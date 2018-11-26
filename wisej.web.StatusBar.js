@@ -98,9 +98,10 @@ qx.Class.define("wisej.web.StatusBar", {
 			// hide or show the label.
 			var label = this.getChildControl("label", true);
 			if (label) {
-				value
-					? label.exclude()
-					: label.show();
+				if (value && panels && panels.length > 0)
+					label.exclude()
+				else
+					label.show();
 			}
 		},
 
@@ -123,6 +124,7 @@ qx.Class.define("wisej.web.StatusBar", {
 		_applyText: function (value, old) {
 
 			this.getChildControl("label").setValue(value);
+			this._applyShowPanels(this.getShowPanels());
 		},
 
 		/**
@@ -153,8 +155,6 @@ qx.Class.define("wisej.web.StatusBar", {
 				}
 			}
 
-			var panelsVisibility = this.isShowPanels() ? "visible" : "excluded";
-
 			if (newPanels != null && newPanels.length > 0) {
 				for (var i = 0; i < newPanels.length; i++) {
 
@@ -162,12 +162,13 @@ qx.Class.define("wisej.web.StatusBar", {
 
 					this.addAt(panel, i, { edge: "west" });
 					panel._setChildAppearance(this);
-					panel.setVisibility(panelsVisibility);
 
 					if (!panel.hasListener("click"))
 						panel.addListener("click", this._onPanelClick, this);
 				}
 			}
+
+			this._applyShowPanels(this.getShowPanels());
 		},
 
 		_onPanelClick: function (e) {

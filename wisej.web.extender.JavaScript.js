@@ -44,7 +44,7 @@ qx.Class.define("wisej.web.extender.JavaScript", {
 
 			if (old != null && old.length > 0) {
 				for (var i = 0; i < old.length; i++) {
-					var comp = Wisej.Core.getComponent(value[i].id);
+					var comp = Wisej.Core.getComponent(old[i].id);
 					if (comp) {
 						// detach previous handlers.
 						var events = old[i].events;

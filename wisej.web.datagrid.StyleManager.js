@@ -66,7 +66,7 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 				return this.__getCssClass(className, this.__sheet, appearance, states, defaultCss);
 			}
 			catch (ex) {
-				this.warn("Missing appearance: " + appearance);
+				this.warn("Missing appearance: ", appearance);
 			}
 		},
 
@@ -184,7 +184,7 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 				return this.__getCssClass(className, this.__sheet, appearance, states, defaultCss);
 			}
 			catch (ex) {
-				this.warn("Missing appearance: " + appearance);
+				this.warn("Missing appearance: ", appearance);
 			}
 		},
 

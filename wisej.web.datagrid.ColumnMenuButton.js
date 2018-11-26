@@ -24,6 +24,18 @@ qx.Class.define("wisej.web.datagrid.ColumnMenuButton", {
 
 	extend: qx.ui.table.columnmenu.Button,
 
+	construct: function () {
+
+		this.base(arguments);
+
+		// set the "owner" and "container" attributes for QA automation.
+		this.addListener("changeMenuVisibility", function (e) {
+			var menu = e.getData();
+			if (menu.isVisible())
+				wisej.utils.Widget.setAutomationAttributes(menu, this);
+		});
+	},
+
 	members: {
 
 		// overridden.

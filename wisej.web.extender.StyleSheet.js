@@ -63,8 +63,10 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 				this.__stylesheet = null;
 			}
 
-			stylesheet = qx.bom.Stylesheet.createElement(value);
-			this.__stylesheet = stylesheet;
+			if (value) {
+				stylesheet = qx.bom.Stylesheet.createElement(value);
+				this.__stylesheet = stylesheet;
+			}
 		},
 
 		/**
@@ -80,7 +82,7 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 					var comp = Wisej.Core.getComponent(old[i].id);
 					if (comp) {
 						var el = comp.getContentElement();
-						el.removeClass(old[i].className)
+						el.removeClass(old[i].className);
 					}
 				}
 			}
@@ -91,7 +93,7 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 					var comp = Wisej.Core.getComponent(value[i].id);
 					if (comp) {
 						var el = comp.getContentElement();
-						el.addClass(value[i].className)
+						el.addClass(value[i].className);
 					}
 				}
 			}
@@ -103,7 +105,7 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 					var comp = window.WisejDesignComponent;
 					if (comp) {
 						var el = comp.getContentElement();
-						el.addClass(value.className)
+						el.addClass(value.className);
 					}
 				}
 			}
@@ -117,7 +119,7 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 				this.__stylesheet = null;
 			}
 
-		},
+		}
 	}
 
 });

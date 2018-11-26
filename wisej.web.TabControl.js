@@ -83,7 +83,7 @@ qx.Class.define("wisej.web.TabControl", {
 		 *
 		 * Sets the orientation of the tabs.
 		 */
-		orientation: { init: "horizontal", check: ["horizontal", "vertical"], apply: "_applyOrientation", themeable: true },
+		orientation: { init: null, check: ["horizontal", "vertical"], apply: "_applyOrientation", themeable: true },
 
 		/**
 		 * Standard size of the tab button icons. If left to null, the original image size is used.
@@ -99,6 +99,16 @@ qx.Class.define("wisej.web.TabControl", {
 		 * Enables or disables the tooltips on the tab buttons.
 		 */
 		showToolTips: { init: true, check: "Boolean", apply: "_applyShowToolTips" },
+
+		/**
+		 * Sets the size of the tab buttons when sizeMode is set to "fixed".
+		 */
+		itemSize: { init: { width: 0, height: 0 }, check: "Map", nullable: true, apply: "_applyItemSize", themeable: true },
+
+		/**
+		 * Specifies how the tab buttons should be sized.
+		 */
+		sizeMode: { init: "normal", check: ["normal", "fill", "fixed", "center"], apply: "_applySizeMode", themeable: true },
 
 	},
 
@@ -197,6 +207,98 @@ qx.Class.define("wisej.web.TabControl", {
 		},
 
 		/**
+		 * Applies the itemSize property.
+		 * When null, it resets to the theme's value.
+		 */
+		_applyItemSize: function (value, old) {
+
+			if (value == null) {
+				this.resetItemSize();
+				return;
+			}
+
+			var pages = this.getChildren();
+			for (var i = 0 ; i < pages.length; i++) {
+				this._updateTabButtonSizeMode(pages[i].getButton());
+			}
+		},
+
+		/**
+		 * Applies the sizeMode property.
+		 */
+		_applySizeMode: function (value, old) {
+
+			if (value == null) {
+				this.resetSizeMode();
+				return;
+			}
+
+			var layout = this.getChildControl("bar").getLayout();
+
+			switch (value) {
+
+				case "center":
+					layout.setAlignX("center");
+					layout.setAlignY("middle");
+					break;
+
+				default:
+					layout.resetAlignX();
+					layout.resetAlignY();
+					break;
+			}
+
+			var pages = this.getChildren();
+			for (var i = 0 ; i < pages.length; i++) {
+				this._updateTabButtonSizeMode(pages[i].getButton());
+			}
+		},
+
+		/**
+		 * Updates the size of the specified button
+		 * according to the value of sizeMode and itemSize.
+		 */
+		_updateTabButtonSizeMode: function (button) {
+			if (!button)
+				return;
+
+			button.resetWidth();
+			button.resetHeight();
+			button.invalidateLayoutCache();
+
+			var sizeMode = this.getSizeMode();
+			switch (sizeMode) {
+
+				case "fill":
+					button.setLayoutProperties({ flex: 1 });
+					break;
+
+				case "fixed":
+				case "center":
+					{
+						button.setLayoutProperties({ flex: 0 });
+
+						var itemSize = this.getItemSize();
+						if (itemSize) {
+							if (this._getEffectiveOrientation() == "vertical") {
+								if (itemSize.height > 0)
+									button.setHeight(itemSize.height);
+							}
+							else {
+								if (itemSize.width > 0)
+									button.setWidth(itemSize.width);
+							}
+						}
+					}
+					break;
+
+				default:
+					button.setLayoutProperties({ flex: 0 });
+					break;
+			}
+		},
+
+		/**
 		 * Gets/Sets the selectedIndex property indicating
 		 * the index of the currently selected tab page.
 		 */
@@ -229,8 +331,12 @@ qx.Class.define("wisej.web.TabControl", {
 		 */
 		_applyAlignment: function (value, old) {
 
-			this.setBarPosition(value);
+			if (value == null) {
+				this.resetAlignment();
+				return;
+			}
 
+			this.setBarPosition(value);
 		},
 
 		/**
@@ -239,6 +345,20 @@ qx.Class.define("wisej.web.TabControl", {
 		_applyBarPosition: function (value, old) {
 
 			this.base(arguments, value, old);
+
+			var layout = this.getChildControl("bar").getLayout();
+			switch (this.getSizeMode()) {
+
+				case "center":
+					layout.setAlignX("center");
+					layout.setAlignY("middle");
+					break;
+
+				default:
+					layout.resetAlignX();
+					layout.resetAlignY();
+					break;
+			}
 
 			// schedule the updateMetrics callback.
 			qx.ui.core.queue.Widget.add(this, "updateMetrics");
@@ -249,15 +369,43 @@ qx.Class.define("wisej.web.TabControl", {
 		 */
 		_applyOrientation: function (value, old) {
 
+			if (value == null) {
+				this.resetOrientation();
+				return;
+			}
+
 			this.removeState(old);
 			this.addState(value);
 
 			var pages = this.getChildren();
-			for (var i = 0 ; i < pages.length; i++)
+			var orientation = this._getEffectiveOrientation();
+			for (var i = 0 ; i < pages.length; i++) {
 				pages[i]._setOrientation(value);
+				this._updateTabButtonSizeMode(pages[i].getButton());
+			}
 
 			// schedule the updateMetrics callback.
 			qx.ui.core.queue.Widget.add(this, "updateMetrics");
+		},
+
+		// returns the orientation value to use. it's either
+		// the user value, theme value, or calculated value.
+		_getEffectiveOrientation: function () {
+			var value = this.getOrientation();
+			if (!value) {
+				switch (this.getAlignment()) {
+					case "top":
+					case "bottom":
+						value = "horizontal";
+						break;
+
+					case "left":
+					case "right":
+						value = "vertical";
+						break;
+				}
+			}
+			return value || "horizontal";
 		},
 
 		/**
@@ -307,8 +455,9 @@ qx.Class.define("wisej.web.TabControl", {
 			this.__applyDisplayToPage(page, this.getDisplay());
 			page._setChildAppearance(this);
 			page._updateIconSize(this.getIconSize());
-			page._setOrientation(this.getOrientation());
+			page._setOrientation(this._getEffectiveOrientation());
 			page.getButton().setBlockToolTip(!this.getShowToolTips());
+			this._updateTabButtonSizeMode(page.getButton());
 		},
 
 		// overridden to propagate the orientation.
@@ -319,9 +468,9 @@ qx.Class.define("wisej.web.TabControl", {
 			this.__applyDisplayToPage(page, this.getDisplay());
 			page._setChildAppearance(this);
 			page._updateIconSize(this.getIconSize());
-			page._setOrientation(this.getOrientation());
+			page._setOrientation(this._getEffectiveOrientation());
 			page.getButton().setBlockToolTip(!this.getShowToolTips());
-
+			this._updateTabButtonSizeMode(page.getButton());
 		},
 
 		// overridden to suppress "beforeChange".
@@ -551,9 +700,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		this.addListener("changeChildIndex", this.__onChangeChildIndex);
 
 		// update the scroll position properties.
-		var scroller = this.getChildControl("pane");
-		scroller.getChildControl("scrollbar-x").addListener("scroll", this._onScrollBarX, this);
-		scroller.getChildControl("scrollbar-y").addListener("scroll", this._onScrollBarY, this);
+		this.__scroller = this.getChildControl("pane");
 	},
 
 	properties: {
@@ -656,6 +803,9 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			vertical: true,
 			horizontal: true,
 		},
+
+		// reference to the inner scroller panel.
+		__scroller: null,
 
 		// saved position and orientation.
 		__barPosition: "top",
@@ -801,10 +951,6 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			this.base(arguments, value, old);
 
-			// hide/show the label.
-			//var button = this.getButton();
-			//button.setShow(value ? "both" : "icon");
-
 			// update the layout of the tab-button.
 			qx.ui.core.queue.Widget.add(this, "layout");
 		},
@@ -902,19 +1048,15 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			if (tabControl) {
 
 				var newIndex = e.getData();
-				if (newIndex != tabControl.indexOf(this)) {
+				var oldIndex = e.getOldData();
 
-					// selected tab?
-					var selected = tabControl.getSelectedIndex() == e.getOldData();
+				// moving a selected tab?
+				var selected = tabControl.getSelectedIndex() == oldIndex;
 
-					tabControl.remove(this);
-					tabControl.addAt(this, newIndex);
-
-					// preserve the selection.
-					if (selected) {
-						this.setVisible(true);
-						tabControl.setSelectedIndex(newIndex);
-					}
+				// preserve the selection.
+				if (selected) {
+					this.setVisible(true);
+					tabControl.setSelectedIndex(newIndex);
 				}
 			}
 		},
@@ -1011,18 +1153,30 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		getChildrenContainer: function () {
 
 			if (this.__childrenContainer == null)
-				this.__childrenContainer = this.getChildControl("pane").getChildren()[0];
+				this.__childrenContainer = this.__scroller.getChildren()[0];
 
 			return this.__childrenContainer;
 		},
 
 		/**
 		 * Returns the element, to which the content padding should be applied.
-		 *
-		 * @return {qx.ui.core.Widget} The content padding target.
 		 */
 		_getContentPaddingTarget: function () {
 			return this.getChildrenContainer();
+		},
+
+		/**
+		 * Returns the target for the accessibility properties.
+		 */
+		getAccessibilityTarget: function () {
+			return this.getButton();
+		},
+
+		/**
+		  * Returns the target for the automation properties.
+		 */
+		getAutomationTarget: function () {
+			return this.getButton();
 		},
 
 		/**
@@ -1030,7 +1184,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 */
 		_applyAutoScroll: function (value, old) {
 
-			var scroller = this.getChildControl("pane");
+			var scroller = this.__scroller;
 
 			if (value) {
 				var scrollBars = this.getScrollBars();
@@ -1074,13 +1228,13 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 */
 		getScrollX: function () {
 
-			return this.getChildControl("pane").getChildControl("scrollbar-x").getPosition();
+			return this.__scroller.getChildControl("scrollbar-x").getPosition();
 		},
 		setScrollX: function (value) {
 
 			var me = this;
 			setTimeout(function () {
-				me.getChildControl("pane").getChildControl("scrollbar-x").setPosition(value);
+				me.__scroller.getChildControl("scrollbar-x").setPosition(value);
 			}, 1);
 		},
 
@@ -1089,13 +1243,13 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 */
 		getScrollY: function () {
 
-			return this.getChildControl("pane").getChildControl("scrollbar-y").getPosition();
+			return this.__scroller.getChildControl("scrollbar-y").getPosition();
 		},
 		setScrollY: function (value) {
 
 			var me = this;
 			setTimeout(function () {
-				me.getChildControl("pane").getChildControl("scrollbar-y").setPosition(value);
+				me.__scroller.getChildControl("scrollbar-y").setPosition(value);
 			}, 1);
 		},
 
@@ -1105,7 +1259,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		_applyScrollBars: function (value, old) {
 
 			if (this.isAutoScroll()) {
-				var scroller = this.getChildControl("pane");
+				var scroller = this.__scroller;
 				scroller.setScrollbarY((value & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
 				scroller.setScrollbarX((value & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
 			}
@@ -1181,6 +1335,8 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					this._add(control);
 
 					control.addListener("resize", this._onScrollerResize, this);
+					control.getChildControl("scrollbar-x").addListener("scroll", this._onScrollBarX, this);
+					control.getChildControl("scrollbar-y").addListener("scroll", this._onScrollBarY, this);
 					control.getChildControl("scrollbar-y").addListener("changeVisibility", this._onScrollerResize, this);
 					control.getChildControl("scrollbar-x").addListener("changeVisibility", this._onScrollerResize, this);
 
@@ -1194,7 +1350,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			// ensure that the client area always fills the container.
 			// it's needed in case child controls are resizable or draggable.
-			var pane = this.getChildControl("pane");
+			var pane = this.__scroller;
 			var clientArea = this.getChildrenContainer();
 			var minSize = this.getAutoScrollMinSize() || {};
 			var size = wisej.utils.Widget.getClientSize(pane);
@@ -1242,6 +1398,23 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 
 	extend: qx.ui.tabview.TabButton,
 
+	construct: function () {
+
+		this.base(arguments);
+
+		if (!wisej.web.DesignMode) {
+
+			// when "automation.mode" is enabled, change the id of the element on creation.
+			// TabButton needs to do this here because the widget TabPage is not created until
+			// the first time it's made visible.
+			if (qx.core.Environment.get("automation.mode") === true) {
+				this.addListenerOnce("appear", function (e) {
+					wisej.utils.Widget.setAutomationID(this.getUserData("page"));
+				});
+			}
+		}
+	},
+
 	properties: {
 
 		/**
@@ -1255,8 +1428,7 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 	members: {
 
 		// overridden
-		_forwardStates:
-			{
+		_forwardStates: {
 				focused: true,
 				checked: true,
 				barTop: true,
@@ -1265,7 +1437,7 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 				barLeft: true,
 				horizontal: true,
 				vertical: true,
-			},
+		},
 
 		/**
 		 * Applies the showClose property.

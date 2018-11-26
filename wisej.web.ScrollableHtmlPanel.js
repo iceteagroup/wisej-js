@@ -31,14 +31,16 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 		// wire clicks on the html panel to fire "elementClick".
 		this.getChildControl("html").addListener("click", this.__onElementClick, this);
 
-		// wire the appear event to set the inner html to autosize.
-		this.getChildControl("html").addListenerOnce("appear", this.__updateHtmlSize, this);
-
 		// wire the resize event to update scrollable area.
 		var scroller = this.getChildControl("pane");
 		scroller.addListener("resize", this.__onPaneResize, this);
-		scroller.addListener("changeScrollbarXVisibility", this.__onScrollBarChangeVisibility, this);
-		scroller.addListener("changeScrollbarXVisibility", this.__onScrollBarChangeVisibility, this);
+
+		// wire the appear/disappear events to start/stop the resizing interval.
+		this.addListener("appear", this._startUpdateInterval, this);
+		this.addListener("disappear", this._stopUpdateInterval, this);
+
+		this.__timer = new qx.event.Timer();
+		this.__timer.addListener("interval", this._onUpdateInterval, this);
 	},
 
 	properties: {
@@ -69,12 +71,21 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 		 * Determines which scrollbars should be visible: 1 = Horizontal, 2 = Vertical, 3 = Both.
 		 */
 		scrollBars: { init: 3, check: "PositiveInteger", apply: "_applyScrollBars" },
+
+		/**
+		 * Interval time (in milliseconds) for the resize update timer.
+		 * Setting this to 0 clears the timer.
+		*/
+		updateTimeout: { check: "Integer", init: 100, apply: "_applyUpdateTimeout" },
 	},
 
 	members: {
 
 		// reference to the isolated style sheet.
 		__stylesheet: null,
+
+		// resizing update timer.
+		__timer: null,
 
 		/**
 		 * Updates the panel size to fit the content.
@@ -86,14 +97,54 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 		/**
 		 * Applies the HTML text.
 		 */
+		_applyUpdateTimeout: function (value, old) {
+			this._startUpdateInterval();
+		},
+
+		/**
+		 * Starts the current running interval
+		 */
+		_startUpdateInterval: function () {
+			var timeout = this.getUpdateTimeout();
+			if (timeout > 0) {
+				this.__timer.setInterval(this.getUpdateTimeout());
+				this.__timer.start();
+			}
+			else {
+				this.__timer.stop();
+			}
+		},
+
+		/**
+		 * stops the current running interval
+		 */
+		_stopUpdateInterval: function () {
+			this.__timer.stop();
+		},
+
+		/**
+		 * Timer event handler. Periodically checks whether the html content
+		 * requires an update of the size of the widget.
+		 *
+		 * The update interval is controlled by the {@link #updateTimeout} property.
+		 */
+		_onUpdateInterval: function () {
+			this.__updateHtmlSize();
+		},
+
+		/**
+		 * Applies the HTML text.
+		 */
 		_applyHtml: function (value, old) {
 
 			var html = this.getChildControl("html");
-			html.setHtml("<div class='" + this.__getClassName() + "'>" + (value || "") + "</div>");
+			html.setHtml("<div style='overflow:hidden' class='"
+				+ this.__getClassName()
+				+ "'>" + (value || "")
+				+ "</div>");
 
 			// update the inner HTML element size.
 			this.__updateHtmlSize();
-
 		},
 
 		/**
@@ -154,14 +205,6 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 
 		},
 
-		__onScrollBarChangeVisibility: function (e) {
-
-			var me = this;
-			setTimeout(function () {
-				me.__updateHtmlSize();
-			}, 1);
-		},
-
 		__updateHtmlSize: function () {
 
 			var html = this.getChildControl("html");
@@ -172,15 +215,11 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 				var wrapperDom = htmlDom.firstChild;
 				var paneSize = this.getChildControl("pane").getPaneSize();
 				if (wrapperDom && paneSize) {
-
 					wrapperDom.style.height = "auto";
-					wrapperDom.style.overflow = "hidden";
 					wrapperDom.style.width = paneSize.width + "px";
-
 					if (wrapperDom.scrollWidth > 0 && wrapperDom.scrollHeight > 0) {
 						html.setWidth(wrapperDom.scrollWidth);
 						html.setHeight(wrapperDom.scrollHeight);
-						wrapperDom.style.width = "100%";
 					}
 				}
 			}
@@ -196,10 +235,17 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 				if (target) {
 
 					if (!this.getAllowNavigation()) {
-						if (target.tagName == "A")
+
+						// find if the target is inside a link.
+						var link = target;
+						for (link = target; link != null && link.tagName != "A"; link = link.parentNode);
+
+						if (link && link.tagName == "A") {
 							e.stop();
+							target = link;
+						}
 					}
-					this.fireDataEvent("elementClick", target.outerHTML);
+					this.fireDataEvent("elementClick", { html: target.outerHTML, role: target.getAttribute("role") });
 				}
 			}
 		},
@@ -231,5 +277,8 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 			qx.bom.Stylesheet.removeSheet(this.__stylesheet);
 			this.__stylesheet = null;
 		}
+
+		this._stopUpdateInterval();
+		this._disposeObjects("__timer");
 	}
 });

@@ -569,9 +569,9 @@ qx.Class.define("wisej.web.MonthCalendar", {
 					var maxDate = this.getMaxValue();
 					var shownDate = new Date(shownYear, shownMonth - index, 1);
 					if (minDate != null && shownDate < minDate)
-						shownDate = minDate;
+						shownDate = new Date(minDate);
 					if (maxDate != null && shownDate > maxDate)
-						shownDate = maxDate;
+						shownDate = new Date(maxDate);
 
 					// update the inner calendars.
 					var range = this.getSelectionRange();
@@ -1064,10 +1064,15 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 						// hide show previous/next month.
 						if (dayLabel.hasState("otherMonth")) {
 
-							if (dayIndex > 25)
-								dayLabel.setVisibility(showNextMonth ? "visible" : "hidden");
-							else
-								dayLabel.setVisibility(showPreviousMonth ? "visible" : "hidden");
+							if (this._checkLimits(date) != 0) {
+								dayLabel.hide();
+							}
+							else {
+								if (dayIndex > 25)
+									dayLabel.setVisibility(showNextMonth ? "visible" : "hidden");
+								else
+									dayLabel.setVisibility(showPreviousMonth ? "visible" : "hidden");
+							}
 						}
 					}
 				}

@@ -54,7 +54,7 @@ qx.Class.define("wisej.web.WebBrowser", {
 		/**
 		 * Whether the widget should have scrollbars.
 		 */
-		scrollbar: { init:"auto", check: ["auto", "no", "yes"], nullable: true, themeable: true, apply: "_applyScrollbar" },
+		scrollbar: { init: "auto", check: ["auto", "no", "yes"], nullable: true, themeable: true, apply: "_applyScrollbar" },
 	},
 
 	events:
@@ -62,7 +62,7 @@ qx.Class.define("wisej.web.WebBrowser", {
 		/**
 		 * The "load" event is fired after the iframe content has successfully been loaded.
 		 */
-		"load" : "qx.event.type.Event",
+		"load": "qx.event.type.Event",
 	},
 
 	members: {
@@ -93,15 +93,20 @@ qx.Class.define("wisej.web.WebBrowser", {
 
 				case "iframe":
 					control = new qx.ui.embed.Iframe();
-					control.addListener("load", function (e) {
-						this.fireEvent("load");
-					}, this);
-
+					control.addListener("load", this._onDocumentLoaded, this);
 					this.add(control);
 					break;
 			}
 
 			return control || this.base(arguments, id);
+		},
+
+		// handles the "load" event from the inner IFrame control.
+		_onDocumentLoaded: function (e) {
+
+			this.fireDataEvent(
+				"load",
+				e.getTarget().getSource());
 		},
 
 		// overridden to delay the "render" event 

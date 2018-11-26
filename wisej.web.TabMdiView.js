@@ -112,6 +112,16 @@ qx.Class.define("wisej.web.TabMdiView", {
 
 			if (!this.__inShowThumbnails && !this.__inHidingThumbnails)
 				this.__hideThumbnails();
+
+			// update the active flag on all mdi children.
+			var pages = this.getChildren();
+			var current = this.getSelection()[0];
+			for (var i = 0; i < pages.length; i++) {
+				var win = pages[i].getChildren()[0];
+				if (win instanceof qx.ui.window.Window) {
+					win.setActive(pages[i] == current);
+				}
+			}
 		},
 
 		// overridden.
@@ -130,8 +140,13 @@ qx.Class.define("wisej.web.TabMdiView", {
 		 */
 		_applyShowThumbnails: function (value, old) {
 
-			if (!value || this.getChildren().length > 0)
+			if (!value) {
+				this.__hideThumbnails();
 				this.getChildControl("bar").setShowPreviewButton(value);
+			}
+			else if (this.getChildren().length > 0) {
+				this.getChildControl("bar").setShowPreviewButton(value);
+			}
 		},
 
 		// overridden
@@ -313,14 +328,55 @@ qx.Class.define("wisej.web.tabmdiview.TabPage", {
 
 	extend: wisej.web.tabcontrol.TabPage,
 
+	construct: function () {
+
+		this.base(arguments);
+
+		var container = this.getChildrenContainer();
+
+		container.addListener("addChildWidget", this._onAddMdiChild, this);
+		container.addListener("removeChildWidget", this._onRemoveMdiChild, this);
+	},
+
 	members: {
 
-		// overridden to fire the "disposed" event.
+		// when an mdi child is added attach to "changeActive".
+		_onAddMdiChild: function (e) {
+			var win = e.getData();
+			if (win instanceof qx.ui.window.Window) {
+				win.addListener("changeActive", this._onChangeActive, this);
+			}
+		},
+
+		// when an mdi child is removed detach to "changeActive".
+		_onRemoveMdiChild: function (e) {
+			var win = e.getData();
+			if (win instanceof qx.ui.window.Window) {
+				win.addListener("changeActive", this._onChangeActive, this);
+			}
+		},
+
+		/**
+		 * Event handler. Called if one of the managed windows changes its active
+		 * state.
+		 *
+		 * @param e {qx.event.type.Event} the event object.
+		 */
+		_onChangeActive: function (e) {
+			if (e.getData()) {
+				var tabControl = this.getParent();
+				if (tabControl != null) {
+					tabControl.setSelection([this]);
+				}
+			}
+		},
+
+		// overridden to fire the "closed" event.
 		// we need it to remove the preview window.
 		dispose: function () {
 
 			try {
-				this.fireEvent("disposed");
+				this.fireEvent("closed");
 			}
 			finally {
 
@@ -449,8 +505,8 @@ qx.Class.define("wisej.web.tabmdiview.WindowPreview", {
 		// create the thumbnail as soon as the dom is created.
 		this.addListenerOnce("appear", this.__createThumbnail);
 
-		// handle the "disposed" event to remove ourselves when the tab page is disposed (form closed).
-		page.addListenerOnce("disposed", this.__onFormClosed, this);
+		// handle the "closed" event to remove ourselves when the tab page is closed (form closed).
+		page.addListenerOnce("closed", this.__onFormClosed, this);
 
 	},
 
@@ -465,8 +521,7 @@ qx.Class.define("wisej.web.tabmdiview.WindowPreview", {
 		 * stretching. Also take a look at the related properties
 		 * {@link #minWidth} and {@link #maxWidth}.
 		 */
-		width:
-		{
+		width: {
 			init: 240,
 			refine: true
 		},
@@ -478,8 +533,7 @@ qx.Class.define("wisej.web.tabmdiview.WindowPreview", {
 		 * stretching. Also take a look at the related properties
 		 * {@link #minHeight} and {@link #maxHeight}.
 		 */
-		height:
-		{
+		height: {
 			init: 200,
 			refine: true
 		},
@@ -500,8 +554,8 @@ qx.Class.define("wisej.web.tabmdiview.WindowPreview", {
 		 */
 		__createThumbnail: function () {
 
-			var window = this.__page.getChildren()[0];
-			this.__showPreview(window);
+			var win = this.__page.getChildren()[0];
+			this.__showPreview(win);
 
 		},
 
@@ -604,22 +658,23 @@ qx.Class.define("wisej.web.tabmdiview.WindowPreview", {
 			return control || this.base(arguments, id);
 		},
 
-		__showPreview: function (window) {
+		__showPreview: function (win) {
 
-			if (!window)
+			if (!win)
 				return;
 
 			// update the title bar.
 			var title = this.getChildControl("title");
 			title.setLabel(this.__page.getLabel());
-			title.setIcon(window.getIcon() || "window-icon");
+			title.setIcon(win.getIcon() || "window-icon");
+			win.getShowClose() ? this._showChildControl("close") : this._excludeChildControl("close");
 
 			// retrieve the dom for the preview target widget.
 			var dom = this.__getPreviewDom();
 			var size = { width: dom.clientWidth, height: dom.clientHeight };
 
 			// create the thumbnail.
-			var thumbnail = wisej.utils.Widget.makeThumbnail(window, size, "fitWidth");
+			var thumbnail = wisej.utils.Widget.makeThumbnail(win, size, "fitWidth");
 
 			// update the inner dom to show the preview window and add
 			// a blocker element on top to prevent clicks inside the thumbnail.

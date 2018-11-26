@@ -42,21 +42,20 @@ qx.Class.define("wisej.web.Form", {
 		// to be able to cancel closing.
 		this.addListener("beforeClose", this.__onBeforeClose);
 
-		// handles key presses for the cancel and accept default buttons.
-		this.addListener("keypress", this._onKeyPress);
-
 		// listen to change of window states.
 		this.addListener("restore", this._onRestore);
 		this.addListener("minimize", this._onMinimize);
 		this.addListener("maximize", this._onMaximize);
 
 		// update the scroll position properties.
-		var scroller = this.getChildControl("pane");
-		scroller.addListener("scrollX", this._onScrollBarX, this);
-		scroller.addListener("scrollY", this._onScrollBarY, this);
+		this.__scroller = this.getChildControl("pane");
 
-		// listen to change of the allowMove property to disable the move cursor.
+		// listen to changes of the allowMove property to disable the move cursor.
 		this.addListener("changeAllowMove", this.__onChangeAllowMove, this);
+
+		// block "contextmenu" from bubbling up to the Page or Desktop.
+		this.addListener("longtap", function (e) { e.stopPropagation(); }, this);
+		this.addListener("contextmenu", function (e) { e.stopPropagation(); }, this);
 	},
 
 	events: {
@@ -168,14 +167,14 @@ qx.Class.define("wisej.web.Form", {
 		 *
 		 * The button that is clicked when the user presses Enter.
 		 */
-		acceptButton: { init: null, nullable: true, transform: "_transformComponent" },
+		acceptButton: { init: null, nullable: true, apply: "_applyAcceptButton", transform: "_transformComponent" },
 
 		/**
 		 * CancelButton property.
 		 *
 		 * The button that is clicked when the user presses Esc.
 		 */
-		cancelButton: { init: null, nullable: true, transform: "_transformComponent" },
+		cancelButton: { init: null, nullable: true, apply: "_applyCancelButton", transform: "_transformComponent" },
 
 		/**
 		 * HeaderBackgroundColor property.
@@ -197,6 +196,28 @@ qx.Class.define("wisej.web.Form", {
 		 * Collection of tool definitions to display on the caption bar.
 		 */
 		tools: { check: "Array", apply: "_applyTools" },
+
+		/**
+		 * ContentEnabled property.
+		 *
+		 * Enables or disables the content of the window. Otherwise a disabled
+		 * window cannot be moved, activated or resized.
+		 */
+		contentEnabled: { init: true, check: "Boolean", apply: "_applyContentEnabled" },
+
+		/**
+		 * mdiChild property.
+		 *
+		 * Indicates whether the form is an mdi child.
+		 */
+		mdiChild: { init: false, check: "Boolean" },
+
+		/**
+		 * mdiClient property.
+		 *
+		 * Represents the internal container for the mdi children.
+		 */
+		mdiClient: { init: null, nullable: true, check: "wisej.web.MdiClient", transform: "_transformComponent" }
 	},
 
 	members: {
@@ -210,6 +231,9 @@ qx.Class.define("wisej.web.Form", {
 		 * Container marker.
 		 */
 		isWisejContainer: true,
+
+		// reference to the inner scroller panel.
+		__scroller: null,
 
 		// stored previous scroll positions, used in __fireScrollEvent.
 		__oldScrollX: 0,
@@ -242,7 +266,7 @@ qx.Class.define("wisej.web.Form", {
 		 */
 		_applyBackgroundColor: function (value, old) {
 
-			this.getChildControl("pane").setBackgroundColor(value);
+			this.getChildrenContainer().setBackgroundColor(value);
 		},
 
 		/**
@@ -350,7 +374,7 @@ qx.Class.define("wisej.web.Form", {
 
 			if (value != this.__windowState) {
 
-				this.__windowState = 
+				this.__windowState =
 					this.__restoreWindowState = value;
 
 				// window state works only for top level windows.
@@ -423,8 +447,7 @@ qx.Class.define("wisej.web.Form", {
 
 				case "defaultLocation":
 
-					if (this.getContentElement().getDomElement() == null)
-					{
+					if (this.getContentElement().getDomElement() == null) {
 						// update the default location when the window is
 						// actually shown, otherwise we can't get the correct
 						// caption height since the theme has not been applied yet.
@@ -460,7 +483,7 @@ qx.Class.define("wisej.web.Form", {
 		 */
 		_applyAutoScroll: function (value, old) {
 
-			var scroller = this.getChildControl("pane");
+			var scroller = this.__scroller;
 
 			if (value) {
 				var scrollBars = this.getScrollBars();
@@ -473,13 +496,56 @@ qx.Class.define("wisej.web.Form", {
 			}
 		},
 
+		// overridden to return true when
+		// the mdi child is selected and the
+		// mdi parent is active.
+		isActive: function () {
+
+			if (this.isMdiChild()) {
+				var mdiParent = this.getMdiParent();
+				if (mdiParent)
+					return mdiParent.getActive() && mdiParent.getActiveMdiChild() == this;
+			}
+
+			return this.getActive();
+		},
+
+		/**
+		 * Returns the MdiParent.
+		 */
+		getMdiParent: function () {
+
+			if (this.isMdiChild()) {
+				return this.getTopLevelContainer();
+			}
+
+			return null;
+		},
+
+		/**
+		 * Returns the active MdiChild form.
+		 */
+		getActiveMdiChild: function () {
+			var mdiClient = this.getMdiClient();
+			return mdiClient ? mdiClient.getActiveMdiChild() : null;
+		},
+
+		/**
+		 * Returns the list of all the MdiChild forms.
+		 */
+		getMdiChildren: function () {
+			var mdiClient = this.getMdiClient();
+			return mdiClient ? mdiClient.getMdiChildren() : [];
+		},
+
 		// overridden to fire the new qualified
 		// events: activated and deactivated.
 		_applyActive: function (value, old) {
 
 			this.base(arguments, value, old);
 
-			this.fireEvent(old ? "deactivated" : "activated");
+			if (this.isTopLevel())
+				this.fireEvent(value ? "activated" : "deactivated");
 		},
 
 		/**
@@ -513,13 +579,13 @@ qx.Class.define("wisej.web.Form", {
 		 */
 		getScrollX: function () {
 
-			return this.getChildControl("pane").getChildControl("scrollbar-x").getPosition();
+			return this.__scroller.getChildControl("scrollbar-x").getPosition();
 		},
 		setScrollX: function (value) {
 
 			var me = this;
 			setTimeout(function () {
-				me.getChildControl("pane").getChildControl("scrollbar-x").setPosition(value);
+				me.__scroller.getChildControl("scrollbar-x").setPosition(value);
 			}, 1);
 		},
 
@@ -528,13 +594,13 @@ qx.Class.define("wisej.web.Form", {
 		 */
 		getScrollY: function () {
 
-			return this.getChildControl("pane").getChildControl("scrollbar-y").getPosition();
+			return this.__scroller.getChildControl("scrollbar-y").getPosition();
 		},
 		setScrollY: function (value) {
 
 			var me = this;
 			setTimeout(function () {
-				me.getChildControl("pane").getChildControl("scrollbar-y").setPosition(value);
+				me.__scroller.getChildControl("scrollbar-y").setPosition(value);
 			}, 1);
 		},
 
@@ -544,10 +610,16 @@ qx.Class.define("wisej.web.Form", {
 		_applyScrollBars: function (value, old) {
 
 			if (this.isAutoScroll()) {
-				var scroller = this.getChildControl("pane");
+				var scroller = this.__scroller;
 				scroller.setScrollbarY((value & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
 				scroller.setScrollbarX((value & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
 			}
+		},
+
+		// overridden
+		_applyContentEnabled: function (value, old) {
+
+			this.getChildrenContainer().setEnabled(value);
 		},
 
 		/**
@@ -589,35 +661,67 @@ qx.Class.define("wisej.web.Form", {
 		},
 
 		/**
-		 * Handler for keypress events.
-		 * 
-		 * Fires clicks on the accept/cancel default buttons when
-		 * the user presses Enter/Esc/
+		 * Applies the acceptButton property.
+		 *
+		 * Registers a capturing shortcut to process the keyDown
+		 * event before any target widget and execute the acceptButton.
 		 */
-		_onKeyPress: function (e) {
+		_applyAcceptButton: function (value, old) {
 
-			var modifiers = e.getModifiers();
-			if (modifiers == 0) {
-				var identifier = e.getKeyIdentifier();
-				switch (identifier) {
-					case "Enter":
-						var acceptButton = this.getAcceptButton();
-						if (acceptButton != null) {
-							acceptButton.execute();
-							e.stop();
-						}
-						break;
+			if (!value && old)
+				this._disposeObjects("__acceptButtonAccel");
 
-					case "Escape":
-						var cancelButton = this.getCancelButton();
-						if (cancelButton != null) {
-							cancelButton.execute();
-							e.stop();
-						}
-						break;
-				}
+			if (value && !this.__acceptButtonAccel) {
+				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter");
+				this.__acceptButtonAccel.addListener("execute", function (e) {
+
+					var acceptButton = this.getAcceptButton();
+					if (acceptButton != null) {
+
+						// ignore accelerators on widgets that are not
+						// in an active top-level container: page, form, or desktop.
+						if (!wisej.utils.Widget.canExecute(acceptButton))
+							return;
+
+						acceptButton.execute();
+					}
+
+				}, this);
 			}
 		},
+		__acceptButtonAccel: null,
+
+		/**
+		 * Applies the cancelButton property.
+		 *
+		 * Registers a capturing shortcut to process the keyDown
+		 * event before any target widget and execute the cancelButton.
+		 */
+		_applyCancelButton: function (value, old) {
+
+			if (!value && old) {
+				this._disposeObjects("__cancelButtonAccel");
+			}
+
+			if (value && !this.__cancelButtonAccel) {
+				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape");
+				this.__cancelButtonAccel.addListener("execute", function (e) {
+
+					var cancelButton = this.getCancelButton();
+					if (cancelButton != null) {
+
+						// ignore accelerators on widgets that are not
+						// in an active top-level container: page, form, or desktop.
+						if (!wisej.utils.Widget.canExecute(cancelButton))
+							return;
+
+						cancelButton.execute();
+					}
+
+				}, this);
+			}
+		},
+		__cancelButtonAccel: null,
 
 		/**
 		 * Applies the borderStyle property.
@@ -648,7 +752,7 @@ qx.Class.define("wisej.web.Form", {
 		 */
 		getChildrenContainer: function () {
 			if (this.__childrenContainer == null)
-				this.__childrenContainer = this.getChildControl("pane").getChildren()[0];
+				this.__childrenContainer = this.__scroller.getChildren()[0];
 
 			return this.__childrenContainer;
 		},
@@ -692,6 +796,8 @@ qx.Class.define("wisej.web.Form", {
 					this._add(control, { flex: 1 });
 
 					control.addListener("resize", this._onScrollerResize, this);
+					control.addListener("scrollX", this._onScrollBarX, this);
+					control.addListener("scrollY", this._onScrollBarY, this);
 					control.addListener("changeScrollbarXVisibility", this._onScrollerResize, this);
 					control.addListener("changeScrollbarXVisibility", this._onScrollerResize, this);
 
@@ -705,7 +811,7 @@ qx.Class.define("wisej.web.Form", {
 
 			// ensure that the client area always fills the container.
 			// it's needed in case child controls are resizable or draggable.
-			var pane = this.getChildControl("pane");
+			var pane = this.__scroller;
 			var clientArea = this.getChildrenContainer();
 			var minSize = this.getAutoScrollMinSize() || {};
 			var size = wisej.utils.Widget.getClientSize(pane);
@@ -726,7 +832,7 @@ qx.Class.define("wisej.web.Form", {
 		/**
 		 * Handles the changeAllowMove event.
 		 *
-		 *	Turns of the move cursor on the captionbar.
+		 *	Turns off the move cursor on the captionbar.
 		 */
 		__onChangeAllowMove: function (e) {
 
@@ -776,11 +882,17 @@ qx.Class.define("wisej.web.Form", {
 
 			if (value) {
 				// insert the main menu before the content pane.
-				var pane = this.getChildControl("pane");
+				var pane = this.__scroller;
 				var index = this._indexOf(pane);
 				this._addAt(value, index);
 			}
 		},
+	},
+
+	destruct: function () {
+
+		this._disposeObjects("__acceptButtonAccel");
+		this._disposeObjects("__cancelButtonAccel");
 	}
 });
 
@@ -790,5 +902,51 @@ qx.Class.define("wisej.web.Form", {
 qx.Class.define("wisej.web.MdiClient", {
 
 	extend: wisej.web.Control,
+
+	members: {
+		/**
+		 * Returns the active MdiChild form.
+		 */
+		getActiveMdiChild: function () {
+			var tabs = this.__getTabContainer();
+			if (tabs != null) {
+				var active = tabs.getSelection()[0];
+				if (active) {
+					var form = active.getChildren()[0];
+					if (form instanceof wisej.web.Form)
+						return form;
+				}
+			}
+			return null;
+		},
+
+		/**
+		 * Returns the list of all the MdiChild forms.
+		 */
+		getMdiChildren: function () {
+			var tabs = this.__getTabContainer();
+			if (tabs != null) {
+				var forms = [];
+				var children = tabs.getChildren();
+				for (var i = 0; i < children.length; i++) {
+					var f = children[i].getChildren()[0];
+					if (f instanceof wisej.web.Form)
+						forms.push(f);
+				}
+				return forms;
+			}
+			return [];
+		},
+
+		// return the tab control that contains mdi children.
+		__getTabContainer: function () {
+			var children = this.getChildren();
+			for (var i = 0; i < children.length; i++) {
+				if (children[i] instanceof wisej.web.TabMdiView)
+					return children[i];
+			}
+			return null;
+		},
+	}
 
 });

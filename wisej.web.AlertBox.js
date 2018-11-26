@@ -45,6 +45,12 @@ qx.Class.define("wisej.web.AlertBox", {
 			this.destroy();
 		});
 
+		// set the name for automation apps.
+		this.getContentElement().setAttribute("name", "AlertBox");
+
+		// block "contextmenu" from bubbling up to the Page or Desktop.
+		this.addListener("longtap", function (e) { e.stopPropagation(); }, this);
+		this.addListener("contextmenu", function (e) { e.stopPropagation(); }, this);
 	},
 
 	properties: {
@@ -59,9 +65,9 @@ qx.Class.define("wisej.web.AlertBox", {
 		/**
 		 * Icon to display in the messagebox.
 		 *
-		 * Known values: None, Error, Question, Warning, Information.
+		 * The actual icon in the theme is "messagebox-" + this.getIcon().
 		 */
-		icon: { init: "", check: "String" },
+		icon: { init: "", check: ["none", "error", "question", "warning", "information"] },
 
 		/**
 		 * Alert box alignment.

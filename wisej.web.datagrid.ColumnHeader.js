@@ -53,7 +53,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		 *
 		 * Sets the auto-ellipsis style.
 		 */
-		autoEllipsis: { init: true, check: "Boolean", apply: "_applyProperty" },
+		autoEllipsis: { init: false, check: "Boolean", apply: "_applyProperty" },
 
 		/**
 		 * Visible property.
@@ -228,7 +228,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		/**
 		 * WidgetDock property.
 		 *
-		 * Determines the layout of the child widget assigned setting widgetId.
+		 * Determines the layout of the child widget assigned setting widget.
 		 */
 		widgetDock: { init: "none", check: ["none", "top", "left", "right", "bottom", "fill"], apply: "_applyProperty" },
 	},
@@ -260,7 +260,6 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 
 				if (this.__cellWidgetProperties.indexOf(name) > -1)
 					headerWidget.set(name, columnHeader.get(name));
-
 			}
 			else {
 
@@ -346,6 +345,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 			if (value) {
 				this._syncCellWidget();
 				this._applySortOrder(this.getSortOrder());
+				value.setName(this.getName());
 			}
 		},
 
@@ -434,7 +434,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 					qx.ui.core.queue.Widget.add(this, "autoSizeColumns");
 					break;
 
-				case "widgetId":
+				case "widget":
 				case "widgetDock":
 					qx.ui.core.queue.Widget.add(this, "setCellWidget");
 					break;
@@ -443,8 +443,22 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 					this._syncCellWidget(name);
 					break;
 			}
-
 		},
-	},
+
+		/**
+		 * Returns the target for the accessibility properties.
+		 */
+		getAccessibilityTarget: function () {
+			return this.getHeaderWidget();
+		},
+
+		/**
+		 * Returns the target for the automation properties.
+		 */
+		getAccessibilityTarget: function () {
+			return this.getHeaderWidget();
+		}
+
+	}
 
 });

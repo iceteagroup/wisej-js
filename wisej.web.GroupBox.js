@@ -414,10 +414,12 @@ qx.Class.define("wisej.web.GroupBox", {
 			}
 
 			if (color == null) {
-				// if none of the parents specify a background color, try with the pane of the top level.
-				// or fallback to "window".
-				var topLevel = this.getTopLevelContainer();
-				var pane = topLevel != null ? topLevel.getChildControl("pane", true) : null;
+
+				// if none of the parents specify a background color, try with the pane of 
+				// the container or fallback to "window".
+
+				var container = this.getTopLevelContainer();
+				var pane = container != null ? container.getChildControl("pane", true) : null;
 				if (pane != null)
 					color = pane.getBackgroundColor();
 				else

@@ -149,7 +149,6 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 
 				// place the focus indicator widget.
 				var rowHeight = tableModel.getRowHeight(row);
-				var x = paneModel.getColumnLeft(col);
 				var y = this.__scroller.getRowTop(row);
 				var w = columnModel.getColumnWidth(col);
 				var h = rowHeight;
@@ -160,6 +159,10 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 					this.setColumn(null);
 					return;
 				}
+
+				var x = (!table.isRtl())
+					? paneModel.getColumnLeft(col)
+					: paneModel.getTotalWidth() - paneModel.getColumnLeft(col) - w;
 
 				// apply the insets to offset the rect. we need to consider that the rectangle to include
 				// is also affected by the row above and the cell to the left.

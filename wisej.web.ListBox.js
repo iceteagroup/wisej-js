@@ -36,6 +36,10 @@ qx.Class.define("wisej.web.ListBox", {
 		this.base(arguments);
 
 		this.addListener("changeSelection", this.__onChangeSelection);
+
+		// adds the inner target to the drop & drop event object.
+		this.addListener("drop", this._onDragEvent, this);
+		this.addListener("dragover", this._onDragEvent, this);
 	},
 
 	properties: {
@@ -73,6 +77,11 @@ qx.Class.define("wisej.web.ListBox", {
 		 * Collection of tool definitions to display on top of the listbox.
 		 */
 		tools: { check: "Array", apply: "_applyTools" },
+
+		/**
+		 * Determines the appearance of child items.
+		 */
+		itemAppearance: { init: "listitem", themeable: true },
 	},
 
 	members: {
@@ -84,6 +93,11 @@ qx.Class.define("wisej.web.ListBox", {
 		 * Applies the readOnly property.
 		 */
 		_applyReadOnly: function (value, old) {
+
+			if (value)
+				this.addState("readonly");
+			else
+				this.removeState("readonly");
 
 			this.setEnableInlineFind(!value);
 
@@ -111,6 +125,18 @@ qx.Class.define("wisej.web.ListBox", {
 			}
 
 			this.base(arguments, value, old);
+		},
+
+		/**
+		 * Applies the appearance property.
+		 *
+		 * Overridden to update the appearance immediately
+		 * to receive the correct value of itemAppearance in case
+		 * it's defined in the theme.
+		 */
+		_applyAppearance: function (value, old) {
+
+			this.syncAppearance();
 		},
 
 		/**
@@ -321,9 +347,13 @@ qx.Class.define("wisej.web.ListBox", {
 
 			var children = this.getChildren();
 			var width = this.getInnerSize().width;
-			var scrollbarY = this.getChildControl("scrollbar-y");
-			if (scrollbarY.isVisible())
-				width -= scrollbarY.getWidth();
+
+			var overlayed = qx.core.Environment.get("os.scrollBarOverlayed");
+			if (!overlayed) {
+				var scrollbarY = this.getChildControl("scrollbar-y");
+				if (scrollbarY.isVisible())
+					width -= scrollbarY.getWidth();
+			}
 
 			if (children != null && children.length > 0) {
 				for (var i = 0; i < children.length; i++)
@@ -338,8 +368,20 @@ qx.Class.define("wisej.web.ListBox", {
 		 */
 		_createListItem: function (properties) {
 			var item = new wisej.web.list.ListItem();
+			item.setAppearance(this.getItemAppearance());
 			item.set(properties);
 			return item;
+		},
+
+		// determines the target item (index) for a drag operation
+		// and adds it to the event object.
+		_onDragEvent: function (e) {
+
+			e.setUserData("eventData", null);
+			var target = e.getOriginalTarget();
+			if (target instanceof wisej.web.list.ListItem) {
+				e.setUserData("eventData", target.getIndex());
+			}
 		},
 
 	}
@@ -463,7 +505,8 @@ qx.Class.define("wisej.web.CheckedListBox", {
 			else if (item instanceof wisej.web.list.CheckedListItemCheckBox) {
 
 				// select the item when clicking on the checkbox.
-				this.setSelection([item.getLayoutParent()]);
+				if (this.getSelectionMode() != "none")
+					this.setSelection([item.getLayoutParent()]);
 			}
 		},
 
@@ -498,6 +541,7 @@ qx.Class.define("wisej.web.CheckedListBox", {
 		_createListItem: function (properties) {
 
 			var item = new wisej.web.list.CheckedListItem();
+			item.setAppearance(this.getItemAppearance());
 			item.set(properties);
 			item.addListener("click", this._onItemClick, this);
 			item.addListener("changeCheckState", this._onItemChangeCheckState, this);

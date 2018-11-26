@@ -27,9 +27,6 @@ qx.Class.define("wisej.web.ScrollablePage", {
 	construct: function () {
 
 		this.base(arguments);
-
-		// handles key presses for the cancel and accept default buttons.
-		this.addListener("keypress", this._onKeyPress);
 	},
 
 	properties: {
@@ -49,14 +46,14 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		 *
 		 * The button that is clicked when the user presses Enter.
 		 */
-		acceptButton: { init: null, nullable: true, transform: "_transformComponent" },
+		acceptButton: { init: null, nullable: true, apply: "_applyAcceptButton", transform: "_transformComponent" },
 
 		/**
 		 * CancelButton property.
 		 *
 		 * The button that is clicked when the user presses Esc.
 		 */
-		cancelButton: { init: null, nullable: true, transform: "_transformComponent" },
+		cancelButton: { init: null, nullable: true, apply: "_applyCancelButton", transform: "_transformComponent" },
 	},
 
 	members: {
@@ -66,6 +63,9 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		 */
 		isPage: true,
 
+		/**
+		 * Applies the active property.
+		 */
 		_applyActive: function (value, old) {
 
 			if (wisej.web.DesignMode)
@@ -82,35 +82,66 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		},
 
 		/**
-		 * Handler for keypress events.
-		 * 
-		 * Fires clicks on the accept/cancel default buttons when
-		 * the user presses Enter/Esc/
+		 * Applies the acceptButton property.
+		 *
+		 * Registers a capturing shortcut to process the keyDown
+		 * event before any target widget and execute the acceptButton.
 		 */
-		_onKeyPress: function (e) {
+		_applyAcceptButton: function (value, old) {
 
-			var modifiers = e.getModifiers();
-			if (modifiers == 0) {
-				var identifier = e.getKeyIdentifier();
-				switch (identifier) {
-					case "Enter":
-						var acceptButton = this.getAcceptButton();
-						if (acceptButton != null) {
-							acceptButton.execute();
-							e.stop();
-						}
-						break;
+			if (!value && old)
+				this._disposeObjects("__acceptButtonAccel");
 
-					case "Escape":
-						var cancelButton = this.getCancelButton();
-						if (cancelButton != null) {
-							cancelButton.execute();
-							e.stop();
-						}
-						break;
-				}
+			if (value && !this.__acceptButtonAccel) {
+				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter");
+				this.__acceptButtonAccel.addListener("execute", function (e) {
+
+					var acceptButton = this.getAcceptButton();
+					if (acceptButton != null) {
+
+						// ignore accelerators on widgets that are not
+						// in an active top-level container: page, form, or desktop.
+						if (!wisej.utils.Widget.canExecute(acceptButton))
+							return;
+
+						acceptButton.execute();
+					}
+
+				}, this);
 			}
 		},
+		__acceptButtonAccel: null,
+
+		/**
+		 * Applies the cancelButton property.
+		 *
+		 * Registers a capturing shortcut to process the keyDown
+		 * event before any target widget and execute the cancelButton.
+		 */
+		_applyCancelButton: function (value, old) {
+
+			if (!value)
+				this._disposeObjects("__cancelButtonAccel");
+
+			if (value && !this.__cancelButtonAccel) {
+				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape");
+				this.__cancelButtonAccel.addListener("execute", function (e) {
+
+					var cancelButton = this.getCancelButton();
+					if (cancelButton != null) {
+
+						// ignore accelerators on widgets that are not
+						// in an active top-level container: page, form, or desktop.
+						if (!wisej.utils.Widget.canExecute(cancelButton))
+							return;
+
+						cancelButton.execute();
+					}
+
+				}, this);
+			}
+		},
+		__cancelButtonAccel: null,
 	},
 
 	destruct: function () {
@@ -119,6 +150,9 @@ qx.Class.define("wisej.web.ScrollablePage", {
 			if (Wisej.Platform.getMainPage() == this)
 				Wisej.Platform.setMainPage(null);
 		}
+
+		this._disposeObjects("__acceptButtonAccel");
+		this._disposeObjects("__cancelButtonAccel");
 	}
 
 });

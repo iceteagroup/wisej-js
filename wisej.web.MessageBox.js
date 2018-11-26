@@ -36,7 +36,7 @@ qx.Class.define("wisej.web.MessageBox", {
 		 * Owner of the message box. It will gain the focus when
 		 * the messagebox is closed.
 		 */
-		owner: { init: null, check: "String", nullable: true },
+		owner: { init: null, check: "String", nullable: true, transform: "_transformComponent" },
 
 		/**
 		 * Title of the message box.
@@ -51,9 +51,9 @@ qx.Class.define("wisej.web.MessageBox", {
 		/**
 		 * Image to display in the messagebox.
 		 *
-		 * Known values: none, error, question, warning, information.
+		 * The actual icon in the theme is "messagebox-" + this.getImage().
 		 */
-		image: { init: "", check: "String" },
+		image: { init: "", check: ["none", "error", "question", "warning", "information"] },
 
 		/**
 		 * List of buttons to show in the messagebox.
@@ -88,25 +88,16 @@ qx.Class.define("wisej.web.MessageBox", {
 		this.setShowMaximize(false);
 		this.setShowMinimize(false);
 		this.setTitle(title || "");
+		this.setAlignX("center");
+		this.setAlignY("middle");
 
-		this.addListener("resize", this.center, this);
 		this.addListener("keypress", this._onKeyPress, this);
-
-		// focus the default button when the messagebox is rendered.
-		this.addListenerOnce("appear", function () {
-
-			if (this.__defaultBtn != null)
-				this.__defaultBtn.focus();
-
-			// limit the size of the MessageBox to the window size.
-			var maxWidth = this.getMaxWidth();
-			maxWidth = Math.max(Math.min(maxWidth || window.innerWidth, window.innerWidth), this.getMinWidth());
-			this.setMaxWidth(maxWidth);
-
-		}, this);
+		this.addListenerOnce("appear", this._onAppear, this);
 
 		// rightToLeft support.
-		this.addListener("changeRtl", function (e) { this.getChildControl("buttonsPane")._mirrorChildren(e.getData()); }, this);
+		this.addListener("changeRtl", function (e) {
+			this.getChildControl("buttonsPane")._mirrorChildren(e.getData());
+		}, this);
 
 		// add forward states.
 		this._forwardStates.error = true;
@@ -115,6 +106,13 @@ qx.Class.define("wisej.web.MessageBox", {
 		this._forwardStates.information = true;
 		this._forwardStates.warning = true;
 		this._forwardStates.question = true;
+
+		// set the name for automation apps.
+		this.getContentElement().setAttribute("name", "MessageBox");
+
+		// block "contextmenu" from bubbling up to the Page or Desktop.
+		this.addListener("longtap", function (e) { e.stopPropagation(); }, this);
+		this.addListener("contextmenu", function (e) { e.stopPropagation(); }, this);
 	},
 
 	members: {
@@ -144,7 +142,7 @@ qx.Class.define("wisej.web.MessageBox", {
 
 				// activate the owner window
 				var owner = this.getOwner();
-				if (owner != null && owner.isWindow)
+				if (owner != null && owner instanceof qx.ui.core.Widget)
 					owner.activate();
 
 			} catch (ex) { }
@@ -188,8 +186,10 @@ qx.Class.define("wisej.web.MessageBox", {
 					break;
 
 				case "message":
-					control = new qx.ui.basic.Label();
-					control.setRich(true);
+					control = new qx.ui.basic.Label().set({
+						rich: true
+					});
+					control.getContentElement().setStyle("overflow", "auto");
 					this.add(control, { edge: "center" });
 					break;
 
@@ -213,7 +213,7 @@ qx.Class.define("wisej.web.MessageBox", {
 
 				// activate the owner window
 				var owner = this.getOwner();
-				if (owner != null && owner.isWindow)
+				if (owner != null && owner instanceof qx.ui.core.Widget)
 					owner.activate();
 			}
 			catch (ex) { }
@@ -247,6 +247,30 @@ qx.Class.define("wisej.web.MessageBox", {
 
 		},
 
+		_onAppear: function (e) {
+
+			if (!wisej.web.DesignMode)
+				Wisej.Platform.setFocusedComponent(this.__defaultBtn);
+
+			// limit the size of the MessageBox to the window size.
+			var message = this.getChildControl("message");
+			var bounds = this.getBounds() || this.getSizeHint();
+			var messageBounds = message.getBounds() || message.getSizeHint();
+
+			var maxWidth = this.getMaxWidth() || window.innerWidth;
+			maxWidth = Math.max(Math.min(maxWidth, window.innerWidth), this.getMinWidth());
+			var maxHeight = this.getMaxHeight() || window.innerHeight;
+			maxHeight = Math.max(Math.min(maxHeight, window.innerHeight), this.getMinHeight());
+
+			this.setMaxWidth(maxWidth);
+			this.setMaxHeight(maxHeight);
+			message.setMaxHeight(maxHeight - bounds.height + messageBounds.height);
+
+			// let the message box grow vertically if necessary.
+			this.invalidateLayoutCache();
+			message.invalidateLayoutCache();
+		},
+
 		__createButtons: function (buttons) {
 
 			// find the buttons container.
@@ -261,6 +285,7 @@ qx.Class.define("wisej.web.MessageBox", {
 				this.__defaultBtn = null;
 				var defaultId = this.getDefaultButton();
 
+				var tabIndex = 1;
 				for (var id in buttons) {
 					var text = buttons[id];
 					var btn = new qx.ui.form.Button(text);
@@ -269,11 +294,17 @@ qx.Class.define("wisej.web.MessageBox", {
 					btn.$$subcontrol = "button";
 					btn.$$subparent = container;
 
+					btn.setTabIndex(tabIndex++);
+					btn.getContentElement().setAttribute("name", id);
 					btn.addListener("execute", this.__buttonHandler, this);
 					container.add(btn);
 
 					// save the default button.
 					if (id == defaultId)
+						this.__defaultBtn = btn;
+
+					// make sure we always have a default button.
+					if (this.__defaultBtn == null)
 						this.__defaultBtn = btn;
 				}
 			}

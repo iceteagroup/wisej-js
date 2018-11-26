@@ -205,6 +205,12 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			return this.__owner.getIconColor();
 		},
 
+		// returns the item padding value.
+		getItemPadding: function () {
+
+			return this.__owner.getItemPadding();
+		},
+
 		/**
 		 * Sets the focused item.
 		 *
@@ -292,7 +298,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		isItemSelectable: function (index) {
 
-			return index > -1 && index < this.__itemCount;
+			return this.isEnabled() && index > -1 && index < this.__itemCount;
 		},
 
 		/**
@@ -634,8 +640,10 @@ qx.Class.define("wisej.web.listview.ItemView", {
 						index = selection[0];
 				}
 
-				var cell = this.__getCellFromIndex(index);
-				newFocused = this.__layer.getRenderedCellWidget(cell.row, cell.column);
+				if (index != null) {
+					var cell = this.__getCellFromIndex(index);
+					newFocused = this.__layer.getRenderedCellWidget(cell.row, cell.column);
+				}
 			}
 
 			if (oldFocused)
@@ -891,6 +899,12 @@ qx.Class.define("wisej.web.listview.ItemView", {
 				this.__owner.fireItemEvent(e, "itemOver", index);
 		},
 
+		// determines the target cell (ListViewItem) for a drag operation
+		// and adds it to the event object.
+		_onDragEvent: function (e) {
+			e.setUserData("eventData", this.__getItemIndex(e.getOriginalTarget()));
+		},
+
 		// determines the index of the item from its row, column position.
 		__getItemIndex: function (item) {
 
@@ -961,13 +975,9 @@ qx.Class.define("wisej.web.listview.ItemCellProvider", {
 		this.base(arguments);
 
 		this.__itemView = itemView;
-		this.__aliasManager = qx.util.AliasManager.getInstance();
 	},
 
 	members: {
-
-		// cached singleton of the image aliases manager.
-		__aliasManager: null,
 
 		// the inner container used to show the items in the items views.
 		__itemView: null,
@@ -979,9 +989,10 @@ qx.Class.define("wisej.web.listview.ItemCellProvider", {
 				wrap: this.__itemView.getLabelWrap(),
 				iconSize: this.__itemView.getIconSize(),
 				itemSize: this.__itemView.getItemSize(),
+				padding: this.__itemView.getItemPadding(),
 				iconColor: this.__itemView.getIconColor(),
 				stateIconSize: this.__itemView.getStateIconSize(),
-				blockToolTip: this.__itemView.getShowItemTooltips(),
+				blockToolTip: !this.__itemView.getShowItemTooltips()
 			});
 
 			widget.addListener("click", this.__itemView._onItemClick, this.__itemView);
@@ -999,12 +1010,12 @@ qx.Class.define("wisej.web.listview.ItemCellProvider", {
 			var data = rowData.data || {};
 
 			// resolve the theme image alias.
-			var icon = this.__aliasManager.resolve(data.icon);
-			var stateIcon = this.__aliasManager.resolve(data.stateIcon);
+			var icon = data.icon;
+			var stateIcon = data.stateIcon;
 
 			// show the checkbox icon instead of the state icon?
 			if (!stateIcon && this.__itemView.getShowCheckBoxes()) {
-				stateIcon = this.__aliasManager.resolve(data.checked ? "checkbox-checked" : "checkbox");
+				stateIcon = data.checked ? "checkbox-checked" : "checkbox";
 			}
 
 			// build the text according to the current view.
@@ -1050,11 +1061,13 @@ qx.Class.define("wisej.web.listview.ItemCellProvider", {
 					widget.setFont(font);
 			}
 
+			var tooltip = rowData.tooltips ? rowData.tooltips[0] : null;
+
 			widget.set({
 				icon: icon || null,
 				label: label || "",
 				stateIcon: stateIcon || "",
-				toolTipText: data.tooltip || "",
+				toolTipText: tooltip || "",
 				wrap: this.__itemView.getLabelWrap(),
 			});
 		},
@@ -1139,6 +1152,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 
 		this.__layout = new qx.ui.layout.Grid();
 		this._setLayout(this.__layout);
+		this.setDroppable(true);
 
 		// use the LargeIcon default - no state icon.
 		this.__layout.setRowFlex(0, 1);
@@ -1180,7 +1194,10 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 
 		_applyWrap: function (value, old) {
 
-			this.getChildControl("label").setWrap(value);
+			var label = this.getChildControl("label");
+			var el = label.getContentElement();
+			label.setWrap(value);
+			el.setStyle("textOverflow", !value ? "ellipsis" : null);
 		},
 
 		_applyIcon: function (value, old) {
@@ -1332,25 +1349,35 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 
 				// the state icon (checkbox or custom state).
 				if (stateIcon && stateIcon.isVisible()) {
-					stateIcon.setLayoutProperties({ row: 0, column: 0 });
-					this.__layout.setColumnFlex(0, 1);
-				}
 
-				// the item's image.
-				if (icon && icon.isVisible()) {
-					icon.setLayoutProperties({ row: 0, column: 1 });
-					this.__layout.setColumnFlex(1, 1);
+					stateIcon.setLayoutProperties({ row: 0, column: 0 });
+
+					// the item's image.
+					if (icon && icon.isVisible()) {
+						icon.setLayoutProperties({ row: 0, column: 1 })
+						this.__layout.setColumnFlex(1, 1);
+					}
+					else {
+						this.__layout.setColumnFlex(0, 1);
+					}
 				}
 				else {
-					this.__layout.setColumnFlex(0, 1);
+
+					// the item's image.
+					if (icon && icon.isVisible()) {
+						icon.setLayoutProperties({ row: 0, column: 0, colSpan: 2 })
+						this.__layout.setColumnFlex(0, 1);
+					}
 				}
 
 				// the item's label, or the hosted widget.
 				if (label && label.isVisible()) {
 					label.setLayoutProperties({ row: 1, column: 0, colSpan: 2 });
+					this.__layout.setColumnFlex(0, 1);
 				}
 				else if (host && host.isVisible()) {
 					host.setLayoutProperties({ row: 1, column: 0, colSpan: 2 });
+					this.__layout.setColumnFlex(0, 1);
 				}
 
 				this.__layout.setRowFlex(1, 1);
@@ -1368,7 +1395,6 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 			// adapt the cell widget layout, if this is the first time.
 			if (!this.$$widget) {
 				this._excludeChildControl("label");
-				this.__updateLayout();
 			}
 
 			if (!dock || dock == "none") {
@@ -1417,7 +1443,6 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 				host.exclude();
 
 				this._showChildControl("label");
-				this.__updateLayout();
 			}
 		},
 
@@ -1434,6 +1459,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 					})
 					// use the LargeIcon default - no state icon.
 					this._add(control, { row: 0, column: 0 });
+					control.addListener("changeVisibility", this.__updateLayout, this);
 					break;
 
 				case "icon":
@@ -1443,6 +1469,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 					})
 					// use the LargeIcon default - no state icon.
 					this._add(control, { row: 0, column: 1 });
+					control.addListener("changeVisibility", this.__updateLayout, this);
 					break;
 
 				case "label":
@@ -1455,6 +1482,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 					});
 					this._add(control, { row: 1, column: 0, colSpan: 2 });
 					control.addListener("mousedown", this.__onLabelMouseDown, this);
+					control.addListener("changeVisibility", this.__updateLayout, this);
 					break;
 
 
@@ -1465,6 +1493,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 						visibility: "excluded"
 					});
 					this._add(control, { row: 1, column: 0, colSpan: 2 });
+					control.addListener("changeVisibility", this.__updateLayout, this);
 					break;
 			}
 
@@ -1636,10 +1665,9 @@ qx.Class.define("wisej.web.listview.ItemDataModel", {
 
 		// increase the blocks in the cache since the list view can
 		// display more items when in small icon view mode.
-		maxCachedBlockCount: { init: 30, refine: true }
+		maxCachedBlockCount: { init: 100, refine: true }
 
 	},
-
 
 	members: {
 

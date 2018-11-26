@@ -584,7 +584,17 @@ qx.Class.define("wisej.web.Panel", {
 		 */
 		_applyHeaderBackgroundColor: function (value, old) {
 
-			this.getChildControl("captionbar").setBackgroundColor(value);
+			var captionBar = this.getChildControl("captionbar");
+
+			if (value) {
+				captionBar.setBackgroundColor(value);
+				var colorMgr = qx.theme.manager.Color.getInstance();
+				this.getContentElement().setStyle("borderColor", colorMgr.resolve(value));
+			}
+			else {
+				captionBar.resetBackgroundColor();
+				this.getContentElement().setStyle("borderColor", null);
+			}
 		},
 
 		/**
@@ -1020,9 +1030,6 @@ qx.Class.define("wisej.web.Panel", {
 		// rightToLeft support. 
 		// listens to "changeRtl" to mirror the captionbar.
 		_onRtlChange: function (e) {
-
-			if (!qx.core.Environment.get("qx.rtl.supported"))
-				return;
 
 			if (e.getData() === e.getOldData())
 				return;

@@ -49,9 +49,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		// add local state events.
 		this.setStateEvents(this.getStateEvents().concat(["valueChanged", "textChanged"]));
 
-		// handle "focusin" and "focusout" to focus/blur the inner editable textfield.
-		this.addListener("focusin", this.__onFocusIn, this);
-
 		// hovered event handlers.
 		this.addListener("pointerover", this._onPointerOver);
 		this.addListener("pointerout", this._onPointerOut);
@@ -146,6 +143,45 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		editable: { check: "Boolean", init: true, apply: "_applyEditable" },
 
 		/**
+		 * PreserveTime property.
+		 *
+		 * When set, the date/time selector will preserve the time set in the original value.
+		 */
+		preserveTime: { init: true, check: "Boolean" },
+
+		/**
+		 * Mask property.
+		 *
+		 * Masking elements:
+		 *
+		 * 0 = Digit, required. This element will accept any single digit between 0 and 9.
+		 * 9 = Digit or space, optional.
+		 * # = Digit or space, optional. If this position is blank in the mask, it will be rendered as a space in the Text property. Plus (+) and minus (-) signs are allowed.
+		 * L = Letter, required. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z] in regular expressions.
+		 * ? = Letter, optional. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z]? in regular expressions.
+		 * & = Character, required. If the AsciiOnly property is set to true, this element behaves like the "L" element.
+		 * C = Character, optional. Any non-control character. If the AsciiOnly property is set to true, this element behaves like the "?" element.
+		 * A = Alphanumeric, required. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "a" element.
+		 * a = Alphanumeric, optional. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "A" element.
+		 * < = Shift down. Converts all characters that follow to lowercase.
+		 * > = Shift up. Converts all characters that follow to uppercase.
+		 * | = Disable a previous shift up or shift down.
+		 * \ = Escape. Escapes a mask character, turning it into a literal. "\\" is the escape sequence for a backslash.
+		 * All other characters Literals = All non-mask elements will appear as themselves within MaskedTextBox. Literals always occupy a static position in the mask at run time, and cannot be moved or deleted by the user.
+		 */
+		mask: { init: "", check: "String", apply: "_applyMask" },
+
+		/**
+		 * The placeholder character to show in place of the mask. 
+		 */
+		prompt: { init: "_", check: "String", apply: "_applyPrompt" },
+
+		/**
+		 * When true, the prompt is removed when the field loses the focus.
+		 */
+		hidePrompt: { init: false, check: "Boolean", apply: "_applyHidePrompt" },
+
+		/**
 		 * Tools property.
 		 *
 		 * Collection of tool definitions to display next to the edit field.
@@ -156,26 +192,58 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 	members: {
 
+		// the mask provider implementation.
+		__maskProvider: null,
+
+		/**
+		 * Shows the date chooser popup.
+		 */
+		open: function () {
+
+			var popup = this.getChildControl("popup");
+			popup.open(this, true);
+		},
+
 		// overridden
 		tabFocus: function () {
 
-			var textField = this.getChildControl("textfield");
-			textField.getFocusElement().focus();
-			textField.selectAllText();
+			if (this.isEditable()) {
+				var textField = this.getChildControl("textfield");
+				textField.getFocusElement().focus();
+				textField.selectAllText();
+			}
+			else {
+				this.focus();
+			}
 		},
 
 		// overridden
 		focus: function () {
-			this.getChildControl("textfield").getFocusElement().focus();
+			if (this.isEditable())
+				this.getChildControl("textfield").getFocusElement().focus();
+			else
+				this.base(arguments);
+		},
+
+		/**
+		 * Returns the target for the accessibility properties.
+		 */
+		getAccessibilityTarget: function () {
+			return this.getChildControl("textfield");
 		},
 
 		/**
 		 * Applies the readOnly property.
 		 */
 		_applyReadOnly: function (value, old) {
+
+			if (value)
+				this.addState("readonly");
+			else
+				this.removeState("readonly");
+
 			this.getChildControl("button").setEnabled(!value);
 			this.getChildControl("textfield").setReadOnly(value);
-			this.getChildControl("textfield").setFocusable(false);
 		},
 
 		/**
@@ -184,7 +252,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		_applyEditable: function (value, old) {
 			value = value && !this.isReadOnly();
 			this.getChildControl("textfield").setReadOnly(!value);
-			this.getChildControl("textfield").setFocusable(false);
 		},
 
 		/**
@@ -194,6 +261,11 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 			if (this.hasChildControl("textfield"))
 				this.getChildControl("textfield").setNativeContextMenu(value);
+
+			if (value)
+				this.addListener("contextmenu", this._onContextMenu);
+			else
+				this.removeListener("contextmenu", this._onContextMenu);
 		},
 
 		/**
@@ -326,6 +398,53 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		},
 
 		/**
+		 * Creates the mask provider instance. It's overridable to
+		 * assign a customized mask provider.
+		 */
+		_createMaskProvider: function () {
+
+			if (this.__maskProvider == null) {
+				this.__maskProvider = new wisej.utils.MaskProvider(this.getChildControl("textfield"));
+				this.__maskProvider.setPrompt(this.getPrompt());
+				this.__maskProvider.setHidePrompt(this.getHidePrompt());
+			}
+		},
+
+		/**
+		 * Applies the mask property.
+		 *
+		 * Sets the current edit mask and updates the existing text.
+		 */
+		_applyMask: function (value, old) {
+
+			if (value)
+				this._createMaskProvider();
+
+			if (this.__maskProvider)
+				this.__maskProvider.setMask(value);
+		},
+
+		/**
+		 * Applies the prompt property.
+		 *
+		 * Sets the character to show as a prompt in place of the mask characters.
+		 */
+		_applyPrompt: function (value, old) {
+
+			if (this.__maskProvider)
+				this.__maskProvider.setPrompt(value);
+		},
+
+		/**
+		 * Applies the hidePrompt property.
+		 */
+		_applyHidePrompt: function (value, old) {
+
+			if (this.__maskProvider)
+				this.__maskProvider.setHidePrompt(value);
+		},
+
+		/**
 		 * Get/set the selection property.
 		 */
 		getSelection: function () {
@@ -340,6 +459,30 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			if (value) {
 				this.setTextSelection(value.start, value.length + value.start);
 			}
+		},
+
+		/**
+		 * Toggles the popup's visibility and transfer the focus.
+		 *
+		 * @param e {qx.event.type.Pointer} Pointer tap event
+		 */
+		_onTap: function (e) {
+
+			this.close();
+
+			if (!this.hasState("focused"))
+				this.tabFocus();
+		},
+
+		/**
+		 * Handles "contextmenu" to stop the bubbling of the event
+		 * when nativeContextMenu is enabled and the widget doesn't even
+		 * its own context menu.
+		 */
+		_onContextMenu: function (e) {
+
+			if (!this.getContextMenu() && this.getNativeContextMenu())
+				e.stopPropagation();
 		},
 
 		// overridden.
@@ -382,24 +525,22 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			}
 
 			var selectedDate = this.getChildControl("list").getValue();
+
+			// the date from the date chooser doesn't specify
+			// the time: preserve the time from the previous value.
+			if (this.getPreserveTime()) {
+				var original = this.getValue();
+				if (original) {
+					selectedDate.setHours(original.getHours());
+					selectedDate.setMinutes(original.getMinutes());
+					selectedDate.setSeconds(original.getSeconds());
+				}
+			}
+
 			this.fireDataEvent("valueChanged", selectedDate);
 			this.selectAllText();
 
 			this.close();
-		},
-
-		// forward the "focus" event and 
-		// focus the inner textfield when gaining the focus, otherwise the editable
-		// textfield doesn't get the focus when clicking close or on the border.
-		__onFocusIn: function (e) {
-
-			var textField = this.getChildControl("textfield");
-
-			if (textField.isVisible()) {
-
-				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget()))
-					textField.getContentElement().focus();
-			}
 		},
 
 		/**
@@ -456,6 +597,13 @@ qx.Class.define("wisej.web.DateTimePicker", {
 					});
 					control.addState("inner");
 					control.addListener("execute", this.__onDownButtonExecute, this);
+					break;
+
+				case "popup":
+					control = new wisej.web.dateTimePicker.DropDown(this);
+					control.add(this.getChildControl("list"));
+					control.addListener("pointerup", this._onChangeDate, this);
+					control.addListener("changeVisibility", this._onPopupChangeVisibility, this);
 					break;
 			}
 
@@ -663,4 +811,48 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		}
 	}
 
+});
+
+
+/**
+ * wisej.web.dateTimePicker.DropDown
+ *
+ * Shows the drop down calendar in a popup widget.
+ */
+qx.Class.define("wisej.web.dateTimePicker.DropDown", {
+
+	extend: wisej.mobile.Popup,
+
+	construct: function (owner) {
+
+		if (qx.core.Environment.get("qx.debug"))
+			this.assertNotNull(owner);
+
+		this.owner = owner;
+		this.base(arguments);
+
+		this.setAutoHide(true);
+		this.setKeepActive(true);
+		this.setPosition("bottom-right");
+		this.setPlacementModeX("best-fit");
+
+		// set the "owner" and "container" attributes for QA automation.
+		this.addListener("changeVisibility", function (e) {
+			if (this.isVisible())
+				wisej.utils.Widget.setAutomationAttributes(this, this.owner);
+		});
+	},
+
+	members: {
+
+		/** the datetime picker that owns this drop down. */
+		owner: null,
+
+		canAutoHide: function (target) {
+			var button = this.owner.getChildControl("button");
+			return button != target
+				&& target != this.owner
+				&& !qx.ui.core.Widget.contains(button, target);
+		}
+	}
 });

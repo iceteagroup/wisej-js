@@ -54,12 +54,10 @@ qx.Class.define("wisej.web.extender.Animation", {
 		 * Performs the specified animation immediately.
 		 *
 		 * @param animation {Map} the animation definition map.
-		 * @param component {Widget} the component to animate. If not specified, it's the id member in the data argument.
 		 */
-		run: function (animation, component) {
+		run: function (animation) {
 
-			if (!component)
-				var component = Wisej.Core.getComponent(animation.id);
+			var component = Wisej.Core.getComponent(animation.id);
 			if (!component)
 				return;
 
@@ -77,18 +75,34 @@ qx.Class.define("wisej.web.extender.Animation", {
 				options.timing = animation.timing;
 			if (animation.reverse != null)
 				options.reverse = animation.reverse;
+			if (animation.delay != null)
+				options.delay = animation.delay;
+			if (animation.keep > -1)
+				options.keep = animation.keep;
 
 			var me = this;
 			wisej.web.Animation.animate(component, animation.name, options, {
 
 				// start callback.
 				start: function () {
-					me.fireDataEvent("start", component);
+					me.fireDataEvent("start", { name: animation.name, target: component });
 				},
 
 				// end callback
 				end: function () {
-					me.fireDataEvent("end", component);
+
+					switch (animation.event)
+					{
+						case "close":
+							component.destroy();
+							break;
+
+						case "disappear":
+							animation.hideElement.call(component.getContentElement());
+							break;
+					}
+
+					me.fireDataEvent("end", { name: animation.name, target: component });
 				}
 
 			});
@@ -101,7 +115,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 
 			if (old != null && old.length > 0) {
 				for (var i = 0; i < old.length; i++) {
-					this.__unregisterAnimation(value[i]);
+					this.__unregisterAnimation(old[i]);
 				}
 			}
 
@@ -114,42 +128,91 @@ qx.Class.define("wisej.web.extender.Animation", {
 
 		// registers the specified animation on the widget in response to
 		// to the trigger event.
-		__registerAnimation: function (data) {
+		__registerAnimation: function (animation) {
 
-			var component = Wisej.Core.getComponent(data.id);
+			var component = Wisej.Core.getComponent(animation.id);
 			if (!component)
 				return;
 
 			// sanity check.
-			if (!data.event || !data.name)
+			if (!animation.event || !animation.name)
 				return;
 
+			// animations bound to the "disappear" event must run
+			// before the element has actually disappeared.
+			if (animation.event == "disappear") {
+
+				this.__registerDisappearAnimation(animation, component);
+				return;
+			}
+
+			// animations bound to the "close" event must run
+			// before the component is destroyed.
+			if (animation.event == "close")
+			{
+				this.__registerCloseAnimation(animation, component);
+				return;
+			}
+
+			// attach to the specified event to run the automation automatically.
 			var me = this;
-			var animation = data;
-			data.listenerId = component.addListener(data.event, function (e) {
+			animation.listenerId = component.addListener(animation.event, function (e) {
 
-				setTimeout(function () {
+				if (e.getTarget() != this)
+					return;
 
-					if (!qx.ui.core.Widget.contains(this, e.getRelatedTarget())) {
-
-						me.run(animation, component);
-
-					}
-				}, animation.delay | 0);
+				me.run(animation);
 
 			});
+		},
 
+		__registerCloseAnimation: function (animation, component) {
+
+			var me = this;
+			component.addListenerOnce("close", function (e) {
+
+				me.run(animation, component);
+
+				// stop the component from getting destroyed only once.
+				e.preventDefault();
+			});
+		},
+
+		__registerDisappearAnimation: function (animation, component) {
+
+			var me = this;
+
+			// override the qx.html.Element.hide() method to
+			// run the animation before the DOM element is hidden.
+			var el = component.getContentElement();
+			if (el && !animation.hideElement) {
+
+				// override and restore the hide method as soon as it's called.
+				animation.hideElement = el.hide;
+				el.hide = function () {
+					me.run(animation, component);
+				};
+			}
 		},
 
 		// unregisters the specified animation on the widget.
-		__unregisterAnimation: function (data) {
+		__unregisterAnimation: function (animation) {
 
-			var comp = Wisej.Core.getComponent(data.id);
-			if (!comp)
+			var component = Wisej.Core.getComponent(animation.id);
+			if (!component)
 				return;
 
-			if (data.listenerId > 0)
-				comp.removeListenerById(data.listenerId);
+			if (animation.listenerId) {
+				component.removeListenerById(animation.listenerId);
+				delete animation.listenerId;
+			}
+
+			if (animation.hideElement)
+			{
+				var el = component.getContentElement();
+				el.hide = animation.hideElement;
+				delete animation.hideElement;
+			}
 		},
 
 		/**
@@ -157,18 +220,15 @@ qx.Class.define("wisej.web.extender.Animation", {
 		 *
 		 * Registers the user-defined animations globally.
 		 */
-		_applyCustom: function(value, old)
-		{
-			if (value != null && value.length > 0)
-			{
+		_applyCustom: function (value, old) {
+			if (value != null && value.length > 0) {
 				for (var i = 0 ; i < value.length; i++) {
 
 					// try to parse the JSON string and register with wisej.web.Animation.
 					try {
 
 						var animation = JSON.parse(value[i]);
-						for (var name in animation)
-						{
+						for (var name in animation) {
 							if (name != null)
 								wisej.web.Animation.register(name, animation[name]);
 

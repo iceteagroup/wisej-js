@@ -87,7 +87,7 @@ qx.Class.define("wisej.web.LinkLabel", {
 		 * Applies the value property.
 		 *
 		 * Splits the text and creates the link element
-		 * according to the position and lenght in the linkArea property.
+		 * according to the position and length in the linkArea property.
 		 */
 		_applyValue: function (value, old) {
 
@@ -103,9 +103,11 @@ qx.Class.define("wisej.web.LinkLabel", {
 			var dom = this.getContentElement().getDomElement();
 			if (dom) {
 
+				var colorMgr = qx.theme.manager.Color.getInstance()
+
 				var styles = {
-					color: this.getLinkColor(),
 					textDecoration: "underline",
+					color: colorMgr.resolve(this.getLinkColor())
 				};
 
 				if (mouseState == null)
@@ -134,9 +136,9 @@ qx.Class.define("wisej.web.LinkLabel", {
 
 				// color
 				if (!this.isEnabled())
-					styles.color = this.getDisabledColor();
+					styles.color = colorMgr.resolve(this.getDisabledColor());
 				else if (mouseState.down)
-					styles.color = this.getActiveColor();
+					styles.color = colorMgr.resolve(this.getActiveColor());
 
 				var links = qx.bom.Selector.query("a", dom);
 				for (var i = 0; i < links.length; i++) {

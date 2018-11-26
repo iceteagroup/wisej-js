@@ -41,14 +41,6 @@ qx.Class.define("wisej.web.datagrid.HeaderRenderer", {
 			return widget;
 		},
 
-		// overridden
-		updateHeaderCell: function (cellInfo, cellWidget) {
-
-			this.base(arguments, cellInfo, cellWidget);
-
-		},
-
-
 	},
 
 });

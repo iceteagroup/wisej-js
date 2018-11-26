@@ -32,8 +32,44 @@ qx.Class.define("wisej.web.HScrollBar", {
 
 		this.base(arguments, "horizontal");
 
+		// listen to changes of the allowMove property to change the move handle target.
+		this.addListener("changeAllowMove", this.__onChangeAllowMove, this);
+	},
+
+	members: {
+
+		/**
+		 * Handles the changeAllowMove event to change the
+		 * move handle target to the slider, otherwise
+		 * scrollbar widgets cannot be moved since the buttons
+		 * and the slider process all the pointer events.
+		 */
+		__onChangeAllowMove: function (e) {
+
+			if (e.getData())
+				this._activateMoveHandle(this.getChildControl("slider"));
+		},
+
+		// overridden.
+		_createChildControlImpl: function (id, hash) {
+			var control;
+
+			switch (id) {
+				case "slider":
+					control = new wisej.web.scrollBar.Slider();
+					control.setPageStep(100);
+					control.setFocusable(false);
+					control.addListener("changeValue", this._onChangeSliderValue, this);
+					control.addListener("slideAnimationEnd", this._onSlideAnimationEnd, this);
+					this._add(control, { flex: 1 });
+					break;
+			}
+
+			return control || this.base(arguments, id);
+		},
 	}
 });
+
 
 /**
  * wisej.web.VScrollBar
@@ -50,5 +86,75 @@ qx.Class.define("wisej.web.VScrollBar", {
 
 		this.base(arguments, "vertical");
 
+		// listen to changes of the allowMove property to change the move handle target.
+		this.addListener("changeAllowMove", this.__onChangeAllowMove, this);
+	},
+
+	members: {
+
+		/**
+		 * Handles the changeAllowMove event to change the
+		 * move handle target to the slider, otherwise
+		 * scrollbar widgets cannot be moved since the buttons
+		 * and the slider process all the pointer events.
+		 */
+		__onChangeAllowMove: function (e) {
+
+			if (e.getData())
+				this._activateMoveHandle(this.getChildControl("slider"));
+		},
+
+		// overridden.
+		_createChildControlImpl: function (id, hash) {
+			var control;
+
+			switch (id) {
+				case "slider":
+					control = new wisej.web.scrollBar.Slider();
+					control.setPageStep(100);
+					control.setFocusable(false);
+					control.addListener("changeValue", this._onChangeSliderValue, this);
+					control.addListener("slideAnimationEnd", this._onSlideAnimationEnd, this);
+					this._add(control, { flex: 1 });
+					break;
+			}
+
+			return control || this.base(arguments, id);
+		},
 	}
+});
+
+
+/**
+ * wisej.web.scrollBar.Slider
+ *
+ * Replaces the internal "slider" in the scrollbars
+ * to prevent the scrollbar from scrolling when it's
+ * movable and being dragged.
+ */
+qx.Class.define("wisej.web.scrollBar.Slider", {
+
+	extend: qx.ui.core.scroll.ScrollSlider,
+
+	members: {
+
+		// overridden.
+		_onPointerMove: function (e) {
+
+			if (this.getLayoutParent().hasState("move"))
+				return;
+
+			this.base(arguments, e);
+		},
+
+		// overridden.
+		_onInterval: function (e) {
+
+			if (this.getLayoutParent().hasState("move"))
+				return;
+
+			this.base(arguments, e);
+		}
+	}
+
 });

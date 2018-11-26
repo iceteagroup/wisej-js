@@ -122,30 +122,18 @@ qx.Class.define("wisej.web.PdfViewer", {
 					url = viewerURL.replace("[source]", encodeURIComponent(this.__toAbsoluteURL(url)));
 					break;
 			}
-			el.setAttribute("data", url);
-		},
 
-		/**
-		 * Creates the content element. The style properties
-		 * position and zIndex are modified from the Widget
-		 * core.
-		 *
-		 * @return {qx.html.Element} The widget's content element
-		 */
-		_createContentElement: function () {
+			var childEl = new qx.html.Element("object", {
+				overflowX: "hidden",
+				overflowY: "hidden",
+				width: "100%",
+				height: "100%"
+			}, {
+				data: url
+			});
 
-			if (wisej.web.DesignMode) {
-				return new qx.html.Element("div", {
-					overflowX: "hidden",
-					overflowY: "hidden"
-				});
-			}
-			else {
-				return new qx.html.Element("object", {
-					overflowX: "hidden",
-					overflowY: "hidden"
-				});
-			}
+			el.removeAll();
+			el.add(childEl);
 		},
 
 		/**
@@ -182,6 +170,9 @@ qx.Class.define("wisej.web.PdfViewer", {
 		 * URL. Supports file paths with or without origin/protocol.
 		 */
 		__toAbsoluteURL: function (url) {
+
+			if (!url)
+				return "";
 
 			// handle absolute URLs (with protocol-relative prefix)
 			// example: //domain.com/file.png

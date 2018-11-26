@@ -237,8 +237,6 @@ qx.Class.define("wisej.web.DragDrop", {
 			}
 			else {
 				cursor.resetSource();
-				//cursor.resetWidth();
-				//cursor.resetHeight();
 			}
 		},
 
@@ -302,8 +300,9 @@ qx.Class.define("wisej.web.DragDrop", {
 			if (wisej.web.DesignMode)
 				return;
 
-			if (component.getContentElement()) {
-				var dom = component.getContentElement().getDomElement();
+			var el = component.getContentElement();
+			if (el) {
+				var dom = el.getDomElement();
 				if (dom) {
 
 					// dragging out of the browser is not yet supported.
@@ -323,6 +322,7 @@ qx.Class.define("wisej.web.DragDrop", {
 				}
 			}
 		},
+
 		/**
 		 * Dragging out of the browser is not yet supported.
 		 * 

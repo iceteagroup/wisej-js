@@ -177,5 +177,47 @@ qx.Class.define("wisej.web.datagrid.ColumnModel", {
 
 			return this.__columnDataArr[col].selected || false;
 		},
+
+		/**
+		 * Reorders all columns to new overall positions. Will fire one "orderChanged" event
+		 * without data afterwards
+		 *
+		 * @param newPositions {Integer[]} Array mapping the index of a column in table model to its wanted overall
+		 *                            position on screen (both zero based). If the table models holds
+		 *                            col0, col1, col2 and col3 and you give [1,3,2,0], the new column order
+		 *                            will be col3, col0, col2, col1
+		*/
+		setColumnsOrder: function (newPositions) {
+
+			// ensures that the new positions don't exceed the number of columns.
+			if (newPositions) {
+				var positions = [];
+				var count = this.getOverallColumnCount();
+
+				// assign valid positions.
+				for (var i = 0; i < count; i++) {
+					var pos = newPositions[i];
+					if (pos > -1 && pos < count && !qx.lang.Array.contains(positions, pos))
+						positions.push(pos);
+					else
+						positions.push(-1);
+				}
+
+				// fill in the voids.
+				for (var i = 0; i < count; i++) {
+					if (positions[i] === -1) {
+						// find next available position.
+						for (var pos = 0; pos < count; pos++) {
+							if (!qx.lang.Array.contains(positions, pos)) {
+								positions[i] = pos;
+								break;
+							}
+						}
+					}
+				}
+			}
+
+			this.base(arguments, positions);
+		}
 	}
 });

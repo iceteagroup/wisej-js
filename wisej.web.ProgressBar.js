@@ -128,9 +128,6 @@ qx.Class.define("wisej.web.ProgressBar", {
 		// listens to "changeRtl" to mirror the location of the progress bar.
 		_onRtlChange: function (e) {
 
-			if (!qx.core.Environment.get("qx.rtl.supported"))
-				return;
-
 			if (e.getData() === e.getOldData())
 				return;
 

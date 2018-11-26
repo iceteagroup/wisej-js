@@ -48,7 +48,7 @@ qx.Class.define("wisej.web.Widget", {
 		/**
 		 * Options property.
 		 */
-		options: { init: null, check: "Map", apply: "_applyOptions" },
+		options: { init: null, check: "Map", transform: "_transformOptions", apply: "_applyOptions" },
 
 		/**
 		 * PostbackUrl property.
@@ -141,8 +141,15 @@ qx.Class.define("wisej.web.Widget", {
 
 			if (this.container) {
 				if (this.update)
-					this.update(this.getOptions() || {});
+					this.update(value || {}, old);
 			}
+		},
+		_transformOptions: function (value) {
+
+			if (typeof value === "string")
+				value = JSON.parse(value);
+
+			return value;
 		},
 
 		/**
@@ -163,13 +170,17 @@ qx.Class.define("wisej.web.Widget", {
 		// overridden
 		renderLayout: function (left, top, width, height) {
 
-			 //force the size of the container element
-			 //immediately to let the third party widget
-			 //adjust itself - otherwise it would be a step behind
-			 //due to the element flushing queues.
+			// force the size of the container element
+			// immediately to let the third party widget
+			// adjust itself - otherwise it would be a step behind
+			// due to the element flushing queues.
+			var insets = this.getInsets();
+
 			this.__containerEl.setStyles({
-				width: width + "px",
-				height: height + "px"
+				top: (insets.top) + "px",
+				left: (insets.left) + "px",
+				width: (width - insets.left - insets.right) + "px",
+				height: (height - insets.top - insets.bottom) + "px"
 			}, true);
 
 			return this.base(arguments, left, top, width, height);

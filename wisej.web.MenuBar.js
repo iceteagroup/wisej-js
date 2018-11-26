@@ -20,7 +20,10 @@
 /**
  * wisej.web.MenuBar
  * 
- *  Represents a menu bar widget.
+ * Represents a menu bar widget. It can be used in any container like any widget.
+ *
+ * The actual menu component is an instance if "wisej.web.menu.MenuBar" that has to be
+ * created and assigned by the code using this class.
  */
 qx.Class.define("wisej.web.MenuBar", {
 
@@ -43,7 +46,7 @@ qx.Class.define("wisej.web.MenuBar", {
 		 *
 		 * Sets the inner menu bar component.
 		 */
-		menuBar: { init: null, nullable: true, apply: "_applyMenuBar", transform: "_transformComponent" },
+		menuBar: { init: null, nullable: true, check: "wisej.web.menu.MenuBar", apply: "_applyMenuBar", transform: "_transformComponent" },
 
 	},
 

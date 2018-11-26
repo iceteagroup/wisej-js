@@ -35,6 +35,10 @@ qx.Class.define("wisej.web.SplitButton", {
 		this._forwardStates.vertical = true;
 		this._forwardStates.horizontal = true;
 		this.addState("horizontal");
+
+		// listen to changes of the allowMove property to change the move handle target.
+		this.addListener("changeAllowMove", this.__onChangeAllowMove, this);
+
 	},
 
 	properties: {
@@ -136,7 +140,7 @@ qx.Class.define("wisej.web.SplitButton", {
 		 */
 		executeMnemonic: function () {
 
-			if (!this.isEnabled() || !this.isVisible())
+			if (!this.isEnabled() || !this.isVisible() || !this.isSeeable())
 				return false;
 
 			this.execute();
@@ -148,7 +152,7 @@ qx.Class.define("wisej.web.SplitButton", {
 		 */
 		executeShortcut: function () {
 
-			if (!this.isEnabled() || !this.isVisible())
+			if (!this.isEnabled() || !this.isVisible() || !this.isSeeable())
 				return false;
 
 			this.execute();
@@ -179,7 +183,6 @@ qx.Class.define("wisej.web.SplitButton", {
 			this.setMenu(value);
 
 			if (value) {
-				this.__wireMenuItems(value);
 				value.setPosition("bottom-left");
 			}
 		},
@@ -220,32 +223,6 @@ qx.Class.define("wisej.web.SplitButton", {
 			button.setPaddingTop(t);
 			button.setPaddingLeft(l);
 			button.setPaddingBottom(b);
-		},
-
-		// iterates all the child items and wires the execute event
-		// in order to fire it on the button owner.
-		__wireMenuItems: function (parent) {
-
-			if (parent == null)
-				return;
-
-			var children = parent.getChildren();
-			for (var i = 0; i < children.length; i++) {
-				var child = children[i];
-				if (child instanceof qx.ui.menu.AbstractButton) {
-
-					child.addListener("execute", this._onItemExecute, this);
-
-					// recurse.
-					this.__wireMenuItems(child.getMenu());
-				}
-			}
-		},
-
-		// handles clicks in menu items.
-		_onItemExecute: function (e) {
-
-			this.fireDataEvent("itemClick", e.getTarget());
 		},
 
 		// overridden.
@@ -303,8 +280,7 @@ qx.Class.define("wisej.web.SplitButton", {
 		 */
 		_applyOrientation: function (value, old) {
 
-			switch (value)
-			{
+			switch (value) {
 				case "horizontal":
 					this.addState("horizontal");
 					this.removeState("vertical");
@@ -328,6 +304,18 @@ qx.Class.define("wisej.web.SplitButton", {
 		_getBackgroundWidget: function () {
 
 			return this.getChildControl("button");
+		},
+
+		/**
+		 * Handles the changeAllowMove event to change the
+		 * move handle target to the main button, otherwise
+		 * split buttons cannot be moved since the main button
+		 * processes all the pointer events.
+		 */
+		__onChangeAllowMove: function (e) {
+			
+			if (e.getData())
+				this._activateMoveHandle(this.getChildControl("button"));
 		},
 
 		// overridden
@@ -358,8 +346,8 @@ qx.Class.define("wisej.web.SplitButton", {
 
 	destruct: function () {
 
-	  if (this.getMenu())
-	    this.getMenu().destroy();
+		if (this.getMenu())
+			this.getMenu().destroy();
 	},
 
 });

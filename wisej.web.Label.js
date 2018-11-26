@@ -115,26 +115,44 @@ qx.Class.define("wisej.web.Label", {
 			// focus the next widget.
 			var parent = this.getParent();
 			if (parent) {
-				var index = parent.indexOf(this);
-				var handler = qx.ui.core.FocusHandler.getInstance();
-				if (handler) {
 
-					// if this is a label and it has a buddy control, focus it.
-					var next = (this instanceof qx.ui.basic.Label)
-						? this.getBuddy()
-						: null;
+				// if this is a label and it has a buddy control, focus it.
+				var next = (this instanceof qx.ui.basic.Label)
+					? this.getBuddy()
+					: null;
 
-					// otherwise try with the next control in collection.
-					if (next == null)
-						next =
-							parent.isReverseControls()
-								? parent.getChildren()[index - 1]
-								: parent.getChildren()[index + 1];
-
-					if (next && !handler.isFocused(next)) {
+				if (next != null) {
+					if (next.isFocusable())
 						next.focus();
-						return true;
-					}
+
+					return true;
+				}
+
+				// otherwise focus the next control in the tab order, unless already focused.
+
+				var nextTabIndex;
+				var myTabIndex = this.getTabIndex();
+				var children = parent.getChildren();
+				var handler = qx.ui.core.FocusHandler.getInstance();
+
+				for (var i = 0; i < children.length; i++) {
+
+					var childTabIndex = children[i].getTabIndex();
+					if (children[i] == this || childTabIndex < myTabIndex)
+						continue;
+
+					if (next != null && childTabIndex > nextTabIndex)
+						continue;
+
+					next = children[i];
+					nextTabIndex = next.getTabIndex();
+					if (handler.isFocused(next))
+						next = null;
+				}
+
+				if (next != null && next.isFocusable()) {
+					next.focus();
+					return true;
 				}
 			}
 
@@ -206,7 +224,7 @@ qx.Class.define("wisej.web.Label", {
 				this.scheduleLayoutUpdate();
 			}
 		},
-		
+
 		/**
 		 * Applies the Icon properties.
 		 *

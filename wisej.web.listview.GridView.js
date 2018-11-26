@@ -90,6 +90,12 @@ qx.Class.define("wisej.web.listview.GridView", {
 			return this.__owner.getIconColor();
 		},
 
+		// returns the item padding value.
+		getItemPadding: function () {
+
+			return this.__owner.getItemPadding();
+		},
+
 		/**
 		 * Returns whether the items should show the checkbox icon.
 		 * The check box icon is the same as the state icon.
@@ -205,6 +211,25 @@ qx.Class.define("wisej.web.listview.GridView", {
 			}
 
 			this.base(arguments, e);
+		},
+
+		// determines the target cell (col, row) for a drag operation
+		// and adds it to the event object.
+		_onDragEvent: function (e) {
+
+			e.setUserData("eventData", null);
+
+			var pageX = e.getDocumentLeft();
+			var pageY = e.getDocumentTop();
+
+			var scrollerArr = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollerArr.length; i++) {
+				var row = scrollerArr[i]._getRowForPagePos(pageX, pageY);
+				if (row != null) {
+					e.setUserData("eventData", row);
+					break;
+				}
+			}
 		},
 	}
 
@@ -389,11 +414,11 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 			if (cellStyle && cellStyle.whiteSpace)
 				whiteSpace = "white-space:" + cellStyle.whiteSpace;
 			else if (cellInfo.table.getLabelWrap)
-				whiteSpace = "white-space:" + (cellInfo.table.getLabelWrap() ? "pre-wrap" : "no-wrap");
+				whiteSpace = "white-space:" + (cellInfo.table.getLabelWrap() ? "pre-wrap" : "nowrap");
 
 			if (cellValue) {
 				htmlArr.push(
-					"<div style='height:100%;overflow:hidden;vertical-align:top'><div class='",
+					"<div style='height:100%;overflow:hidden;vertical-align:top;text-overflow:inherit'><div class='",
 					this._contentMiddleClassName,
 					"' style='", whiteSpace, "'>",
 					cellValue,

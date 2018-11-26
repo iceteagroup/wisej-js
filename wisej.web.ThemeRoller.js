@@ -33,7 +33,7 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 		 */
 		loadTheme: function (theme) {
 
-			if (typeof theme == "string") {
+			if (typeof theme === "string") {
 				// if the theme is a string, it could be the name of a theme already loaded, or
 				// the name of a theme definition file.
 				this.__loadThemeByName(theme);

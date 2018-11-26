@@ -21,7 +21,7 @@
  * wisej.web.ToolContainer
  *
  * This is the panel that contains the little
- * tool bubttons that can be associated to many Wisej controls.
+ * tool buttons that can be associated to many Wisej controls.
  * 
  */
 qx.Class.define("wisej.web.ToolContainer", {
@@ -124,6 +124,9 @@ qx.Class.define("wisej.web.ToolContainer", {
 						customState: (state || null)
 					});
 
+					container.setTools(toAdd);
+					container.setPosition(position);
+
 					// add the "left" or "right" state.
 					container.addState(alignment);
 
@@ -139,12 +142,12 @@ qx.Class.define("wisej.web.ToolContainer", {
 					// subscribe to focus events to auto hide/show autoHide tools.
 					target.addListener("focusin", container._onFocusIn, container);
 					target.addListener("focusout", container._onFocusOut, container);
-				}
-			}
 
-			if (container != null) {
-				container.setTools(toAdd);
-				container.setPosition(position);
+				} else {
+
+					container.setTools(toAdd);
+					container.setPosition(position);
+				}
 			}
 
 			return container;
@@ -415,6 +418,10 @@ qx.Class.define("wisej.web.toolContainer.ToolButton", {
 
 	extend: qx.ui.form.Button,
 
+	// All Wisej components must include this mixin
+	// to provide services to the Wisej core.
+	include: [wisej.mixin.MWisejComponent],
+
 	properties: {
 
 		/**
@@ -424,11 +431,6 @@ qx.Class.define("wisej.web.toolContainer.ToolButton", {
 
 		// overridden
 		focusable: { init: false, refine: true },
-
-		/**
-		 * The id of the tool button.
-		 */
-		id: { check: "String" },
 
 		/**
 		 * Position property.
@@ -478,6 +480,15 @@ qx.Class.define("wisej.web.toolContainer.ToolButton", {
 
 		},
 
+		// property apply
+		_applyEnabled: function (value, old) {
+
+			if (value == null)
+				this.resetEnabled();
+			else
+				this.base(arguments, value, old);
+
+		},
 	}
 
 });

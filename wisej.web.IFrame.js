@@ -25,7 +25,8 @@ qx.Class.define("wisej.web.IFrame", {
 	extend: qx.ui.embed.Iframe,
 
 	// Cannot use ThemedIframe, it's impossible to use
-	// the inner document because of CORS.
+	// the inner document to measure the size because of
+	// newer browses's security.
 	// extend: qx.ui.embed.ThemedIframe,
 
 	// All Wisej components must include this mixin
@@ -59,6 +60,8 @@ qx.Class.define("wisej.web.IFrame", {
 			"keyup",
 			"keypress",
 			"pointerdown",
+			"pointermove",
+			"pointerup",
 		],
 	},
 
@@ -71,9 +74,35 @@ qx.Class.define("wisej.web.IFrame", {
 		 * The icon to show at design time instead of the content.
 		 */
 		designIcon: { init: null, check: "String" },
+
+		/**
+		 * Allows the IFrame to access certain local features when using
+		 * a cross-origin source, see https://sites.google.com/a/chromium.org/dev/Home/chromium-security/deprecating-permissions-in-cross-origin-iframes.
+		 */
+		allow: { init: null, check: "String", apply: "_applyAllow" }
 	},
 
 	members: {
+
+		/**
+		 * Get the DOM document object of an IFrame.
+		 *
+		 * @return {Document} The DOM document object of the IFrame.
+		 */
+		getDocument: function () {
+
+			var el = this._getIframeElement();
+			return el.getDocument ? el.getDocument() : null;
+
+		},
+
+		/**
+		 * Applies the allow property.
+		 */
+		_applyAllow: function (value, old) {
+			var el = this._getIframeElement();
+			el.setAttribute("allow", value);
+		},
 
 		// overridden.
 		// displays the design icon and url text when in design mode.
@@ -98,7 +127,7 @@ qx.Class.define("wisej.web.IFrame", {
 
 		_onLoad: function (e) {
 
-			// attach to pointer events in the iframe to
+			// attach to pointer events in the IFrame to
 			// notify wisej that the user is still alive.
 			if (!wisej.web.DesignMode) {
 
@@ -118,36 +147,35 @@ qx.Class.define("wisej.web.IFrame", {
 			}
 		},
 
-		// handles events on the IFrame document.
+		// handles events on the IFrame document to dispatch the
+		// event to the widget that contains the IFrame. otherwise
+		// IFrame events do not bubble.
 		__onIframeEvent: function (e) {
+
+			var target = this.getContentElement().getDomElement();
 
 			// inform Wisej that we user is still alive
 			Wisej.Core.userIsAlive();
 
-			switch (e.getType()) {
-
-				case "pointerdown":
-					// close all menus and popups when clicking on an IFrame.
-					qx.ui.menu.Manager.getInstance().hideAll();
-					qx.ui.popup.Manager.getInstance().hideAll();
-					break;
-
-				default:
-					var clone = e.clone();
-					clone.setBubbles(false);
-
-					// adjust the pointer position.
-					if (clone._native && clone._native.pageX !== undefined) {
-
-						var dom = wisej.utils.Widget.ensureDomElement(this);
-						var position = qx.bom.element.Location.getPosition(dom);
-						clone._native.pageY += position.top;
-						clone._native.pageX += position.left;
-					}
-
-					this.dispatchEvent(clone);
-					break;
+			if (e.getType() == "pointerdown") {
+				// close all menus and popups when clicking on an IFrame.
+				qx.ui.menu.Manager.getInstance().hideAll();
+				qx.ui.popup.Manager.getInstance().hideAll();
 			}
+
+			var clone = e.clone();
+			clone.setBubbles(true);
+			clone.setTarget(target);
+
+			// adjust the pointer position.
+			if (clone._native && clone._native.pageX !== undefined) {
+
+				var position = qx.bom.element.Location.get(target, "border");
+				clone._native.pageY += position.top;
+				clone._native.pageX += position.left;
+			}
+
+			qx.event.Registration.dispatchEvent(target, clone);
 		},
 
 		// overridden to delay the "render" event 
@@ -163,18 +191,6 @@ qx.Class.define("wisej.web.IFrame", {
 			else {
 				this.fireEvent("render");
 			}
-		},
-
-		/**
-		 * Get the DOM document object of an IFrame.
-		 *
-		 * @return {Document} The DOM document object of the IFrame.
-		 */
-		getDocument: function () {
-
-			var el = this._getIframeElement();
-			return el.getDocument ? el.getDocument() : null;
-
 		},
 
 		/**
@@ -194,6 +210,7 @@ qx.Class.define("wisej.web.IFrame", {
 			}
 			else {
 				var iframe = new qx.html.Iframe(this.__source);
+				iframe.setAttribute("allow", this.getAllow());
 				iframe.addListener("load", this._onIframeLoad, this);
 				return iframe;
 			}

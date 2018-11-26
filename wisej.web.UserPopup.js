@@ -37,12 +37,13 @@ qx.Class.define("wisej.web.UserPopup", {
 		if (!wisej.web.DesignMode) {
 
 			// pre-create the popup wrapper that we'll use to show this widget.
-			this.__popup = new wisej.web.userPopup.Popup();
-			this.__popup.add(this);
-			this.__updatePopupResizableEdges();
+			this.__popup = this.getChildControl("popup");
 
-			// listen to changes to the resizable edges to shift the property to the container popup.
+			// listen to changes to the resizableEdges property to shift the property to the container popup.
 			this.addListener("changeResizableEdges", this._onChangedResizableEdges);
+
+			// listen to changes to the allowMove property to shift the property to the container popup.
+			this.addListener("changeAllowMove", this._onChangeAllowMove);
 		}
 	},
 
@@ -94,20 +95,24 @@ qx.Class.define("wisej.web.UserPopup", {
 
 	members: {
 
+		/** the wrapper popup. */
 		__popup: null,
 
 		/**
 		 * Shows the UserPopup widget inside the popup container.
 		 *
-		 * @param opener {Widget | String} the opener widget reference or id.
+		 * @param opener {Widget} the opener widget reference.
 		 * @param x {Integer} the x position, used when opener is null.
 		 * @param x {Integer} the y position, used when opener is null.
 		 */
 		showPopup: function (opener, x, y) {
 
-			// retrieve the header widget if the opened is a column header.
+			// retrieve the header widget if the opener is a column header.
 			if (opener instanceof wisej.web.datagrid.ColumnHeader)
 				opener = opener.getHeaderWidget();
+			// retrieve the TabPage button, if the opener is a TabPage.
+			if (opener instanceof qx.ui.tabview.Page)
+				opener = opener.getButton();
 
 			this.__popup.add(this);
 			this.__popup.setOffset(this.getOffset());
@@ -120,19 +125,14 @@ qx.Class.define("wisej.web.UserPopup", {
 
 			if (opener) {
 
-				this.__popup.placeToWidget(opener, true);
+				this.__popup.open(opener, true);
 			}
 			else {
 
-				var coords = {
-					left: x, top: y,
-					right: x, bottom: y
-				};
-				this.__popup._place(coords);
+				this.__popup.open({ left: x, top: y });
 			}
 
 			this.show();
-			this.__popup.show();
 		},
 
 		/**
@@ -144,18 +144,17 @@ qx.Class.define("wisej.web.UserPopup", {
 		},
 
 		/**
-		 * Process changes to the resizable edges to apply the
+		 * Process changes to the resizableEdges to apply the
 		 * same value to the wrapper popup.
 		 */
 		_onChangedResizableEdges: function (e) {
 
-			this.__updatePopupResizableEdges();
-
+			this.__updatePopupResizableEdges(this.__popup);
 			this.setResizable(false);
 		},
 
-		// Transfers the resizable edges to the wrapper popup widget.
-		__updatePopupResizableEdges: function () {
+		// Transfers the resizableEdges property to the wrapper popup widget.
+		__updatePopupResizableEdges: function (popup) {
 
 			var edges = [
 				this.getResizableTop(),
@@ -163,7 +162,25 @@ qx.Class.define("wisej.web.UserPopup", {
 				this.getResizableBottom(),
 				this.getResizableLeft()];
 
-			this.__popup.setResizable(edges);
+			popup.setResizable(edges);
+		},
+
+		/**
+		 * Process changes to the allowMove property to apply the
+		 * same value to the wrapper popup.
+		 */
+		_onChangeAllowMove: function (e) {
+
+			this.__updatePopupAllowMove(this.__popup);
+			this.setMovable(false);
+			this._releaseMoveHandle();
+		},
+
+		// Transfers the allowMove property to the wrapper popup widget.
+		__updatePopupAllowMove: function (popup) {
+
+			popup.setAllowMove(this.getAllowMove());
+			popup.setKeepOnScreen(this.getKeepOnScreen());
 		},
 
 		/**
@@ -182,7 +199,25 @@ qx.Class.define("wisej.web.UserPopup", {
 					this.__popup.set(name, value);
 					break;
 			}
-		}
+		},
+
+		_createChildControlImpl: function (id, hash) {
+
+			var control;
+
+			switch (id) {
+
+				case "popup":
+					control = new wisej.web.userPopup.Popup();
+					control.getContentElement().setStyle("overflow", "visible");
+					control.add(this);
+					this.__updatePopupResizableEdges(control);
+					break;
+			}
+
+			return control || this.base(arguments, id);
+		},
+
 	},
 
 	destruct: function () {
@@ -202,15 +237,28 @@ qx.Class.define("wisej.web.UserPopup", {
  */
 qx.Class.define("wisej.web.userPopup.Popup", {
 
-	extend: qx.ui.popup.Popup,
+	extend: wisej.mobile.Popup,
 
-	include: [qx.ui.core.MResizable],
+	include: [
+		qx.ui.core.MMovable,
+		qx.ui.core.MResizable],
 
 	construct: function () {
 
 		this.base(arguments, new qx.ui.layout.Grow());
 
 		this.setResizable(false);
+	},
+
+	properties: {
+
+		/**
+		 * Movable property.
+		 * 
+		 * When set to true, the widget can be dragged on the screen.
+		 */
+		allowMove: { init: false, check: "Boolean", apply: "_applyAllowMove" },
+
 	},
 
 	members: {
@@ -225,6 +273,25 @@ qx.Class.define("wisej.web.userPopup.Popup", {
 			}
 
 			return true;
-		}
+		},
+
+		/**
+		 * Allows the widget to be moved across the screen.
+		 */
+		_applyAllowMove: function (value, old) {
+
+			if (value == old)
+				return;
+
+			this.setMovable(value);
+
+			if (value && this.__moveHandle == null)
+				this._activateMoveHandle(this);
+
+			// allow the child widget to be dragged on android touch devices.
+			var el = this.getContentElement();
+			if (value)
+				el.setStyles({ "touch-action": "none", "-ms-touch-action": "none" });
+		},
 	}
 });

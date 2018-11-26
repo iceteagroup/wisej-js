@@ -275,7 +275,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		 */
 		_createListItem: function (data) {
 
-			return new wisej.web.list.ListItem(data, this.getPane ? this.getPane() : null);
+			return new wisej.web.virtual.list.ListItem(data, this.getPane ? this.getPane() : null);
 
 		},
 
@@ -394,7 +394,7 @@ qx.Class.define("wisej.web.VirtualCheckedListBox", {
 		 */
 		_createListItem: function (data) {
 
-			return new wisej.web.list.CheckedListItem(data, this.getPane ? this.getPane() : null);
+			return new wisej.web.virtual.list.CheckedListItem(data, this.getPane ? this.getPane() : null);
 
 		},
 
@@ -406,9 +406,9 @@ qx.Class.define("wisej.web.VirtualCheckedListBox", {
 /**
  * wisej.web.list.ListItem
  *
- * Represents the items in the wisej.web.ListBox.
+ * Represents the items in the wisej.web.VirtualListBox.
  */
-qx.Class.define("wisej.web.list.ListItem", {
+qx.Class.define("wisej.web.virtual.list.ListItem", {
 
 	extend: qx.ui.form.ListItem,
 
@@ -467,9 +467,9 @@ qx.Class.define("wisej.web.list.ListItem", {
 /**
  * wisej.web.list.CheckedListItem
  *
- * Represents the items in the wisej.web.CheckedListBox.
+ * Represents the items in the wisej.web.VirtualCheckedListBox.
  */
-qx.Class.define("wisej.web.list.CheckedListItem", {
+qx.Class.define("wisej.web.virtual.list.CheckedListItem", {
 
 	extend: wisej.web.list.ListItem,
 

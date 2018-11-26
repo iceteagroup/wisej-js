@@ -172,7 +172,7 @@ qx.Class.define("wisej.web.Button", {
 		 */
 		executeMnemonic: function () {
 
-			if (!this.isEnabled() || !this.isVisible())
+			if (!this.isEnabled() || !this.isVisible() || !this.isSeeable())
 				return false;
 
 			this.execute();
@@ -184,7 +184,7 @@ qx.Class.define("wisej.web.Button", {
 		 */
 		executeShortcut: function () {
 
-			if (!this.isEnabled() || !this.isVisible())
+			if (!this.isEnabled() || !this.isVisible() || !this.isSeeable())
 				return false;
 
 			this.execute();
@@ -233,7 +233,6 @@ qx.Class.define("wisej.web.Button", {
 			this.setMenu(value);
 
 			if (value) {
-				this.__wireMenuItems(value);
 				value.setPosition("bottom-left");
 			}
 
@@ -246,34 +245,6 @@ qx.Class.define("wisej.web.Button", {
 				this.setAppearance("menubutton");
 			else if (value == null && this.getAppearance() == "menubutton")
 				this.setAppearance("button");
-		},
-
-		// iterates all the child items and wires the execute event
-		// in order to fire it on the button owner.
-		__wireMenuItems: function (parent) {
-
-			if (parent == null)
-				return;
-
-			var children = parent.getChildren();
-			for (var i = 0; i < children.length; i++) {
-				var child = children[i];
-				if (child instanceof qx.ui.menu.AbstractButton) {
-
-					child.addListener("execute", this._onItemExecute, this);
-
-					// recurse.
-					this.__wireMenuItems(child.getMenu());
-
-				}
-			}
-		},
-
-		// handles clicks in menu items.
-		_onItemExecute: function (e) {
-
-			this.fireDataEvent("itemClick", e.getTarget());
-
 		},
 
 		// overridden

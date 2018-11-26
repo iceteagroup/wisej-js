@@ -49,14 +49,14 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 		 *
 		 * Enables/disables the helptips.
 		 */
-		active: { init: true, check: "Boolean" },
+		active: { init: true, check: "Boolean", apply: "_applyActive" },
 
 		/**
 		 * Icon property.
 		 *
 		 * Indicates the default icon to show in the helptips.
 		 */
-		icon: { init: null, check: "String", nullable: true },
+		icon: { init: null, check: "String", apply: "_applyIcon", nullable: true },
 
 		/**
 		 * PopDelay property.
@@ -83,7 +83,9 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 			"topLeft", "topCenter", "topRight",
 			"bottomLeft", "bottomCenter", "bottomRight",
 			"leftTop", "leftMiddle", "leftBottom",
-			"rightTop", "rightMiddle", "rightBottom"]
+			"rightTop", "rightMiddle", "rightBottom"],
+			apply: "_applyAlignment",
+			themeable: true
 		},
 
 		/**
@@ -98,14 +100,14 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 		 *
 		 * Defines the text color for the helptip.
 		 */
-		textColor: { init: null, check: "Color", themeable: true },
+		textColor: { init: null, check: "Color", apply: "_applyTextColor", themeable: true },
 
 		/**
 		 * BackgroundColor property.
 		 *
 		 * Defines the text color for the helptip.
 		 */
-		backgroundColor: { init: null, check: "Color", themeable: true },
+		backgroundColor: { init: null, check: "Color", apply: "_applyBackgroundColor", themeable: true },
 	},
 
 	statics: {
@@ -127,6 +129,7 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 		__showTimer: 0,
 		__closeTimer: 0,
 
+		// loads all the helptips.
 		_applyHelpTips: function (value, old) {
 
 			if (old != null && old.length > 0) {
@@ -153,6 +156,7 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 						comp.removeListener("activate", this.__onComponentActivate, this);
 						comp.removeListener("disappear", this.__onComponentDeactivate, this);
 						comp.removeListener("deactivate", this.__onComponentDeactivate, this);
+						comp.removeListener("changeEnabled", this.__onComponentDeactivate, this);
 					}
 				}
 			}
@@ -173,15 +177,74 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 						comp.addListener("activate", this.__onComponentActivate, this);
 						comp.addListener("disappear", this.__onComponentDeactivate, this);
 						comp.addListener("deactivate", this.__onComponentDeactivate, this);
+						comp.addListener("changeEnabled", this.__onComponentDeactivate, this);
 					}
 				}
 			}
 		},
 
+		/**
+		 * Applies the Active property.
+		 */
+		_applyActive: function (value, old) {
+
+			if (!value)
+				this.hideHelpTip();
+		},
+
+		/**
+		 * Applies the Alignment property.
+		 */
+		_applyAlignment: function (value, old) {
+
+			var helptip = this.__helptip;
+			if (!helptip)
+				return;
+
+			helptip.setPosition(qx.lang.String.hyphenate(value));
+		},
+
+		/**
+		 * Applies the Icon property.
+		 */
+		_applyIcon: function (value, old) {
+
+			var helptip = this.__helptip;
+			if (!helptip)
+				return;
+
+			var icon = value;
+			helptip.setShow(icon == "none" ? "label" : "both");
+			if (icon == null || icon == "default")
+				helptip.resetIcon();
+			else if (icon != "none")
+				helptip.setIcon("icon-" + icon);
+		},
+
+		/**
+		 * Applies the TextColor property.
+		 */
+		_applyTextColor: function (value, old) {
+			var helptip = this.__helptip;
+			if (!helptip)
+				return;
+
+			helptip.setTextColor(value);
+		},
+
+		/**
+		 * Applies the BackgroundColor property.
+		 */
+		_applyBackgroundColor: function (value, old) {
+			var helptip = this.__helptip;
+			if (!helptip)
+				return;
+
+			helptip.setBackgroundColor(value);
+		},
+
 		// shows the helptip associated with the component when it gets activated.
 		__onComponentActivate: function (e) {
-
-			e.stopPropagation();
 
 			// hide the shared helptip widget.
 			this.hideHelpTip();
@@ -198,14 +261,14 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 		// hides the helptip when the component is deactivated.
 		__onComponentDeactivate: function (e) {
 
-			e.stopPropagation();
 			this.hideHelpTip();
 		},
 
 		// hides the shared helptip widget.
 		hideHelpTip: function () {
 
-			if (this.__helptip == null)
+			var helptip = this.__helptip;
+			if (!helptip)
 				return;
 
 			// stop the timers.
@@ -218,11 +281,6 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 				this.__closeTimer = 0;
 			}
 
-			// already waiting to be closed?
-			if (this.__closeTimer > 0)
-				return;
-
-			var helptip = this.getHelpTip();
 			helptip.exclude();
 		},
 
@@ -238,23 +296,11 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 				this.__closeTimer = 0;
 			}
 
-			// update the helptip widget.
 			var helptip = this.getHelpTip();
+
+			// update the helptip text and place next to the target widget.
 			helptip.setLabel(text);
-			helptip.setTextColor(this.getTextColor());
-			helptip.setBackgroundColor(this.getBackgroundColor());
-
-			// update the alignment.
-			helptip.setPosition(qx.lang.String.hyphenate(this.getAlignment()));
 			helptip.placeToWidget(widget, true);
-
-			// update the icon.
-			var icon = this.getIcon();
-			helptip.setShow(icon == "none" ? "label" : "both");
-			if (icon == null || icon == "default")
-				helptip.resetIcon();
-			else if (icon != "none")
-				helptip.setIcon("icon-" + icon);
 
 			// stop the close timer.
 			if (this.__closeTimer > 0) {
@@ -302,11 +348,19 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 		getHelpTip: function () {
 
 			if (this.__helptip == null) {
+
 				this.__helptip = new wisej.web.extender.helpTip.Popup().set({
 					rich: true,
 					visibility: "excluded",
+					placementModeX: "best-fit",
+					placementModeY: "best-fit",
+					textColor: this.getTextColor(),
+					backgroundColor: this.getBackgroundColor(),
+					position: qx.lang.String.hyphenate(this.getAlignment()),
 					zIndex: 900000
 				});
+
+				this._applyIcon(this.getIcon());
 
 				qx.core.Init.getApplication().getRoot().add(this.__helptip);
 			}

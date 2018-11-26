@@ -52,6 +52,10 @@ qx.Class.define("wisej.web.ListView", {
 		// forward the focusin and focusout events to the current view.
 		this.addListener("focusin", this.__onFocusIn, this);
 		this.addListener("focusout", this.__onFocusOut, this);
+
+		// adds the inner target to the drop & drop event object.
+		this.addListener("drop", this._onDragEvent, this);
+		this.addListener("dragover", this._onDragEvent, this);
 	},
 
 	properties: {
@@ -125,46 +129,54 @@ qx.Class.define("wisej.web.ListView", {
 		columns: { init: null, check: "Array", apply: "_applyColumns" },
 
 		/**
-         * LabelEdit property.
+		* LabelEdit property.
 		 *
 		 * Enables or disables label editing.
-         */
+		*/
 		labelEdit: { init: true, check: "Boolean" },
 
 		/**
-         * LabelWrap property.
+		 * LabelWrap property.
 		 *
 		 * Enables or disables label wrapping. When false, the ellipsis is shown when the label text exceeded the item width.
-         */
+		 */
 		labelWrap: { init: false, check: "Boolean", apply: "_applyLabelWrap" },
 
 		/**
-         * HeaderStyle property.
+		 * HeaderStyle property.
 		 *
 		 * Returns or sets the column header style.
-         */
+		 */
 		headerStyle: { init: "clickable", check: ["none", "clickable", "nonClickable"], apply: "_applyHeaderStyle" },
 
 		/**
-         * LiveResize property.
+		 * LiveResize property.
 		 *
 		 * Returns or sets the datagrid view's liveResize property.
-         */
+		 */
 		liveResize: { init: "true", check: "Boolean", apply: "_applyLiveResize" },
 
 		/**
-         * GridLines property.
+		 * GridLines property.
 		 *
 		 * Shows or hides the cell lines in the datagrid view.
-         */
+		 */
 		gridLines: { init: "true", check: "Boolean", apply: "_applyGridLines" },
 
 		/**
-         * GridLineStyle property.
+		 * GridLineStyle property.
 		 *
 		 * Sets the type of border to use for the grid's cells of the datagrid view.
-         */
+		 */
 		gridLineStyle: { init: "single", check: ["none", "both", "vertical", "horizontal"], apply: "_applyGridLineStyle" },
+
+		/**
+		 * ItemPadding property.
+		 * 
+		 * Determines the padding to add to the items when in item-view and to the
+		 * cells when in details view.
+		 */
+		itemPadding: { init: null, check: "Array", apply: "_applyItemPadding" },
 
 		/**
 		 * Tools property.
@@ -390,6 +402,16 @@ qx.Class.define("wisej.web.ListView", {
 			this.gridView.setGridLines(value);
 		},
 
+		/**
+		 * Applies the itemPadding property.
+		 */
+		_applyItemPadding: function (value, old) {
+
+			this.gridView.setDefaultCellStyle({ padding: value });
+			this.reloadData();
+
+		},
+
 		/** 
 		 * Applies the tools property.
 		 */
@@ -543,13 +565,24 @@ qx.Class.define("wisej.web.ListView", {
 		/**
 		 * Fires the specified item event.
 		 *
-		 * @param pointerEvent {qx.event.type.Pointer} original pointer event.
+		 * @param e {qx.event.type.Pointer} original pointer event.
 		 * @param type {String} name of the event.
 		 * @param index {Integer} item's index.
 		 */
-		fireItemEvent: function (pointerEvent, type, index) {
+		fireItemEvent: function (e, type, index) {
 
-			this.fireEvent(type, wisej.web.listview.ItemEvent, [pointerEvent, index]);
+			// prevent events in hosted widgets.
+			var target = e.getTarget();
+			var item = e.getCurrentTarget();
+			if (item) {
+				var host = item.getChildControl("host", true);
+				if (host) {
+					if (qx.ui.core.Widget.contains(host, target))
+						return;
+				}
+			}
+
+			this.fireEvent(type, wisej.web.listview.ItemEvent, [e, index]);
 		},
 
 		/**
@@ -634,6 +667,22 @@ qx.Class.define("wisej.web.ListView", {
 
 			currentView.fireNonBubblingEvent("blur", qx.event.type.Focus);
 			currentView.fireNonBubblingEvent("focusout", qx.event.type.Focus);
+		},
+
+		// Adds the index of the item under the pointer
+		// to let the server know which ListViewItem is the target.
+		_onDragEvent: function (e) {
+
+			var target = e.getOriginalTarget();
+
+			if (this.itemView.isVisible()) {
+				if (target instanceof wisej.web.listview.ItemCellWidget) {
+					this.itemView._onDragEvent(e);
+				}
+			}
+			else if (this.gridView.isVisible()) {
+				this.gridView._onDragEvent(e);
+			}
 		},
 
 	}

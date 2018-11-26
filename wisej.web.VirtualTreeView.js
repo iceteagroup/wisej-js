@@ -1,6 +1,6 @@
 ﻿///////////////////////////////////////////////////////////////////////////////
 //
-// (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
+// (C) 2018 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
 // 
 //
@@ -18,11 +18,16 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- * wisej.web.TreeView
+ * wisej.web.VirtualTreeView
+ *
+ * Alternative virtual implementation of the wisej.web.TreeView class.
+ * Uses the virtual rendering system in qooxdoo to allow a TreeView control
+ * to render unlimited nodes without any performance drop.
+ *
  */
-qx.Class.define("wisej.web.TreeView", {
+qx.Class.define("wisej.web.VirtualTreeView", {
 
-	extend: qx.ui.tree.Tree,
+	extend: qx.ui.tree.VirtualTree,
 
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
@@ -33,9 +38,9 @@ qx.Class.define("wisej.web.TreeView", {
 
 	construct: function () {
 
-		this.base(arguments);
+		this.base(arguments, null, "label", "children");
 
-		this.addListener("dragstart", this._onItemDrag, this);
+		//this.addListener("dragstart", this._onItemDrag, this);
 
 		// add local state properties.
 		this.setStateProperties(this.getStateProperties().concat(["topNode"]));
@@ -43,16 +48,26 @@ qx.Class.define("wisej.web.TreeView", {
 		// reset the cached metrics when scrolling or resizing.
 		this.addListener("resize", this.__resetCachedTopNode);
 		this.addListener("scrollAnimationYEnd", this.__resetCachedTopNode);
+
+		// set up our binding delegate.
+		this.setDelegate(new wisej.web.virtualTreeView.TreeViewDelegate(this));
+
+		// listen to selection changes.
+		this.getSelection().addListener("change", this._onSelectionChange, this);
+
 	},
 
 	properties: {
+
+		// overridden
+		appearance: { refine: true, init: "tree" },
 
 		/**
 		 * Root property.
 		 *
 		 * Sets or gets the root node.
 		 */
-		rootNode: { init: null, nullable: true, check: "wisej.web.TreeNode", apply: "_applyRootNode", transform: "_transformComponent" },
+		rootNode: { init: null, nullable: true, check: "wisej.web.virtualTreeView.TreeNode", apply: "_applyRootNode", transform: "_transformComponent" },
 
 		/**
 		 * TopNode property.
@@ -61,7 +76,7 @@ qx.Class.define("wisej.web.TreeView", {
 		 *
 		 * Returns or sets the node displayed at the top of the tree view.
 		 */
-		// topNode: { init: null, nullable: true, check: "wisej.web.TreeNode", apply: "_applyTopNode", transform: "_transformComponent" },
+		// topNode: { init: null, nullable: true, check: "wisej.web.virtualTreeView.TreeNode", apply: "_applyTopNode", transform: "_transformComponent" },
 
 		/**
 		 * HideOpenClose property.
@@ -174,7 +189,6 @@ qx.Class.define("wisej.web.TreeView", {
 		 * Determines the appearance of child nodes that can be expanded.
 		 */
 		folderAppearance: { init: "tree-folder", apply: "_applyFolderAppearance", themeable: true },
-
 	},
 
 	members: {
@@ -182,16 +196,28 @@ qx.Class.define("wisej.web.TreeView", {
 		// keep track if the nodes are being selected from the _applySelectedNodes method.
 		__inApplySelectedNodes: false,
 
+		// overridden. interface implementation
+		hasChildren: function (node) {
+
+			return node.getCanExpand()
+				|| qx.ui.tree.core.Util.hasChildren(node, this.getChildProperty(), !this.isShowLeafs());
+		},
+
+		// overridden. interface implementation
+		isNodeOpen: function (node) {
+
+			return node.isExpanded()
+				|| qx.lang.Array.contains(this.__openNodes, node);
+		},
+
 		/**
 		 * Applies the root node.
 		 *
-		 * We simply assign the root node to the base root property.
-		 * The rootNode property is needed here only to convert the incoming string id
-		 * to a component reference.
+		 * Assigns the model property, in the VirtualTree the model is the root.
 		 */
 		_applyRootNode: function (value, old) {
 
-			this.setRoot(value);
+			this.setModel(value);
 
 		},
 
@@ -200,8 +226,8 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyFileAppearance: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				node.setFileAppearance(value);
+			this.__forEachItem(function (item) {
+				item.setFileAppearance(value);
 			});
 		},
 
@@ -210,8 +236,8 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyFolderAppearance: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				node.setFolderAppearance(value);
+			this.__forEachItem(function (item) {
+				item.setFolderAppearance(value);
 			});
 		},
 
@@ -222,9 +248,9 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyIcon: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				if (!node.hasState("opened"))
-					node._updateIcon();
+			this.__forEachItem(function (item) {
+				if (!item.hasState("opened"))
+					item._updateIcon();
 			});
 		},
 
@@ -237,8 +263,8 @@ qx.Class.define("wisej.web.TreeView", {
 
 			name = (name == "iconSize") ? "icon" : "iconState";
 
-			this.__forEachNode(function (node) {
-				node._updateIconSize(value, name);
+			this.__forEachItem(function (item) {
+				item._updateIconSize(value, name);
 			});
 		},
 
@@ -249,9 +275,9 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyIconOpened: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				if (node.hasState("opened"))
-					node._updateIcon();
+			this.__forEachItem(function (item) {
+				if (item.hasState("opened"))
+					item._updateIcon();
 			});
 		},
 
@@ -264,8 +290,8 @@ qx.Class.define("wisej.web.TreeView", {
 			if (this.isCheckBoxes()) {
 
 				var checkBoxIcons = this.getCheckBoxIcons();
-				this.__forEachNode(function (node) {
-					node._updateCheckBoxIcons(checkBoxIcons);
+				this.__forEachItem(function (item) {
+					item._updateCheckBoxIcons(checkBoxIcons);
 				});
 			}
 		},
@@ -276,8 +302,8 @@ qx.Class.define("wisej.web.TreeView", {
 		_applyShowNodeToolTips: function (value, old) {
 
 			var block = !value;
-			this.__forEachNode(function (node) {
-				node.setBlockToolTip(block);
+			this.__forEachItem(function (item) {
+				item.setBlockToolTip(block);
 			});
 		},
 
@@ -288,9 +314,9 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyIconSelected: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				if (node.hasState("selected"))
-					node._updateIcon();
+			this.__forEachItem(function (item) {
+				if (item.hasState("selected"))
+					item._updateIcon();
 			});
 
 		},
@@ -300,8 +326,8 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyHideOpenClose: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				node._updateIndent();
+			this.__forEachItem(function (item) {
+				item._updateIndent();
 			});
 		},
 
@@ -315,12 +341,12 @@ qx.Class.define("wisej.web.TreeView", {
 			if (value == old)
 				return;
 
-			this.__forEachNode(function (node) {
+			this.__forEachItem(function (item) {
 
 				if (value == null || value == -1)
-					node.resetIndent();
+					item.resetIndent();
 				else
-					node.setIndent(value);
+					item.setIndent(value);
 			});
 		},
 
@@ -331,9 +357,10 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyCheckBoxes: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				node._updateCheckBox(value);
+			this.__forEachItem(function (item) {
+				item._updateCheckBox(value);
 			});
+
 		},
 
 		/**
@@ -343,23 +370,22 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_applyHideIcons: function (value, old) {
 
-			this.__forEachNode(function (node) {
-				node._updateHideIcon(value);
+			this.__forEachItem(function (item) {
+				item._updateHideIcon(value);
 			});
 		},
 
 		/**
-		 * Iterates all nodes and child nodes.
+		 * Iterates all rendered items.
 		 */
-		__forEachNode: function (callback) {
+		__forEachItem: function (callback) {
 
 			if (callback) {
-				var root = this.getRoot();
-				if (root) {
-					var allNodes = root.getItems(true);
-					for (var i = 0; i < allNodes.length; i++) {
-
-						if (callback(allNodes[i]) === false)
+				var layers = this.getPane().getLayers();
+				for (var i = 0; i < layers.length; i++) {
+					var children = layers[i].getChildren();
+					for (var j = 0; j < children.length; j++) {
+						if (callback(children[j]) === false)
 							break;
 					}
 				}
@@ -401,13 +427,14 @@ qx.Class.define("wisej.web.TreeView", {
 			this.__inApplySelectedNodes = true;
 			try {
 
-				this.setSelection(value);
+				this.getSelection().removeAll();
+				if (value && value.length > 0)
+					this.getSelection().append(value);
 
 			} finally {
 
 				this.__inApplySelectedNodes = false;
 			}
-
 		},
 
 		/** 
@@ -450,21 +477,33 @@ qx.Class.define("wisej.web.TreeView", {
 		getTopNode: function () {
 
 			if (this.__topNode === undefined) {
-				var pane = this.getChildControl("pane");
-				var widget = wisej.utils.Widget.getWidgetFromPoint(pane, 0, 1);
-
-				if (widget instanceof wisej.web.TreeNode)
-					this.__topNode = widget;
+				this.buildLookupTable();
+				var node = this.getLookupTable().getItem(0);
+				if (node instanceof wisej.web.virtualTreeView.TreeNode)
+					this.__topNode = node;
 			}
 
 			return this.__topNode != null ? this.__topNode.getId() : null;
 		},
 		setTopNode: function (node) {
 
+			if (this.getBounds() == null) {
+				this.addListenerOnce("appear", function () {
+					qx.event.Timer.once(function () {
+						this.setTopNode(node);
+					}, this, 0);
+				}, this);
+				return;
+			}
+
 			node = this._transformComponent(node);
 			if (node != this.__topNode) {
-				if (node) {
-					this.scrollChildIntoViewY(node, "top");
+				this.buildLookupTable();
+				var row = this.getLookupTable().indexOf(node);
+				if (row > -1) {
+					var pane = this.getPane();
+					var itemTop = pane.getRowConfig().getItemPosition(row);
+					pane.setScrollY(itemTop);
 				}
 				this.__topNode = undefined;
 			}
@@ -478,24 +517,51 @@ qx.Class.define("wisej.web.TreeView", {
 			this.__topNode = undefined;
 		},
 
+		/**
+		 * Returns the tree item, which contains the given widget.
+		 *
+		 * @param widget {qx.ui.core.Widget} The widget to get the containing tree item.
+		 * @return {qx.ui.tree.core.AbstractItem|null} The tree item containing the widget. If the
+		 *     widget is not inside of any tree item <code>null</code> is returned.
+		 */
+		getTreeItem: function (widget) {
+
+			while (widget) {
+				if (widget == this)
+					return null;
+				if (widget instanceof qx.ui.tree.core.AbstractItem)
+					return widget;
+				widget = widget.getLayoutParent();
+			}
+
+			return null;
+		},
+
+		/**
+		 * Returns the tree item, which contains the given widget.
+		 *
+		 * @param widget {qx.ui.core.Widget} The widget to get the data node.
+		 * @return {wisej.web.virtualTreeView.TreeNode|null} The tree node containing the data represented by the widget. If the
+		 *     widget is not inside of any tree item <code>null</code> is returned.
+		 */
+		getTreeNode: function (widget) {
+
+			var item = this.getTreeItem(widget);
+			if (item)
+				return item.getModel();
+		},
+
 		// updates the properties of the node using the values
 		// set in the tree parent.
-		_updateNode: function (node) {
+		_updateItem: function (item) {
 
-			node._updateIconSize(this.getIconSize(), "icon");
-			node._updateIconSize(this.getIconStateSize(), "iconState");
-			node._updateCheckBox(this.getCheckBoxes());
-			node._updateCheckBoxIcons(this.getCheckBoxIcons());
-			node.setBlockToolTip(!this.getShowNodeToolTips());
-			node.setFileAppearance(this.getFileAppearance());
-			node.setFolderAppearance(this.getFolderAppearance());
-
-			if (node.hasChildren()) {
-				var nodes = node.getItems(false);
-				for (var i = 0; i < nodes.length; i++) {
-					this._updateNode(nodes[i]);
-				}
-			}
+			item._updateIconSize(this.getIconSize(), "icon");
+			item._updateIconSize(this.getIconStateSize(), "iconState");
+			item._updateCheckBox(this.getCheckBoxes());
+			item._updateCheckBoxIcons(this.getCheckBoxIcons());
+			item.setBlockToolTip(!this.getShowNodeToolTips());
+			item.setFileAppearance(this.getFileAppearance());
+			item.setFolderAppearance(this.getFolderAppearance());
 		},
 
 		// overridden
@@ -537,6 +603,7 @@ qx.Class.define("wisej.web.TreeView", {
 
 		// overridden.
 		getInnerSize: function () {
+
 			var size = this.base(arguments);
 
 			// reduce by the height of the tools container.
@@ -567,38 +634,39 @@ qx.Class.define("wisej.web.TreeView", {
 		 *
 		 * @param e {qx.event.type.Data} The selection data event.
 		 */
-		_onChangeSelection: function (e) {
+		_onSelectionChange: function (e) {
 
-			clearTimeout(this.__editNodeTimer);
-			this.__editNodeTimer = 0;
-
-			this.base(arguments, e);
+			//clearTimeout(this.__editNodeTimer);
+			//this.__editNodeTimer = 0;
 
 			if (!this.__inApplySelectedNodes)
-				this.fireDataEvent("selectionChanged", e.getData());
+				this.fireDataEvent("selectionChanged", e.getData().added);
 		},
 
 		_onKeyPress: function (e) {
 
-			var node = this._getLeadItem();
-			if (node !== null) {
+			var selection = this.getSelection();
+			var node = selection.getItem(0);
+			var item = this.getTreeItem(e.getTarget());
+
+			if (item !== null) {
 				switch (e.getKeyIdentifier()) {
 					case "-":
 					case "Left":
-						if (node.isOpen()) {
-							node.collapse();
+						if (item.isOpen()) {
+							item.collapse();
 						}
 						else {
-							var parentNode = node.getParent();
+							var parentNode = node.getParentNode();
 							if (parentNode && parentNode.isVisible())
-								this.setSelection([parentNode]);
+								selection.splice(0, 1, parentNode);
 						}
 						return;
 
 					case "+":
 					case "Right":
-						if (!node.isOpen())
-							node.expand();
+						if (!item.isOpen())
+							item.expand();
 						return;
 
 					case "Enter":
@@ -613,28 +681,28 @@ qx.Class.define("wisej.web.TreeView", {
 							this.fireDataEvent("nodeCheckClick", node);
 						}
 						else {
-							node.isOpen()
-								? node.collapse()
-								: node.expand();
+							item.isOpen()
+								? item.collapse()
+								: item.expand();
 						}
 
 						return;
 				}
 
-				// if label editing is enabled, process F2
-				// to start editing the first selected node.
-				if (this.isLabelEdit()) {
-					switch (e.getKeyIdentifier()) {
-						case "F2":
-							if (!this.isWired("beginEdit")) {
-								node.editLabel();
-							}
-							else {
-								this.fireDataEvent("beginEdit", node);
-							}
-							return;
-					}
-				}
+				//// if label editing is enabled, process F2
+				//// to start editing the first selected node.
+				//if (this.isLabelEdit()) {
+				//	switch (e.getKeyIdentifier()) {
+				//		case "F2":
+				//			if (!this.isWired("beginEdit")) {
+				//				node.editLabel();
+				//			}
+				//			else {
+				//				this.fireDataEvent("beginEdit", node);
+				//			}
+				//			return;
+				//	}
+				//}
 			}
 
 			this.base(arguments, e);
@@ -645,13 +713,13 @@ qx.Class.define("wisej.web.TreeView", {
 		  */
 		_onOpen: function (e) {
 
-			var node = this.getTreeItem(e.getTarget());
-			if (node == null)
+			var item = this.getTreeItem(e.getTarget());
+			if (item == null)
 				return;
 
-			node.isOpen()
-				? node.collapse()
-				: node.expand();
+			item.isOpen()
+				? item.collapse()
+				: item.expand();
 
 			e.stopPropagation();
 		},
@@ -661,19 +729,19 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_editNode: function (node) {
 
-			if (!this.isWired("beginEdit")) {
-				node.editLabel();
-			}
-			else {
+			//if (!this.isWired("beginEdit")) {
+			//	node.editLabel();
+			//}
+			//else {
 
-				clearTimeout(this.__editNodeTimer);
-				this.__editNodeTimer = 0;
+			//	clearTimeout(this.__editNodeTimer);
+			//	this.__editNodeTimer = 0;
 
-				var me = this;
-				this.__editNodeTimer = setTimeout(function () {
-					me.fireDataEvent("beginEdit", node);
-				}, 100);
-			}
+			//	var me = this;
+			//	this.__editNodeTimer = setTimeout(function () {
+			//		me.fireDataEvent("beginEdit", node);
+			//	}, 100);
+			//}
 		},
 
 		// timer used to start editing the current node.
@@ -685,23 +753,397 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_onItemDrag: function (e) {
 
-			clearTimeout(this.__editNodeTimer);
-			this.__editNodeTimer = 0;
+			//clearTimeout(this.__editNodeTimer);
+			//this.__editNodeTimer = 0;
 
-			var node = this.getTreeItem(e.getOriginalTarget());
-			if (node)
-				this.fireDataEvent("itemDrag", node);
+			//var node = this.__findNode(e.getOriginalTarget());
+			//if (node)
+			//	this.fireDataEvent("itemDrag", node);
 		},
+
 	},
 });
 
 
 /**
- * wisej.web.TreeNode
+ * wisej.web.virtualTreeView.TreeViewDelegate
+ *
+ * Delegate implementation used by the virtual infrastructure
+ * to create, initialize, pool the widgets used when rendering the nodes.
+ *
  */
-qx.Class.define("wisej.web.TreeNode", {
+qx.Class.define("wisej.web.virtualTreeView.TreeViewDelegate", {
 
-	extend: qx.ui.tree.TreeFolder,
+	extend: qx.core.Object,
+
+	implement: [
+		qx.ui.tree.core.IVirtualTreeDelegate
+	],
+
+	construct: function (tree) {
+
+		this.base(arguments);
+
+		this.__tree = tree;
+	},
+
+	members: {
+
+		/** the instance of wisej.web.VirtualTreeView that created this delegate. */
+		__tree: null,
+
+		/**
+		 * Gives the user the opportunity to set individual styles and properties
+		 * on the widget cells created by the controller.
+		 *
+		 * @param item {qx.ui.core.Widget} Item to modify.
+		 */
+		configureItem: function (item) { },
+
+
+		/**
+		 * Creates a widget cell which will be used for rendering. Be sure to
+		 * implement the {@link #bindItem} function as well to get the needed
+		 * properties bound.
+		 *
+		 * @return {qx.ui.core.Widget} A new created item cell.
+		 */
+		createItem: function () {
+
+			return new wisej.web.VirtualTreeItem().set({ tree: this.__tree });
+		},
+
+		/**
+		 * Gives the user the opportunity to reset properties or states.
+		 *
+		 * @param item {qx.ui.core.Widget} Item to modify.
+		 */
+		onPool: function (item) {
+
+			item.removeState("opened");
+			item.removeState("hovered");
+			item.removeState("selected");
+			item.removeState("disabled");
+		},
+
+		/**
+		 * Sets up the binding for the given widget cell and index.
+		 *
+		 * For every property you want to bind, use
+		 * {@link MWidgetController#bindProperty} like this:
+		 * <code>
+		 * controller.bindProperty(null, "value", options, item, id);
+		 * </code>
+		 *
+		 * @param controller {MWidgetController} The currently used controller.
+		 * @param item {qx.ui.core.Widget} The created and used item.
+		 * @param id {Integer} The id for the binding.
+		 */
+		bindItem: function (controller, item, id) {
+
+			controller.bindProperty("", "model", null, item, id);
+			controller.bindProperty("label", "label", null, item, id);
+			controller.bindProperty("font", "font", null, item, id);
+			controller.bindProperty("textColor", "textColor", null, item, id);
+			controller.bindProperty("font", "font", null, item, id);
+			controller.bindProperty("icon", "icon", null, item, id);
+			controller.bindProperty("iconSelected", "iconSelected", null, item, id);
+			controller.bindProperty("iconState", "iconState", null, item, id);
+			controller.bindProperty("visible", "visible", null, item, id);
+			controller.bindProperty("enabled", "enabled", null, item, id);
+			controller.bindProperty("backgroundColor", "backgroundColor", null, item, id);
+			controller.bindProperty("toolTipText", "toolTipText", null, item, id);
+			controller.bindProperty("contextMenu", "contextMenu", null, item, id);
+			controller.bindProperty("checkBox", "checkBox", null, item, id);
+			controller.bindProperty("checkState", "checkState", null, item, id);
+			controller.bindProperty("hideIcon", "hideIcon", null, item, id);
+			controller.bindProperty("showLoader", "showLoader", null, item, id);
+			controller.bindProperty("canExpand", "canExpand", null, item, id);
+			controller.bindProperty("expanded", "expanded", null, item, id);
+
+			controller.bindProperty("canExpand", "openSymbolMode", {
+				converter: function (value, model, sourceObject, targetObject) {
+					return (value) ? "always" : "auto";
+				}
+			}, item, id);
+
+			controller.bindPropertyReverse("tree", "tree", null, item, id);
+		},
+	}
+});
+
+
+/**
+ * wisej.web.virtualTreeView.TreeNode
+ *
+ * TreeNode data in the data model. Instances of this
+ * class are bound to the wisej.web.VirtualTreeItem widgets
+ * displayed in the wisej.web.VirtualTreeView.
+ *
+ * This is the main difference with the standard implementation
+ * in wisej.web.TreeView. The VirtualTreeView manages the nodes
+ * in a data model and renders only the visible nodes in the widget.
+ *
+ */
+qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
+
+	extend: qx.core.Object,
+
+	// All Wisej components must include this mixin
+	// to provide services to the Wisej core.
+	include: [
+		wisej.mixin.MWisejComponent,
+		qx.data.marshal.MEventBubbling],
+
+	construct: function (label) {
+
+		this.base(arguments);
+
+		if (label)
+			this.setLabel(label);
+
+		this.setChildren(new qx.data.Array());
+	},
+
+	properties: {
+
+		/**
+		 * Tree property.
+		 *
+		 * Reference to the parent wisej.web.VirtualTreeView.
+		 */
+		tree: { init: null, check: "wisej.web.VirtualTreeView", apply: "_applyTree" },
+
+		/**
+		 * The label/caption/text.
+		 */
+		label: { init: "", check: "String", event: "changeLabel", },
+
+		/**
+		 * Node icon.
+		 */
+		icon: { init: null, check: "String", event: "changeIcon" },
+
+		/**
+		 * Node icon when the node is selected.
+		 */
+		iconSelected: { init: null, check: "String", event: "changeIconSelected" },
+
+		/**
+		 * State icon displayed to the left of the node icon.
+		 */
+		iconState: { init: null, check: "String", event: "changeIconState" },
+
+		/**
+		 * The tooltip.
+		 */
+		toolTipText: { init: "", check: "String", event: "changeToolTipText", },
+
+		/**
+		 * The expanded state.
+		 */
+		expanded: { init: false, check: "Boolean", apply: "_applyExpanded", event: "changeExpanded" },
+
+		/**
+		 * The visible property.
+		 */
+		visible: { init: true, check: "Boolean", event: "changeVisible" },
+
+		/**
+		 * The enabled property.
+		 */
+		enabled: { init: true, check: "Boolean", event: "changeEnabled" },
+
+		/**
+		 * The canExpand property.
+		 */
+		canExpand: { init: true, check: "Boolean", event: "changeCanExpand" },
+
+		/**
+		 * The showLoader property.
+		 */
+		showLoader: { init: true, check: "Boolean", event: "changeShowLoader" },
+
+		/**
+		 * The background color.
+		 */
+		backgroundColor: { init: null, check: "Color", event: "changeBackgroundColor", },
+
+		/**
+		 * The text color.
+		 */
+		textColor: { init: null, check: "Color", event: "changeTextColor", },
+
+		/**
+		 * The font.
+		 */
+		font: { init: null, check: "Font", event: "changeFont", dereference: true },
+
+		/**
+		 * The child nodes.
+		 */
+		nodes: { init: null, check: "Array", apply: "_applyNodes", transform: "_transformComponents" },
+
+		/**
+		 * CheckBox property.
+		 *
+		 * Hides or shows the checkbox in tree node.
+		 */
+		checkBox: { init: null, nullable: true, check: "Boolean", event: "changeCheckBox" },
+
+		/**
+		 * CheckState property.
+		 *
+		 * Gets or sets the check state of the checkbox.
+		 */
+		checkState: { init: false, check: "Boolean", nullable: true, event: "changeCheckState" },
+
+		/**
+		 * HideIcon property.
+		 *
+		 * Hides or shows node icons.
+		 */
+		hideIcon: { init: null, nullable: true, check: "Boolean", event: "changeHideIcon" },
+
+		/**
+		 * The data bound children property.
+		 *
+		 * Altering this collection alters the widget.
+		 */
+		children: { init: null, check: "qx.data.Array", apply: "_applyEventPropagation", event: "changeChildren" },
+
+		/**
+		 * Index property.
+		 *
+		 * The position of this node within the node collection it belongs to.
+		 */
+		index: { init: -1, check: "Integer", apply: "_applyIndex" },
+
+		/**
+		 * ParentNode property.
+		 */
+		parentNode: { init: null, check: "wisej.web.virtualTreeView.TreeNode", apply: "_applyParentNode", transform: "_transformComponent" },
+
+		/**
+		 * The contextual menu.
+		 */
+		contextMenu: { init: null, nullable: true, transform: "_transformMenu" },
+	},
+
+	members: {
+
+		/**
+		 * Applies the nodes property.
+		 *
+		 * Replaces all the nodes in the children collection.
+		 */
+		_applyNodes: function (value, old) {
+
+			var children = this.getChildren();
+			children.removeAll();
+
+			if (value && value.length > 0) {
+
+				children.append(value);
+
+				for (var i = 0, l = value.length; i < l; i++) {
+					qx.util.PropertyUtil.setUserValue(value[i], "parentNode", this);
+				}
+			}
+		},
+
+		/**
+		 * Applies the tree property.
+		 *
+		 */
+		_applyTree: function (value, old) {
+
+			var tree = value;
+			if (tree && this.isExpanded()) {
+				tree.openNodeWithoutScrolling(this);
+			}
+		},
+
+		/**
+		 * Applies the expanded property.
+		 *
+		 * This property cannot be bound to the model since a node cannot be expanded
+		 * while it's being updated using the bound model.
+		 */
+		_applyExpanded: function (value, old) {
+
+			if (value == old)
+				return;
+
+			var tree = this.getTree();
+			if (tree) {
+				value
+					? tree.openNodeWithoutScrolling(this)
+					: tree.closeNodeWithoutScrolling(this);
+			}
+		},
+
+		/**
+		 * Applies the parentNode property.
+		 */
+		_applyParentNode: function (value, old) {
+
+			if (value == old)
+				return;
+
+			if (old)
+				old.getChildren().remove(this);
+
+			if (value) {
+
+				var parentChildren = value.getChildren();
+
+				// different parent?
+				if (!parentChildren.contains(this)) {
+					var index = this.getIndex();
+					if (index > -1)
+						parentChildren.insertAt(index, this);
+					else
+						parentChildren.push(this);
+				}
+			}
+		},
+
+		/**
+		 * Applies the index property.
+		 */
+		_applyIndex: function (value, old) {
+
+			if (value == old)
+				return;
+
+			var parentNode = this.getParentNode();
+			if (parentNode) {
+				var parentChildren = parentNode.getChildren();
+				if (parentChildren.contains(this)) {
+					var newIndex = value;
+					var currentIndex = parentChildren.indexOf(this);
+
+					if (newIndex != currentIndex) {
+						parentChildren.remove(this);
+						parentChildren.insertAt(newIndex, this);
+					}
+				}
+			}
+		}
+	}
+});
+
+
+/**
+ * wisej.web.VirtualTreeItem
+ *
+ * This is the widget that renders the nodes in the
+ * VirtualTreeView.
+ */
+qx.Class.define("wisej.web.VirtualTreeItem", {
+
+	extend: qx.ui.tree.VirtualTreeItem,
 
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
@@ -723,13 +1165,11 @@ qx.Class.define("wisej.web.TreeNode", {
 	properties: {
 
 		/**
-		 * Nodes property.
+		 * Tree property.
 		 *
-		 * Assigns the list of nodes as children of this node.
-		 *
-		 * This property is defined with the setter/getter methods.
+		 * Reference to the parent wisej.web.VirtualTreeView.
 		 */
-		// nodes: { init: null, nullable: true, check: "Array", apply: "_applyNodes", transform: "_transformComponents" },
+		tree: { init: null, check: "wisej.web.VirtualTreeView", apply: "_applyTree", event: "changeTree" },
 
 		/**
 		 * CanExpand property.
@@ -785,22 +1225,6 @@ qx.Class.define("wisej.web.TreeNode", {
 		checkState: { init: false, check: "Boolean", nullable: true, apply: "_applyCheckState" },
 
 		/**
-		 * Index property.
-		 *
-		 * The position of this node within the node collection it belongs to.
-		 */
-		index: { init: 0, check: "Integer", apply: "_applyIndex" },
-
-		/**
-		 * ParentNode property.
-		 *
-		 * The node that owns this node. Root nodes are owned by the root.
-		 *
-		 * This property is defined with the setter/getter methods.
-		 */
-		// parentNode: { init: null, nullable: true, apply: "_applyParentNode", transform: "_transformComponent" },
-
-		/**
 		 * The visible property.
 		 * 
 		 * Property defined with the setter/getter methods.
@@ -843,11 +1267,15 @@ qx.Class.define("wisej.web.TreeNode", {
 		 */
 		expand: function () {
 
-			if (this.isOpen() || !this.isOpenable() || !this.isEnabled())
+			if (this.isOpen() || !this.isOpenable())
 				return;
 
 			var treeView = this.getTree();
-			if (treeView == null || !treeView.isEnabled())
+			if (treeView == null)
+				return;
+
+			var node = treeView.getTreeNode(this);
+			if (node == null)
 				return;
 
 			// fire the event on the server, unless in design mode.
@@ -856,7 +1284,7 @@ qx.Class.define("wisej.web.TreeNode", {
 			}
 			else {
 				this.__showLoader();
-				treeView.fireDataEvent("expand", this);
+				treeView.fireDataEvent("expand", node);
 			}
 		},
 
@@ -866,11 +1294,15 @@ qx.Class.define("wisej.web.TreeNode", {
 		 */
 		collapse: function () {
 
-			if (!this.isOpen() || !this.isEnabled())
+			if (!this.isOpen())
 				return;
 
 			var treeView = this.getTree();
-			if (treeView == null || !treeView.isEnabled())
+			if (treeView == null)
+				return;
+
+			var node = treeView.getTreeNode(this);
+			if (node == null)
 				return;
 
 			// fire the event on the server, unless in design mode.
@@ -879,36 +1311,7 @@ qx.Class.define("wisej.web.TreeNode", {
 			}
 			else {
 				this.__hideLoader();
-				treeView.fireDataEvent("collapse", this);
-			}
-		},
-
-		/**
-		 * Applies the nodes property.
-		 *
-		 * Loads the node widgets as children of this node.
-		 */
-		getNodes: function () {
-
-			return this.getChildren();
-		},
-		setNodes: function (value) {
-
-			value = this._transformComponents(value);
-
-			this.removeAll();
-
-			var treeView = this.getTree();
-
-			var nodes = value;
-			if (nodes != null && nodes.length > 0) {
-				for (var i = 0; i < nodes.length; i++) {
-
-					this.add(nodes[i]);
-
-					if (treeView)
-						treeView._updateNode(nodes[i]);
-				}
+				treeView.fireDataEvent("collapse", node);
 			}
 		},
 
@@ -918,13 +1321,10 @@ qx.Class.define("wisej.web.TreeNode", {
 		 * Opens/closes the node.
 		 */
 		getExpanded: function () {
-
 			return this.isOpen();
 		},
 		setExpanded: function (value) {
-
 			this.setOpen(value);
-			this.__hideLoader();
 		},
 
 		/**
@@ -961,7 +1361,7 @@ qx.Class.define("wisej.web.TreeNode", {
 
 			var treeView = this.getTree();
 			if (treeView != null)
-				treeView.scrollChildIntoView(this);
+				treeView.getPane().scrollRowIntoView(this.getUserData("cell.row"));
 		},
 
 		/**
@@ -980,6 +1380,41 @@ qx.Class.define("wisej.web.TreeNode", {
 
 			var image = this.getChildControl("state");
 			this._add(image);
+		},
+
+		/**
+		 * Applies the tree property.
+		 */
+		_applyTree: function (value, old) {
+
+			if (value)
+				value._updateItem(this);
+		},
+
+		// overridden.
+		_applyOpen: function (value, old) {
+			this.__hideLoader();
+			this.base(arguments, value, old);
+		},
+
+		/**
+		 * Applies the appearance according to the
+		 * @canExpand property value.
+		 */
+		_applyFileAppearance: function (value, old) {
+
+			if (!this.getCanExpand())
+				this.setAppearance(value);
+		},
+
+		/**
+		 * Applies the appearance according to the
+		 * @canExpand property value.
+		 */
+		_applyFolderAppearance: function (value, old) {
+
+			if (this.getCanExpand())
+				this.setAppearance(value);
 		},
 
 		/**
@@ -1014,7 +1449,7 @@ qx.Class.define("wisej.web.TreeNode", {
 		_applyShowLoader: function (value, old) {
 
 			if (old && !value)
-				this.__hideLoader(true);
+				this.__hideLoader();
 		},
 
 		removeState: function (state) {
@@ -1288,26 +1723,6 @@ qx.Class.define("wisej.web.TreeNode", {
 		},
 
 		/**
-		 * Applies the appearance according to the
-		 * @canExpand property value.
-		 */
-		_applyFileAppearance: function (value, old) {
-
-			if (!this.getCanExpand())
-				this.setAppearance(value);
-		},
-
-		/**
-		 * Applies the appearance according to the
-		 * @canExpand property value.
-		 */
-		_applyFolderAppearance: function (value, old) {
-
-			if (this.getCanExpand())
-				this.setAppearance(value);
-		},
-
-		/**
 		 * Applies the canExpand property.
 		 *
 		 * Changes the appearance key of the TreeNode class
@@ -1325,57 +1740,6 @@ qx.Class.define("wisej.web.TreeNode", {
 
 				// remove the ajax loader, in case the node was loading.
 				this.__hideLoader();
-			}
-		},
-
-		/**
-		 * Applies the index property.
-		 *
-		 * If the node already belongs to a collection, it changes the position accordingly.
-		 */
-		_applyIndex: function (value, old) {
-
-			var parentNode = this.getParent();
-			if (parentNode != null) {
-
-				if (parentNode.getChildren().indexOf(this) == value)
-					return;
-
-				parentNode.addAt(this, value);
-			}
-		},
-
-		/**
-		 * Applies the parentNode property.
-		 *
-		 * If the value is null, the node is removed from the collection.
-		 * If the value is a valid TreeNde and this node doesn't already belong to the collection
-		 * it adds at the specified index.
-		 */
-		getParentNode: function () {
-
-			return this.getParent();
-
-		},
-		setParentNode: function (value) {
-
-			value = this._transformComponent(value);
-
-			// same owner?
-			var old = this.getParent();
-			if (old == value)
-				return;
-
-			// remove from the previous owner.
-			if (old != null)
-				old.remove(this);
-
-			if (value != null) {
-
-				var treeView = value.getTree();
-				value.addAt(this, this.getIndex());
-				if (treeView)
-					treeView._updateNode(this);
 			}
 		},
 
@@ -1410,13 +1774,6 @@ qx.Class.define("wisej.web.TreeNode", {
 		 */
 		_onPointerOver: function (e) {
 
-			if (!this.isEnabled())
-				return;
-
-			var treeView = this.getTree();
-			if (treeView == null || !treeView.isEnabled())
-				return;
-
 			this.addState("hovered");
 
 			this.__fireNodeEvent("nodeMouseOver", e);
@@ -1426,13 +1783,6 @@ qx.Class.define("wisej.web.TreeNode", {
 		 * Event handler for the pointer out event.
 		 */
 		_onPointerOut: function (e) {
-
-			if (!this.isEnabled())
-				return;
-
-			var treeView = this.getTree();
-			if (treeView == null || !treeView.isEnabled())
-				return;
 
 			this.removeState("hovered");
 
@@ -1448,7 +1798,7 @@ qx.Class.define("wisej.web.TreeNode", {
 			if (treeView != null) {
 				treeView.fireEvent(
 					type,
-					wisej.web.treeview.NodeEvent,
+					wisej.web.virtualTreeView.NodeEvent,
 					[pointerEvent, node]);
 			}
 		},
@@ -1467,7 +1817,7 @@ qx.Class.define("wisej.web.TreeNode", {
 		__showLoader: function () {
 
 			if (this.getShowLoader()) {
-				if (this.getChildren().length == 0) {
+				if (this.getModel().getChildren().length == 0) {
 					var open = this.getChildControl("open", true);
 					if (open) {
 						open.setSource(this.getLoader());
@@ -1476,9 +1826,9 @@ qx.Class.define("wisej.web.TreeNode", {
 			}
 		},
 
-		__hideLoader: function (force) {
+		__hideLoader: function () {
 
-			if (force || this.getShowLoader()) {
+			if (this.getShowLoader()) {
 				var open = this.getChildControl("open", true);
 				if (open) {
 					open.resetSource();
@@ -1591,12 +1941,19 @@ qx.Class.define("wisej.web.TreeNode", {
 
 			var treeView = this.getTree();
 			if (treeView)
-				treeView.fireDataEvent("nodeCheckClick", this);
+				treeView.fireDataEvent("nodeCheckClick", this.getModel());
 		},
 
 		// stop the treeview from selecting the node when checking the node.
 		_onNodeCheckBoxTap: function (e) {
 			e.stop();
+		},
+
+		// overridden.
+		_onChangeChildProperty: function (e) {
+
+			this.base(arguments, e);
+
 		},
 
 		/**
@@ -1611,154 +1968,36 @@ qx.Class.define("wisej.web.TreeNode", {
 
 			var nodeBounds = this.base(arguments);
 
-			var treeView = this.getTree();
-			if (treeView) {
-				var treeBounds = treeView.getContentLocation();
-				nodeBounds.left = treeBounds.left;
-				nodeBounds.right = treeBounds.right;
-			}
+			//var treeView = this.getTree();
+			//if (treeView) {
+			//	var treeBounds = treeView.getContentLocation();
+			//	nodeBounds.left = treeBounds.left;
+			//	nodeBounds.right = treeBounds.right;
+			//}
 			return nodeBounds
 		},
 
-		// overridden.
-		destroy: function () {
+		//// overridden.
+		//destroy: function () {
 
-			// remove the node from its parent.
-			var parent = this.getParent();
-			if (parent)
-				parent.remove(this);
+		//	// remove the node from its parent.
+		//	var parent = this.getParent();
+		//	if (parent)
+		//		parent.remove(this);
 
-			this.base(arguments);
-		},
+		//	this.base(arguments);
+		//},
 	},
 
 });
 
 
 /**
- * wisej.web.treeview.LabelEditor
- *
- * Extends the TextField class to edit the treenode label.
- */
-qx.Class.define("wisej.web.treeview.LabelEditor", {
-
-	extend: qx.ui.form.TextField,
-
-	construct: function () {
-
-		this.base(arguments);
-
-		// listen to the lost focus to commit editing.
-		this.addListener("blur", this._onBlur);
-
-		// list to the keyboard to commit or cancel editing.
-		this.addListener("keypress", this._onKeyPress);
-	},
-
-	properties: {
-
-		// Appearance override
-		appearance: { refine: true, init: "label-editor" },
-	},
-
-	members: {
-
-		/**
-		 * Begins editing the specified node.
-		 */
-		editNode: function (node) {
-
-			// already editing?
-			if (this.isVisible())
-				return;
-
-			// find the label, the edit control will replace it.
-			var label = node.getChildControl("label");
-			var labelBounds = label.getBounds();
-			var nodeBounds = node.getBounds();
-			label.hide();
-
-			node._add(this);
-			this.setPaddingLeft(label.getPaddingLeft());
-			this.setPaddingRight(label.getPaddingRight());
-			this.setValue(qx.bom.String.unescape(label.getValue()));
-			this.setUserBounds(labelBounds.left, labelBounds.top, nodeBounds.width - labelBounds.left, labelBounds.height);
-
-			this.show();
-			this.focus();
-		},
-
-		endEdit: function (cancel) {
-
-			this.exclude();
-
-			// get the owner node.
-			var node = this.getLayoutParent();
-
-			// restore the label.
-			var label = node.getChildControl("label");
-			label.show();
-
-			this.fireDataEvent("endEdit", {
-				node: node,
-				text: cancel === true ? null : this.getValue()
-			});
-		},
-
-		_onBlur: function (e) {
-
-			if (this.isVisible())
-				this.endEdit(true);
-		},
-
-		_onKeyPress: function (e) {
-
-			switch (e.getKeyIdentifier()) {
-
-				case "Escape":
-					this.endEdit(true);
-					break;
-
-				case "Enter":
-					this.endEdit();
-					break;
-			};
-
-			e.stopPropagation();
-		},
-
-	},
-});
-
-
-/**
- * wisej.web.treeview.OpenButton
- * 
- * Extends the FolderOpenButton to prevent the nodes from
- * expanding and collapsing automatically. We fire the beforeExpand
- * and beforeCollapse event to let the server handle the node's state.
- */
-qx.Class.define("wisej.web.treeview.OpenButton", {
-
-	extend: qx.ui.tree.core.FolderOpenButton,
-
-	members: {
-
-		// overridden and disabled.
-		_onTap: function (e) {
-			e.stopPropagation();
-		}
-	}
-
-});
-
-
-/**
- * wisej.web.treeview.NodeEvent
+ * wisej.web.virtualTreeView.NodeEvent
  *
  * Specialized data event holding mouse and node information.
  */
-qx.Class.define("wisej.web.treeview.NodeEvent", {
+qx.Class.define("wisej.web.virtualTreeView.NodeEvent", {
 
 	extend: qx.event.type.Pointer,
 
@@ -1770,11 +2009,11 @@ qx.Class.define("wisej.web.treeview.NodeEvent", {
 		 * Initializes an event object.
 		 *
 		 * @param pointerEvent {qx.event.type.Pointer} The original pointer event
-		 * @param node {wisej.web.TreeNode} The node target of the event.
+		 * @param item {wisej.web.VirtualTreeItem} The node target of the event.
 		 *
 		 * @return {qx.event.type.Data} the initialized instance.
 		 */
-		init: function (pointerEvent, node) {
+		init: function (pointerEvent, item) {
 
 			pointerEvent.clone(this);
 			this.setBubbles(false);
@@ -1783,8 +2022,8 @@ qx.Class.define("wisej.web.treeview.NodeEvent", {
 			var x = null;
 			var y = null;
 
-			if (node) {
-				var treeView = node.getTree();
+			if (item) {
+				var treeView = item.getTree();
 				if (treeView) {
 					var el = treeView.getContentElement().getDomElement();
 					if (el) {
@@ -1795,7 +2034,7 @@ qx.Class.define("wisej.web.treeview.NodeEvent", {
 				}
 			}
 
-			this.__data = { node: node, x: x, y: y };
+			this.__data = { node: item.getModel(), x: x, y: y };
 
 			return this;
 		},

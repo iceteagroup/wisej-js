@@ -46,9 +46,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 		this.setStateProperties(this.getStateProperties().concat(["scrollX", "scrollY"]));
 
 		// update the scroll position properties.
-		var scroller = this.getChildControl("pane");
-		scroller.addListener("scrollX", this._onScrollBarX, this);
-		scroller.addListener("scrollY", this._onScrollBarY, this);
+		this.__scroller = this.getChildControl("pane");
 
 		this.addListener("pointerover", this._onPointerOver);
 		this.addListener("pointerout", this._onPointerOut);
@@ -121,6 +119,9 @@ qx.Class.define("wisej.web.ScrollableControl", {
 		 */
 		isWisejContainer: true,
 
+		// reference to the inner scroller panel.
+		__scroller: null,
+
 		// reference to the inner children container.
 		__childrenContainer: null,
 
@@ -137,7 +138,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 		getChildrenContainer: function () {
 
 			if (this.__childrenContainer == null)
-				this.__childrenContainer = this.getChildControl("pane").getChildren()[0];
+				this.__childrenContainer = this.__scroller.getChildren()[0];
 
 			return this.__childrenContainer;
 		},
@@ -156,7 +157,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 		 */
 		_applyAutoScroll: function (value, old) {
 
-			var scroller = this.getChildControl("pane");
+			var scroller = this.__scroller;
 
 			if (value) {
 				var scrollBars = this.getScrollBars();
@@ -200,12 +201,12 @@ qx.Class.define("wisej.web.ScrollableControl", {
 		 */
 		getScrollX: function () {
 
-			var scrollbar = this.getChildControl("pane").getChildControl("scrollbar-x", true);
+			var scrollbar = this.__scroller.getChildControl("scrollbar-x", true);
 			return scrollbar == null ? 0 : scrollbar.getPosition() | 0;
 		},
 		setScrollX: function (value) {
 
-			var scrollbar = this.getChildControl("pane").getChildControl("scrollbar-x", true);
+			var scrollbar = this.__scroller.getChildControl("scrollbar-x", true);
 			if (scrollbar) {
 				setTimeout(function () {
 					scrollbar.setPosition(value);
@@ -218,12 +219,12 @@ qx.Class.define("wisej.web.ScrollableControl", {
 		 */
 		getScrollY: function () {
 
-			var scrollbar = this.getChildControl("pane").getChildControl("scrollbar-y", true);
+			var scrollbar = this.__scroller.getChildControl("scrollbar-y", true);
 			return scrollbar == null ? 0 : scrollbar.getPosition() | 0;
 		},
 		setScrollY: function (value) {
 
-			var scrollbar = this.getChildControl("pane").getChildControl("scrollbar-y", true);
+			var scrollbar = this.__scroller.getChildControl("scrollbar-y", true);
 			if (scrollbar) {
 				setTimeout(function () {
 					scrollbar.setPosition(value);
@@ -237,7 +238,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 		_applyScrollBars: function (value, old) {
 
 			if (this.isAutoScroll()) {
-				var scroller = this.getChildControl("pane");
+				var scroller = this.__scroller;
 				scroller.setScrollbarY((value & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
 				scroller.setScrollbarX((value & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
 			}
@@ -304,6 +305,8 @@ qx.Class.define("wisej.web.ScrollableControl", {
 					this._add(control, { edge: "center" });
 
 					control.addListener("resize", this._onScrollerResize, this);
+					control.addListener("scrollX", this._onScrollBarX, this);
+					control.addListener("scrollY", this._onScrollBarY, this);
 					control.addListener("changeScrollbarXVisibility", this._onScrollerResize, this);
 					control.addListener("changeScrollbarXVisibility", this._onScrollerResize, this);
 
@@ -317,7 +320,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 
 			// ensure that the client area always fills the container.
 			// it's needed in case child controls are resizable or draggable.
-			var pane = this.getChildControl("pane");
+			var pane = this.__scroller;
 			var clientArea = this.getChildrenContainer();
 			var minSize = this.getAutoScrollMinSize() || {};
 			var size = wisej.utils.Widget.getClientSize(pane);
@@ -348,7 +351,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 
 		__forwardToScroller: function (funcName, value, duration) {
 
-			var scroller = this.getChildControl("pane");
+			var scroller = this.__scroller;
 			if (scroller)
 				return scroller[funcName].call(scroller, value, duration);
 		},

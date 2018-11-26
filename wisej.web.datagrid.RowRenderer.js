@@ -155,7 +155,7 @@ qx.Class.define("wisej.web.datagrid.RowRenderer", {
 			if (!className)
 				return this.__defaultRowRenderer;
 
-			// retrieve or create the cell renderer.
+			// retrieve or create the row renderer.
 			var renderer = this.__rowRenderers[className];
 			if (!renderer) {
 				var clazz = qx.Class.getByName(className);
@@ -254,7 +254,8 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 				state.odd = true;
 
 			// cell border.
-			state[rowInfo.table._gridLinesStateName] = true;
+			if (rowInfo.table)
+				state[rowInfo.table._gridLinesStateName] = true;
 
 			// new row?
 			var rowData = rowInfo.rowData;
@@ -262,7 +263,7 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 				state.new = true;
 
 			// is any cell in the row being edited?
-			if (rowInfo.focusedRow && rowInfo.table.isEditing())
+			if (rowInfo.focusedRow && rowInfo.table && rowInfo.table.isEditing())
 				state.editing = true;
 
 			return state;
@@ -277,7 +278,7 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 			var rowData = rowInfo.rowData;
 			var rowHeight = rowInfo.styleHeight;
 
-			if (!table.isKeepSameRowHeight()) {
+			if (table && !table.isKeepSameRowHeight()) {
 
 				rowHeight = (rowData ? rowData.height : null) || rowHeight;
 
@@ -322,20 +323,22 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 			var colCount = paneModel.getColumnCount();
 
 			// propagate the class change to the child cells.
+			var rtl = table.getRtl();
 			var childNodes = rowElem.childNodes;
 			for (var x = 0; x < colCount; x++) {
 
 				// invoke the cell renderer to update the cell element.
+				var cellNode = childNodes[rtl ? (colCount - x - 1) : x];
 
 				var col = paneModel.getColumnAtX(x);
-				if (col != null && col >= 0 && childNodes[x]) {
+				if (col != null && col >= 0 && cellNode) {
 					cellInfo.col = col;
 					cellInfo.xPos = x;
 					cellInfo.editable = tableModel.isColumnEditable(col);
 					cellInfo.styleWidth = columnModel.getColumnWidth(col);
 
 					var cellRenderer = columnModel.getDataCellRenderer(col);
-					cellRenderer.updateDataCellElement(cellInfo, childNodes[x]);
+					cellRenderer.updateDataCellElement(cellInfo, cellNode);
 				}
 			}
 		},

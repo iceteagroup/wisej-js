@@ -56,6 +56,14 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 
 	extend: qx.ui.table.model.Remote,
 
+	properties: {
+
+		// increase the blocks in the cache since the list view can
+		// display more items when in small icon view mode.
+		maxCachedBlockCount: { init: 100, refine: true }
+
+	},
+
 	members: {
 
 		// the table that owns this model.

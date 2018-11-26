@@ -36,10 +36,10 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 
 			if (cellEditor) {
 
-				var getMethod = cellEditor.getCellValue || cellEditor.getText || cellEditor.getValue;
+				var getValueMethod = cellEditor.getCellValue || cellEditor.getText || cellEditor.getValue;
 
-				if (getMethod)
-					return getMethod.call(cellEditor);
+				if (getValueMethod)
+					return getValueMethod.call(cellEditor);
 			}
 		},
 
@@ -50,12 +50,12 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 
 			if (cellEditor) {
 
-				var setMethod = cellEditor.setCellValue || cellEditor.setText || cellEditor.setValue;
+				var setValueMethod = cellEditor.setCellValue || cellEditor.setText || cellEditor.setValue;
 
-				if (setMethod) {
+				if (setValueMethod) {
 
 					value = value || "";
-					setMethod.call(cellEditor, value);
+					setValueMethod.call(cellEditor, value);
 
 					if (cellEditor.setTextSelection)
 						cellEditor.setTextSelection(value.length);
@@ -92,7 +92,8 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 		// interface implementation
 		createCellEditor: function (cellInfo) {
 
-			var column = cellInfo.table.getColumns()[cellInfo.col];
+			var table = cellInfo.table;
+			var column = table.getColumns()[cellInfo.col];
 
 			if (column) {
 
@@ -105,6 +106,12 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 					editor.setAllowShrinkX(true);
 					editor.setAllowShrinkY(true);
 					editor.resetUserBounds();
+					editor.setRtl(table.isRtl());
+					editor.setUserData("owner", table);
+					editor.setUserData("opener", column);
+
+					// set the "owner" and "container" attributes for QA automation.
+					wisej.utils.Widget.setAutomationAttributes(editor, column);
 
 					// if the "beginEdit" event is not wired, initialize the
 					// editor with the value from the cell.

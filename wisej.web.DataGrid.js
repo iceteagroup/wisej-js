@@ -75,6 +75,10 @@ qx.Class.define("wisej.web.DataGrid", {
 		for (var i = 0; i < children.length; i++) {
 			children[i].setLayoutProperties({ row: i + 1, column: 1 });
 		}
+
+		// adds the inner target to the drop & drop event object.
+		this.addListener("drop", this._onDragEvent, this);
+		this.addListener("dragover", this._onDragEvent, this);
 	},
 
 	properties: {
@@ -148,11 +152,22 @@ qx.Class.define("wisej.web.DataGrid", {
 		liveResize: { init: true, check: "Boolean", apply: "_applyLiveResize" },
 
 		/**
-         * GridLines property.
+		 * GridLines property.
 		 *
 		 * Sets the type of border to use for the grid's cells.
-         */
+		 */
 		gridLines: { init: "single", check: ["none", "vertical", "horizontal", "both"], apply: "_applyGridLines" },
+
+		/** 
+		 * TopScrollOffset property.
+		 *
+		 * The number of rows to keep when scrolling the content up.
+		 *
+		 * These are rows that have a negative margin and may contain
+		 * cells with RowSpan > 1 and have to be rendered when scrolled
+		 * outside of the view.
+		 */
+		topScrollOffset: { init: 0, check: "PositiveInteger", apply: "_applyTopScrollOffset" },
 
 		/**
 		 * keepSameRowHeight
@@ -519,8 +534,8 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (!this.__updateMode)
 				this.base(arguments, e);
 
-			// call the deferred scrollIntoView or setFocusCell that couldn't
-			// have been called when the table we not populate yet.
+			// call the deferred scrollIntoView or setFocusedCell that couldn't
+			// have been called when the table we not populated yet.
 			this.__executePendingCalls();
 		},
 
@@ -613,16 +628,6 @@ qx.Class.define("wisej.web.DataGrid", {
 				var row = this.getFocusedRow();
 				var col = this.getFocusedColumn();
 
-				// automatically focus the first row/col when entering the grid the first time.
-				// after giving it a chance to process the click/tap in case it
-				// sets a focused cell before we automatically focus the first one.
-				if (row == null && col == null) {
-					var focusedRow = this.getFirstVisibleRow();
-					var focusedCol = this.getFirstVisibleColumn();
-					if (focusedRow != null && focusedCol != null)
-						this.setFocusedCell(focusedCol, focusedRow);
-				}
-
 				// don't show the focus indicator when the current column is the row header.
 				if (col == this._rowHeaderColIndex)
 					return;
@@ -633,6 +638,32 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 
 			this.__showFocusIndicator(gotFocus);
+		},
+
+		/**
+		 * Focus this widget when using the keyboard. This is
+		 * mainly thought for the advanced qooxdoo keyboard handling
+		 * and should not be used by the application developer.
+		 *
+		 * @internal
+		 */
+		tabFocus: function () {
+
+			this.getFocusElement().focus();
+
+			var row = this.getFocusedRow();
+			var col = this.getFocusedColumn();
+
+			// automatically focus the first row/col when entering the grid 
+			// by tabbing into it and there is no focused row or col.
+			if (row == null && col == null) {
+				if (row == null && col == null) {
+					var firstRow = this.getFirstVisibleRow();
+					var firstCol = this.getFirstVisibleColumn();
+					if (firstRow != null && firstCol != null)
+						this.setFocusedCell(firstCol, firstRow);
+				}
+			}
 		},
 
 		/**
@@ -797,9 +828,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				}
 			}
 			finally {
-
 				this.__updateMode = false;
-
 				this._onTableModelMetaDataChanged();
 			}
 		},
@@ -890,9 +919,9 @@ qx.Class.define("wisej.web.DataGrid", {
 				}
 
 				this._updateScrollerWidths();
+				this._applyHeaderCellsVisible(this.getHeaderCellsVisible());
 			}
 		},
-
 
 		/**
 		 * Fires the scroll event when scrolling.
@@ -956,6 +985,19 @@ qx.Class.define("wisej.web.DataGrid", {
 			var scrollerArr = this._getPaneScrollerArr();
 			for (var i = 0; i < scrollerArr.length; i++) {
 				scrollerArr[i].setLiveResize(value);
+			}
+		},
+
+		/**
+		 * Applies the topScrollOffset property.
+		 *
+		 * Updates the property on all scroller panes.
+		 */
+		_applyTopScrollOffset: function (value, old) {
+
+			var scrollerArr = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollerArr.length; i++) {
+				scrollerArr[i].getTablePane().setTopScrollOffset(value);
 			}
 		},
 
@@ -1604,7 +1646,11 @@ qx.Class.define("wisej.web.DataGrid", {
 				e.stop();
 		},
 
-		// overridden to fire "endEdit" to the server.
+		/**
+		 * Stops editing and writes the editor's value to the model.
+		 *
+		 * @param notify {Boolean ? true} false to suppress sending "endEdit" to the server.
+		 */
 		stopEditing: function (notify) {
 
 			if (this.__canFireServerEvent()) {
@@ -1623,6 +1669,9 @@ qx.Class.define("wisej.web.DataGrid", {
 
 		// Overridden: Fire "cancelEdit" to the server
 		cancelEditing: function () {
+
+			if (!this.isEditing())
+				return;
 
 			this.base(arguments);
 
@@ -1750,15 +1799,66 @@ qx.Class.define("wisej.web.DataGrid", {
 				var data = e.getData();
 				if (data) {
 
-					// update the column instance.
 					var column = this.getColumns()[data.col];
-					if (column)
+					if (column) {
+
 						column.setWidth(data.newWidth);
 
-					this.fireDataEvent("columnWidthChanged", { col: data.col, width: data.newWidth });
+						// if the column was resized by the user, update the
+						// relative fillWeight of the column being resized and
+						// then next column in case they are both auto fill columns.
+
+						if (data.isPointerAction) {
+
+							var model = this.getTableColumnModel();
+
+							var col = data.col;
+							var newWidth = data.newWidth;
+							var oldWidth = data.oldWidth;
+
+							if (column.getSizeMode() == "fill") {
+								column.setFillWeight(newWidth / oldWidth * column.getFillWeight());
+							}
+
+							// adjust the next fill column, if this is the first iteration of this function.
+							if (!this.__resizingSecondFillColumn) {
+								var col2 = model.getVisibleColumnAtX(model.getVisibleX(col) + 1);
+								if (col2 != null) {
+
+									var column2 = this.getColumns()[col2];
+									if (column2.getSizeMode() == "fill") {
+
+										this.__resizingSecondFillColumn = true;
+										try {
+											// update the width of the related fill column.
+											// the fillWeight will be updated on the server
+											// when re-entering this method when calling model.setColumnWidth()
+											// below with the last argument set to true (pointer event).
+											newWidth = model.getColumnWidth(col2) - (newWidth - oldWidth);
+											model.setColumnWidth(col2, newWidth, true);
+
+										} finally {
+
+											this.__resizingSecondFillColumn = false;
+										}
+
+									}
+								}
+							}
+						}
+
+						this.fireDataEvent("columnWidthChanged", {
+							col: data.col,
+							width: data.newWidth,
+							isPointerAction: data.isPointerAction
+						});
+					}
 				}
 			}
 		},
+
+		/** re-entrant flag used by _onColWidthChanged */
+		__resizingSecondFillColumn: false,
 
 		// overridden: fire the colPosChanged event when the user moves a column.
 		_onColOrderChanged: function (e) {
@@ -1768,7 +1868,11 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (this.__canFireServerEvent()) {
 				var data = e.getData();
 				if (data)
-					this.fireDataEvent("columnPositionChanged", { col: data.col, position: data.toOverXPos });
+					this.fireDataEvent("columnPositionChanged", {
+						col: data.col,
+						position: data.toOverXPos,
+						oldPosition: data.fromOverXPos
+					});
 			}
 			else {
 				// update the focus indicator when the column position change
@@ -2117,8 +2221,9 @@ qx.Class.define("wisej.web.DataGrid", {
 				// update the position of the columns accounting for the row header at position 0.
 				if (this.getRowheadersVisible()) {
 
-					for (var i = 0; i < newPositions.length; i++)
+					for (var i = 0; i < newPositions.length; i++) {
 						newPositions[i]++;
+					}
 
 					// insert the position of the row header, which is always 0.
 					newPositions.splice(0, 0, 0);
@@ -2138,16 +2243,22 @@ qx.Class.define("wisej.web.DataGrid", {
 		  */
 		moveFocusedCell: function (deltaX, deltaY) {
 
-			var row = this.getFocusedRow();
-			var col = this.getFocusedColumn();
+			var prevRow = this.getFocusedRow();
+			var prevCol = this.getFocusedColumn();
 			var tableModel = this.getTableModel();
 			var columnModel = this.getTableColumnModel();
 
 			// if tabbing in when there is no current cell, default to the first cell.
+			var row = prevRow;
 			if (row == null)
 				row = 0;
+			var col = prevCol;
 			if (col == null)
 				col = 0;
+
+			// rtl?
+			if (this.isRtl())
+				deltaX = deltaX * -1;
 
 			var x = columnModel.getVisibleX(col);
 			var colCount = columnModel.getVisibleColumnCount();
@@ -2164,7 +2275,13 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (row < 0 || row == null)
 				return;
 
-			this.setFocusedCell(col, row, true);
+			// notify the server only when the row is unchanged and the column has changed
+			// when the row changed we fire "selectionChanged" which will also update
+			// the current cell.
+			// NOTE: this will change when the selection model will support cell and column selection.
+			var notify = (prevRow == row) && (prevCol != col);
+
+			this.setFocusedCell(col, row, true /*scrollVisible*/, notify);
 		},
 
 		/**
@@ -2191,8 +2308,11 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * @param col {Integer?null} the model index of the focused cell's column.
 		 * @param row {Integer?null} the model index of the focused cell's row.
 		 * @param scrollVisible {Boolean ? false} whether to scroll the new focused cell visible.
+		 * @param notify {Boolean ? true} false to suppress sending the "focusCellChanged" event to the server..
 		 */
-		setFocusedCell: function (col, row, scrollVisible) {
+		setFocusedCell: function (col, row, scrollVisible, notify) {
+
+			notify = notify !== false ? true : false;
 
 			var hasFocus = this.hasFocus();
 			var savedRow = this.getFocusedRow();
@@ -2232,11 +2352,8 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			this.base(arguments, col, row, scrollVisible);
 
-			if (this.__canFireServerEvent()) {
-				var me = this;
-				setTimeout(function () { 
-					me.fireDataEvent("focusCellChanged", { col: col, row: row });
-				}, 1);
+			if (this.__canFireServerEvent() && notify) {
+				this.fireDataEvent("focusCellChanged", { col: col, row: row });
 			}
 
 			// start editing on enter, when focused.
@@ -2463,8 +2580,38 @@ qx.Class.define("wisej.web.DataGrid", {
 			// do not show native menu
 			// don't open any other context menu.
 			e.stop();
+		},
+
+		// determines the target cell (col, row) for a drag operation
+		// and adds it to the event object.
+		_onDragEvent: function (e) {
+
+			e.setUserData("eventData", null);
+
+			var pageX = e.getDocumentLeft();
+			var pageY = e.getDocumentTop();
+
+			var scrollerArr = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollerArr.length; i++) {
+				var col = scrollerArr[i]._getColumnForPageX(pageX);
+				var row = scrollerArr[i]._getRowForPagePos(pageX, pageY);
+				if (col != null && row != null)
+				{
+					e.setUserData("eventData", { col: col, row: row });
+					break;
+				}
+			}
+		},
+
+		// overridden to delay the "render" event to give a chance
+		// to the designer to pick the correct rendered control.
+		_onDesignRender: function () {
+
+			this.autoSizeColumns();
+			this.fireEvent("render");
 
 		},
+
 	},
 
 	destruct: function () {

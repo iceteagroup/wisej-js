@@ -33,11 +33,309 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 		this.base(arguments, paneScroller);
 
 		this.__widgetRepository = [];
+		this.setTopScrollOffset(paneScroller.getTable().getTopScrollOffset());
 
 		this.addListener("paneUpdated", this._onPaneUpdated, this);
 	},
 
+	properties: {
+
+		/** 
+		 * The number of rows to keep when scrolling the content up.
+		 *
+		 * These are rows that have a negative margin and may contain
+		 * cells with RowSpan > 1 and have to be rendered when scrolled
+		 * outside of the view.
+		 */
+		topScrollOffset: { check: "PositiveInteger", apply: "_applyTopScrollOffset" },
+	},
+
 	members: {
+
+		/* =======================================================================
+		 * RowSpan > 1 implementation.
+		* =======================================================================*/
+
+		/**
+		 * Applies the topScrollOffset property.
+		 */
+		_applyTopScrollOffset: function (value, old) {
+			if (old != null)
+				this._updateAllRows();
+		},
+
+		/**
+		 * Updates the content of the pane.
+		 *
+		 * @param completeUpdate {Boolean ? false} if true a complete update is performed.
+		 *      On a complete update all cell widgets are recreated.
+		 * @param scrollOffset {Integer ? null} If set specifies how many rows to scroll.
+		 * @param onlyRow {Integer ? null} if set only the specified row will be updated.
+		 * @param onlySelectionOrFocusChanged {Boolean ? false} if true, cell values won't
+		 *          be updated. Only the row background will.
+		 */
+		updateContent: function (completeUpdate, scrollOffset, onlyRow, onlySelectionOrFocusChanged) {
+
+			if (completeUpdate) {
+				this.__rowCacheClear();
+			}
+
+			if (scrollOffset && Math.abs(scrollOffset) <= Math.min(10, this.getVisibleRowCount()) && this.getTopScrollOffset() == 0) {
+				this._scrollContent(scrollOffset);
+			} else if (onlySelectionOrFocusChanged && !this.getTable().getAlwaysUpdateCells()) {
+				this._updateRowStyles(onlyRow);
+			} else {
+				this._updateAllRows();
+			}
+		},
+
+
+		/**
+		 * If only focus or selection changes it is sufficient to only update the
+		 * row styles. This method updates the row styles of all visible rows or
+		 * of just one row.
+		 *
+		 * @param onlyRow {Integer|null ? null} If this parameter is set only the row
+		 *     with this index is updated.
+		 */
+		_updateRowStyles: function (onlyRow) {
+			var elem = this.getContentElement().getDomElement();
+
+			if (!elem || !elem.firstChild) {
+				this._updateAllRows();
+				return;
+			}
+
+			var table = this.getTable();
+			var selectionModel = table.getSelectionModel();
+			var tableModel = table.getTableModel();
+			var rowRenderer = table.getDataRowRenderer();
+			var rowNodes = elem.firstChild.childNodes;
+			var cellInfo = { table: table };
+
+			// @ITG:Wisej: Added reference to the current scroller, column model and data model to simplify the life of cell renderers.
+			cellInfo.tableModel = tableModel;
+			cellInfo.scroller = this.getPaneScroller();
+			cellInfo.columnModel = table.getTableColumnModel();
+			cellInfo.rightToLeft = table.getRtl();
+
+			// We don't want to execute the row loop below more than necessary. If
+			// onlyRow is not null, we want to do the loop only for that row.
+			// In that case, we start at (set the "row" variable to) that row, and
+			// stop at (set the "end" variable to the offset of) the next row.
+			var row = this.getFirstVisibleRow();
+			var y = 0;
+
+			// adjust for the top offset.
+			var spanOffset = this.getTopScrollOffset();
+			if (row < spanOffset)
+				spanOffset = row;
+			row -= spanOffset;
+
+			// How many rows do we need to update?
+			var end = rowNodes.length;
+
+			if (onlyRow != null) {
+				// How many rows are we skipping?
+				var offset = onlyRow - row;
+				if (offset >= 0 && offset < end) {
+					row = onlyRow;
+					y = offset;
+					end = offset + 1;
+				} else {
+					return;
+				}
+			}
+
+			for (; y < end; y++, row++) {
+				cellInfo.row = row;
+				cellInfo.selected = selectionModel.isSelectedIndex(row);
+				cellInfo.focusedRow = (this.__focusedRow == row);
+				cellInfo.rowData = tableModel.getRowData(row);
+
+				rowRenderer.updateDataRowElement(cellInfo, rowNodes[y]);
+			};
+		},
+
+
+		/**
+		 * Get the HTML table fragment for the given row range.
+		 *
+		 * @param firstRow {Integer} Index of the first row
+		 * @param rowCount {Integer} Number of rows
+		 * @return {String} The HTML table fragment for the given row range.
+		 */
+		_getRowsHtml: function (firstRow, rowCount) {
+			var table = this.getTable();
+			var selectionModel = table.getSelectionModel();
+			var tableModel = table.getTableModel();
+			var columnModel = table.getTableColumnModel();
+			var paneModel = this.getPaneScroller().getTablePaneModel();
+			var rowRenderer = table.getDataRowRenderer();
+
+			tableModel.prefetchRows(firstRow, firstRow + rowCount - 1);
+
+			var rowHeight = table.getRowHeight();
+			var colCount = paneModel.getColumnCount();
+			var left = 0;
+			var cols = [];
+
+			// @ITG:Wisej: RightToLeft support.
+			var rtl = table.isRtl();
+
+			// @ITG:Wisej: RightToLeft support.
+			// precompute column properties
+			for (var x =
+			  rtl ? (colCount - 1) : (0) ;
+			  rtl ? (x > -1) : (x < colCount) ;
+			  rtl ? (x--) : (x++)) {
+				var col = paneModel.getColumnAtX(x);
+				var cellWidth = columnModel.getColumnWidth(col);
+
+				cols.push({
+					col: col,
+					xPos: x,
+					editable: tableModel.isColumnEditable(col),
+					focusedCol: this.__focusedCol == col,
+					styleLeft: left,
+					styleWidth: cellWidth
+				});
+
+				left += cellWidth;
+			}
+
+			var rowsArr = [];
+			var paneReloadsData = false;
+
+			// adjust for the top offset.
+			var topVisibleRow = firstRow;
+			var spanOffset = this.getTopScrollOffset();
+			if (firstRow < spanOffset)
+				spanOffset = firstRow;
+			firstRow -= spanOffset;
+			rowCount += spanOffset;
+
+			// calculate the total offset for the rows outside of the visible range.
+			var marginTop = 0;
+			if (spanOffset > 0) {
+				for (var row = firstRow, maxRow = firstRow + spanOffset; row < maxRow; row++) {
+					var rowData = tableModel.getRowData(row);
+					marginTop += (rowData ? rowData.height : null) || rowHeight;
+				}
+			}
+
+			for (var row = firstRow, maxRow = firstRow + rowCount; row < maxRow; row++) {
+
+				var focusedRow = (this.__focusedRow == row);
+				var selected = selectionModel.isSelectedIndex(row);
+
+				// don't retrieve offset rows from the cache.
+				if (row >= topVisibleRow) {
+					var cachedRow = this.__rowCacheGet(row, selected, focusedRow);
+					if (cachedRow) {
+						rowsArr.push(cachedRow);
+						continue;
+					}
+				}
+
+				var rowHtml = [];
+
+				var cellInfo = { table: table };
+				cellInfo.styleHeight = rowHeight;
+
+				// @ITG:Wisej: Added reference to the current scroller, column model and data model to simplify the life of cell renderers.
+				cellInfo.tableModel = tableModel;
+				cellInfo.columnModel = columnModel;
+				cellInfo.scroller = this.getPaneScroller();
+				cellInfo.rightToLeft = rtl;
+
+				cellInfo.row = row;
+				cellInfo.selected = selected;
+				cellInfo.focusedRow = focusedRow;
+				cellInfo.rowData = tableModel.getRowData(row);
+
+				if (!cellInfo.rowData) {
+					paneReloadsData = true;
+				}
+
+				rowHtml.push('<div ');
+
+				var rowAttributes = rowRenderer.getRowAttributes(cellInfo);
+				if (rowAttributes) {
+					rowHtml.push(rowAttributes);
+				}
+
+				var rowClass = rowRenderer.getRowClass(cellInfo);
+				if (rowClass) {
+					rowHtml.push('class="', rowClass, '" ');
+				}
+
+				var rowStyle = rowRenderer.createRowStyle(cellInfo) || "";
+
+				// if this is the first row of the offset rows, set the negative margin.
+				if (spanOffset > 0 && row == firstRow) {
+					if (rowStyle && rowStyle[rowStyle.length - 1] != ";")
+						rowStyle += ";";
+
+					rowStyle += "margin-top:-" + marginTop + "px";
+				}
+
+				// @ITG:Wisej: Removed this line and moved it to the row renderer.
+				// rowStyle += ";position:relative;" + rowRenderer.getRowHeightStyle(rowHeight) + "width:100%;";
+				if (rowStyle) {
+					rowHtml.push('style="', rowStyle, '" ');
+				}
+				rowHtml.push('>');
+
+				var stopLoop = false;
+				for (x = 0; x < colCount && !stopLoop; x++) {
+					var col_def = cols[x];
+					for (var attr in col_def) {
+						cellInfo[attr] = col_def[attr];
+					}
+					var col = cellInfo.col;
+
+					// Use the "getValue" method of the tableModel to get the cell's
+					// value working directly on the "rowData" object
+					// (-> cellInfo.rowData[col];) is not a solution because you can't
+					// work with the columnIndex -> you have to use the columnId of the
+					// columnIndex This is exactly what the method "getValue" does
+					cellInfo.value = tableModel.getValue(col, row);
+					var cellRenderer = columnModel.getDataCellRenderer(col);
+
+					// Retrieve the current default cell style for this column.
+					cellInfo.style = cellRenderer.getDefaultCellStyle();
+
+					// @ITG:Wisej: Added column id to the cellInfo map.
+					cellInfo.columnId = tableModel.getColumnId(col);
+
+					// Allow a cell renderer to tell us not to draw any further cells in
+					// the row. Older, or traditional cell renderers don't return a
+					// value, however, from createDataCellHtml, so assume those are
+					// returning false.
+					//
+					// Tested with http://tinyurl.com/333hyhv
+					stopLoop =
+					  cellRenderer.createDataCellHtml(cellInfo, rowHtml) || false;
+				}
+				rowHtml.push('</div>');
+
+				var rowString = rowHtml.join("");
+
+				// don't cache offset rows.
+				if (row >= topVisibleRow) {
+					this.__rowCacheSet(row, rowString, selected, focusedRow);
+				}
+
+				rowsArr.push(rowString);
+			}
+			this.fireDataEvent("paneReloadsData", paneReloadsData);
+			return rowsArr.join("");
+		},
+
+		/* =======================================================================
+		 * Cell widgets implementation.
+		 * =======================================================================*/
 
 		// keeps a reference to all the root containers created by the grid panel
 		// to host widgets inside cells.
@@ -139,12 +437,21 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 					repository.push(root);
 				}
 
+				// let the layout engine handle the size.
 				widget.resetUserBounds();
 
 				// let the widget shrink regardless of the content
 				// to fit in the cell.
 				widget.setMinWidth(0);
 				widget.setMinHeight(0);
+
+				// add "owner" and "opener" QA attributes.
+				var table = this.getTable();
+				var colIndex = parseInt(cellElem.getAttribute("col"));
+				var column = table.getColumns()[colIndex];
+				widget.setUserData("owner", table);
+				widget.setUserData("opener", column);
+				wisej.utils.Widget.setAutomationAttributes(widget, column);
 
 				// add the widget to the root container and set the correct layout
 				// according to the dock property.
@@ -180,9 +487,22 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 					}
 
 					root.add(widget, { edge: edge, left: null, top: null });
+
+					// notify the server when the layout engine resizes the widget.
+					if (!widget.isWired("resize")) {
+						widget.removeListener("resize", this.__onCellWidgetResize, this);
+						widget.addListener("resize", this.__onCellWidgetResize, this);
+					}
 				}
 				return widget;
 			}
+		},
+
+		// send the "resize" event to the sever to adjust the
+		// size of cell widgets when they are docked.
+		__onCellWidgetResize: function (e) {
+			var target = e.getTarget();
+			Wisej.Core.fireEvent(target.getId(), "resize", { Size: e.getData() }, target);
 		},
 
 		// dispose of all the root containers that are not being used.
@@ -242,7 +562,7 @@ qx.Class.define("wisej.web.datagrid.gridPane.InlineRoot", {
 
 	members: {
 
-		// overridden
+		// overridden - change the host element.
 		_createContentElement: function () {
 
 			var el = this.__elem;
@@ -265,6 +585,12 @@ qx.Class.define("wisej.web.datagrid.gridPane.InlineRoot", {
 			}, this, 0);
 
 			return root;
-		}
+		},
+
+		// overridden - we need to be able to use cell elements that are not visible.
+		__initDynamicMode: function () {
+			qx.event.Registration.addListener(this.__elem, "resize", this._onResize, this);
+		},
+
 	}
 });

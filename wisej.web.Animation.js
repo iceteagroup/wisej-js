@@ -112,7 +112,33 @@ qx.Class.define("wisej.web.Animation", {
 		 */
 		__perform: function (dom, animation, options, callbacks) {
 
-			if (typeof animation == "string") {
+			var reverse = options.reverse === true;
+
+			animation = this.__getAnimation(animation, options);
+			if (animation) {
+
+				var handle =
+					!reverse
+						? qx.bom.element.Animation.animate(dom, animation)
+						: qx.bom.element.Animation.animateReverse(dom, animation);
+
+				if (callbacks) {
+					if (callbacks.end)
+						handle.addListenerOnce("end", callbacks.end);
+					if (callbacks.start)
+						handle.addListenerOnce("start", callbacks.start);
+				}
+
+				return handle;
+			}
+		},
+
+		/**
+		 * Retrieves the animation and replaces the template values.
+		 */
+		__getAnimation: function (animation, options) {
+
+			if (typeof animation === "string") {
 				var name = animation;
 				animation = wisej.web.Animation.__animations[name];
 				// clone it, we don't want to change the original definition.
@@ -131,9 +157,10 @@ qx.Class.define("wisej.web.Animation", {
 
 				// read and remove the options that must be handled separately.
 				if (options) {
-					var reverse = options.reverse === true;
-					delete options.reverse;
+
 					var values = options.values;
+
+					delete options.reverse;
 					delete options.values;
 
 					// adjust the animation definition.
@@ -153,65 +180,51 @@ qx.Class.define("wisej.web.Animation", {
 					keyFrames = qx.bom.Template.render(keyFrames, values);
 					animation.keyFrames = JSON.parse(keyFrames);
 				}
-
-				var handle =
-					!reverse
-						? qx.bom.element.Animation.animate(dom, animation)
-						: qx.bom.element.Animation.animateReverse(dom, animation);
-
-				if (callbacks) {
-					if (callbacks.end)
-						handle.addListenerOnce("end", callbacks.end);
-					if (callbacks.start)
-						handle.addListenerOnce("start", callbacks.start);
-				}
-
-				return handle;
 			}
+			return animation;
 		},
 
 		/**
 		 * Animation definitions.
+		 *
+		 * The values can use the following parameters following parameters in curly brackets, using the
+		 * mustache.js syntax:
+		 *
+		 *	{x}, {y}, {width}, {height}, {right}, {bottom}
+		 *
+		 * The values are all numeric and you need to add "px" after the argument.
+		 *
+		 * i.e.: { transform: "translate(0px, -{{bottom}}px)" }; // notice the double curly.
+		 *
 		 */
 		__animations: {
 
 			fadeIn: {
-				"duration": 850,
-				"repeat": 1,
-				"keep": 100,
-				"keyFrames": {
+				duration: 850,
+				repeat: 1,
+				keep: 1,
+				keyFrames: {
 					0: { opacity: 0 },
 					100: { opacity: 1 }
 				}
 			},
 
 			fadeOut: {
-				"duration": 850,
-				"repeat": 1,
-				"keep": 100,
-				"keyFrames": {
+				duration: 850,
+				repeat: 1,
+				keep: 0,
+				keyFrames: {
 					0: { opacity: 1 },
 					100: { opacity: 0 }
 				}
 			},
 
-			slideInTop: {
-				"duration": 850,
-				"repeat": 1,
-				"keep": 100,
-				"template": true,
-				"keyFrames": {
-					0: { transform: "translate(0px, -{{bottom}}px)" },
-					100: { transform: "translate(0px, 0px)" },
-				}
-			},
-
 			bounce: {
-				"duration": 850,
-				"repeat": 1,
-				"origin": "50% 50%",
-				"keep": 100,
-				"keyFrames": {
+				duration: 850,
+				repeat: 1,
+				origin: "50% 50%",
+				keep: 100,
+				keyFrames: {
 					0: { transform: "translate(0px, 0px)" },
 					15: { transform: "translate(0px, -25px)" },
 					30: { transform: "translate(0px ,0px)" },
@@ -223,10 +236,10 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			blink: {
-				"duration": 250,
-				"repeat": 1,
-				"keep": 100,
-				"keyFrames": {
+				duration: 250,
+				repeat: 1,
+				keep: 100,
+				keyFrames: {
 					0: { opacity: 1.0 },
 					50: { opacity: 0.0 },
 					100: { opacity: 1.0 },
@@ -234,10 +247,10 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			tada: {
-				"duration": 1000,
-				"repeat": 1,
-				"keep": 100,
-				"keyFrames": {
+				duration: 1000,
+				repeat: 1,
+				keep: 100,
+				keyFrames: {
 					0: { transform: "rotate(0deg) scaleX(1.00) scaleY(1.00)" },
 					10: { transform: "rotate(-3deg) scaleX(0.80) scaleY(0.80)" },
 					20: { transform: "rotate(-3deg) scaleX(0.80) scaleY(0.80)" },
@@ -250,7 +263,183 @@ qx.Class.define("wisej.web.Animation", {
 					90: { transform: "rotate(3deg) scaleX(1.20) scaleY(1.20)" },
 					100: { transform: "rotate(0deg) scaleX(1.00) scaleY(1.00)" }
 				}
-			}
+			},
+
+			slideLeftIn: {
+				duration: 350,
+				timing: "linear",
+				origin: "bottom center",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "translateX(-100%)" },
+					100: { transform: "translateX(0%)" }
+				}
+			},
+
+			slideRightIn: {
+				duration: 350,
+				timing: "linear",
+				origin: "bottom center",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "translateX(100%)" },
+					100: { transform: "translateX(0%)" }
+				}
+			},
+
+			slideLeftOut: {
+				duration: 350,
+				timing: "linear",
+				origin: "bottom center",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "translateX(0%)" },
+					100: { transform: "translateX(-100%)" }
+				}
+			},
+
+			slideRightOut: {
+				duration: 350,
+				timing: "linear",
+				origin: "bottom center",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "translateX(0%)" },
+					100: { transform: "translateX(100%)" }
+				}
+			},
+
+			popIn: {
+				duration: 350,
+				timing: "linear",
+				origin: "center",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "scale(.2, .2)" },
+					100: { transform: "scale(1, 1)" }
+				}
+			},
+
+			popOut: {
+				duration: 350,
+				timing: "linear",
+				origin: "center",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "scale(1, 1)" },
+					100: { transform: "scale(.2, .2)" }
+				}
+			},
+
+			shrinkHeight: {
+				duration: 400,
+				timing: "linear",
+				origin: "top center",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "scale(1, 1)",opacity: 1 },
+					100: { transform: "scale(1, 0)", opacity: 0 }
+				}
+			},
+
+			growHeight: {
+				duration: 400,
+				timing: "linear",
+				origin: "top center",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "scale(1, 0)",opacity: 0 },
+					100: { transform: "scale(1, 1)", opacity: 1 }
+				}
+			},
+
+			shrinkWidth: {
+				duration: 400,
+				timing: "linear",
+				origin: "left center",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "scale(1, 1)",opacity: 1 },
+					100: { transform: "scale(0, 1)", opacity: 0 }
+				}
+			},
+
+			growWidth: {
+				duration: 400,
+				timing: "linear",
+				origin: "left center",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "scale(0, 1)",opacity: 0 },
+					100: { transform: "scale(1, 1)", opacity: 1 }
+				}
+			},
+
+			shrink: {
+				duration: 400,
+				timing: "linear",
+				origin: "left top",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "scale(1, 1)",opacity: 1 },
+					100: { transform: "scale(0, 0)", opacity: 0 }
+				}
+			},
+
+			grow: {
+				duration: 400,
+				timing: "linear",
+				origin: "left top",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "scale(0, 0)",opacity: 0 },
+					100: { transform: "scale(1, 1)", opacity: 1 }
+				}
+			},
+
+			slideUpIn: {
+				duration: 350,
+				timing: "linear",
+				origin: "center",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "translateY(100%)" },
+					100: { transform: "translateY(0%)" }
+				}
+			},
+
+			slideUpOut: {
+				duration: 350,
+				timing: "linear",
+				origin: "center",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "translateY(0%)" },
+					100: { transform: "translateY(-100%)" }
+				}
+			},
+
+			slideDownIn: {
+				duration: 350,
+				timing: "linear",
+				origin: "center",
+				keep: 100,
+				keyFrames: {
+					0: { transform: "translateY(-100%)" },
+					100: { transform: "translateY(0%)" }
+				}
+			},
+
+			slideDownOut: {
+				duration: 350,
+				timing: "linear",
+				origin: "center",
+				keep: 0,
+				keyFrames: {
+					0: { transform: "translateY(0%)" },
+					100: { transform: "translateY(100%)" }
+				}
+			},
 		}
 	}
 });

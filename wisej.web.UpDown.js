@@ -47,12 +47,12 @@ qx.Class.define("wisej.web.UpDownBase", {
 		// add local state events.
 		this.setStateEvents(this.getStateEvents().concat(["changeValue"]));
 
-		// handle "focusin" to focus the inner editable textfield.
-		this.addListener("focusin", this.__onFocusIn, this);
-
 		// hovered event handlers.
 		this.addListener("pointerover", this._onPointerOver);
 		this.addListener("pointerout", this._onPointerOut);
+
+		// set the focus to the inner textfield.
+		this.addListener("tap", this._onTap, this);
 
 		// enable the native context menu by default.
 		this.setNativeContextMenu(true);
@@ -133,6 +133,12 @@ qx.Class.define("wisej.web.UpDownBase", {
 		 * Applies the readOnly property.
 		 */
 		_applyReadOnly: function (value, old) {
+
+			if (value)
+				this.addState("readonly");
+			else
+				this.removeState("readonly");
+
 			this.getChildControl("upbutton").setEnabled(!value);
 			this.getChildControl("downbutton").setEnabled(!value);
 			this.getChildControl("textfield").setReadOnly(value);
@@ -171,6 +177,11 @@ qx.Class.define("wisej.web.UpDownBase", {
 
 			if (this.hasChildControl("textfield"))
 				this.getChildControl("textfield").setNativeContextMenu(value);
+
+			if (value)
+				this.addListener("contextmenu", this._onContextMenu);
+			else
+				this.removeListener("contextmenu", this._onContextMenu);
 		},
 
 		/**
@@ -205,6 +216,28 @@ qx.Class.define("wisej.web.UpDownBase", {
 			}
 		},
 
+		/**
+		 * Transfer the focus.
+		 *
+		 * @param e {qx.event.type.Pointer} Pointer tap event
+		 */
+		_onTap: function (e) {
+
+			if (!this.hasState("focused"))
+				this.tabFocus();
+		},
+
+		/**
+		 * Handles "contextmenu" to stop the bubbling of the event
+		 * when nativeContextMenu is enabled and the widget doesn't even
+		 * its own context menu.
+		 */
+		_onContextMenu: function (e) {
+
+			if (!this.getContextMenu() && this.getNativeContextMenu())
+				e.stopPropagation();
+		},
+
 		// overridden
 		_onRoll: function (e) {
 
@@ -236,17 +269,6 @@ qx.Class.define("wisej.web.UpDownBase", {
 
 			e.stopPropagation();
 			e.preventDefault();
-		},
-
-		// focus the inner textfield when gaining the focus, otherwise the editable
-		// textfield doesn't get the focus when clicking close or on the border.
-		__onFocusIn: function (e) {
-
-			var textField = this.getChildControl("textfield");
-			if (textField.isVisible()) {
-				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget()))
-					textField.getContentElement().focus();
-			}
 		},
 
 		/**

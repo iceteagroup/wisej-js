@@ -264,15 +264,18 @@ qx.Class.define("wisej.utils.Widget", {
 		 * Crawls up until it finds a wisej widget.
 		 *
  		 * @param item {qx.ui.core.Widget | Element} A child widget or element.
+ 		 * @param excludeInner {Boolean?} Exclude inner children.
 		 */
-		findWisejComponent: function (item) {
+		findWisejComponent: function (item, excludeInner) {
 
 			// retrieve the widget from the element.
 			if (item instanceof Element)
 				item = qx.ui.core.Widget.getWidgetByElement(item);
 
-			while (item && !item.isWisejComponent)
+			excludeInner = excludeInner === true;
+			while (item && (!item.isWisejComponent || (excludeInner && item.hasState("inner")))) {
 				item = item.getLayoutParent ? item.getLayoutParent() : null;
+			}
 
 			return item;
 		},
@@ -319,8 +322,10 @@ qx.Class.define("wisej.utils.Widget", {
 			var el = this.__measureElement;
 
 			// create the element used to measure.
-			if (this.__measureElement == null)
-				this.__measureElement = el = qx.dom.Element.create("div");
+			if (el == null) {
+				el = this.__measureElement = qx.dom.Element.create("div");
+				document.body.appendChild(el);
+			}
 
 			el.style = style;
 
@@ -332,13 +337,15 @@ qx.Class.define("wisej.utils.Widget", {
 			elStyle.overflow = "hidden";
 			elStyle.display = "block";
 			elStyle.whiteSpace = "normal";
-			document.body.appendChild(el);
 
 			el.className = className;
 			el.innerHTML = html;
 
 			// detect size
-			var size = qx.bom.element.Dimension.getSize(el);
+			var firstChild = el.firstChild;
+			firstChild.style.width = "auto";
+			firstChild.style.height = "auto";
+			var size = qx.bom.element.Dimension.getSize(firstChild);
 
 			// all modern browser are needing one more pixel for width
 			size.width++;
@@ -372,7 +379,6 @@ qx.Class.define("wisej.utils.Widget", {
 
 		/**
 		 * Determines whether the widget can execute a shortcut or a mnemonic command.
-		 * Checks if the widget is in an active container or is a standalone widget.
 		 *
  		 * @param child {qx.ui.core.Widget} The child widget to check.
 		 */
@@ -381,27 +387,29 @@ qx.Class.define("wisej.utils.Widget", {
 			if (!child)
 				return false;
 
-			var parent = null;
-			for (parent = child.getLayoutParent() ;
-					parent != null && !(parent.getLayoutParent() instanceof qx.ui.root.Abstract) ;
-						parent = parent.getLayoutParent());
-
-			if (parent)
-			{
-				if (parent instanceof wisej.web.Form)
-				{
-					return parent.isActive();
-				}
-				else if (parent instanceof wisej.web.ScrollablePage)
-				{
-					return parent.isSeeable();
-				}
-				else if (parent instanceof wisej.web.Desktop)
-				{
-					return parent.isSeeable();
-				}
+			// a form must be active.
+			if (child instanceof wisej.web.Form) {
+				if (!child.isActive())
+					return false;
 			}
-			return true;
+
+			// the top level container must be active:
+			//   - current main page, or
+			//   - current desktop, or
+			//   - active floating form.
+			var topLevel = child.getTopLevelContainer();
+			if (topLevel && topLevel.isActive()) {
+
+				var focusHandler = qx.ui.core.FocusHandler.getInstance();
+				var activeWidget = focusHandler.getActiveWidget();
+
+				return activeWidget == null
+						|| activeWidget == topLevel
+						|| activeWidget == Wisej.Platform.getRoot()
+						|| qx.ui.core.Widget.contains(topLevel, activeWidget);
+			}
+
+			return false;
 		},
 
 		/**
@@ -410,8 +418,7 @@ qx.Class.define("wisej.utils.Widget", {
 		 */
 		isInputKey: function (identifier) {
 
-			if (!this.inputKeyMap)
-			{
+			if (!this.inputKeyMap) {
 				this.inputKeyMap = {};
 				var keyCodes = qx.event.util.Keyboard.keyCodeToIdentifierMap;
 				for (var key in keyCodes) {
@@ -419,70 +426,210 @@ qx.Class.define("wisej.utils.Widget", {
 				}
 			}
 			return this.inputKeyMap[identifier];
+		},
+
+		/**
+		 * Adds the "opener" and "container" attributes to popup widgets
+		 * to be able to reference their opener control and container
+		 * when using QA automation tools.
+		 */
+		setAutomationAttributes: function (target, opener) {
+
+			if (!target)
+				return;
+
+			var ownerName = null;
+			var openerName = null;
+			var containerName = null;
+
+			if (opener) {
+
+				if (opener.isWisejMenu) {
+
+					// determine "opener" and "container" for floating menus.
+					var container = opener.findContainer();
+					if (container && container.isWisejComponent) {
+						container = container.getTopLevelContainer();
+					}
+
+					openerName = opener.getName();
+					if (container && container.isWisejComponent) {
+						containerName = container.getName();
+					}
+
+					// determine the owner, mostly for MDI merged menu.
+					var owner = opener.getUserData("owner");
+					if (owner && owner.isWisejComponent) {
+						ownerName = owner.getName(); // mdiChild1
+					}
+				}
+				else if (opener.isWisejControl) {
+
+					// determine "opener" and "container" for floating popups (i.e. drop down controls).
+					openerName = opener.getName(); // comboBow1
+
+					container = opener.getTopLevelContainer();
+					if (container && container.isWisejComponent) {
+						containerName = container.getName(); // page1
+					}
+
+					// determine "opener" and "container" for floating popups
+					// created by parentless widgets (i.e. table editors with a drop down).
+					var owner = opener.getUserData("owner");
+					if (owner && owner.isWisejComponent) {
+						ownerName = owner.getName(); // dataGrid1
+						var container = owner.getTopLevelContainer();
+						if (container && container.isWisejComponent) {
+							containerName = container.getName(); // page1
+						}
+					}
+					var opener = opener.getUserData("opener");
+					if (opener && opener.isWisejComponent) {
+						openerName = opener.getName(); // dataGrid1
+					}
+				}
+				else if (opener.isWisejComponent) {
+
+					// determine "opener", "owner" and "container" for parentless widgets
+					// i.e. table editors where the owner is the column component.
+					openerName = opener.getName(); // column1
+
+					container = opener.getTopLevelContainer();
+					if (container && container.isWisejComponent) {
+						containerName = container.getName(); // page1
+					}
+
+					var owner = target.getUserData("owner");
+					if (owner && owner.isWisejComponent) {
+						ownerName = owner.getName(); // dataGrid1
+						var container = owner.getTopLevelContainer();
+						if (container && container.isWisejComponent) {
+							containerName = container.getName(); // page1
+						}
+					}
+				}
+
+				// change "" to null.
+				ownerName = ownerName ? ownerName : null;
+				openerName = openerName ? openerName : null;
+				containerName = containerName ? containerName : null;
+			}
+
+			var el = target.isWisejComponent ? target.getAutomationElement() : target.getContentElement();
+			if (el) {
+				el.setAttributes({
+					"owner": ownerName,
+					"opener": openerName,
+					"container": containerName,
+				});
+			}
+
+			if (qx.core.Environment.get("automation.mode") === true)
+				this.setAutomationID(target);
+		},
+
+		/**
+		 * Generates a unique hierarchal ID to be used with automation tools.
+		 */
+		setAutomationID: function (target) {
+
+			if (!target)
+				return;
+
+			if (target.getUserData("automationId"))
+				return;
+
+			var el = target.isWisejComponent ? target.getAutomationElement() : target.getContentElement();
+			if (el) {
+
+				var ids = [];
+				var ownerName = el.getAttribute("owner");
+				var openerName = el.getAttribute("opener");
+				var containerName = el.getAttribute("container");
+
+				if (containerName)
+					ids.push(containerName);
+				if (ownerName)
+					ids.push(ownerName);
+				if (openerName)
+					ids.push(openerName);
+
+				var names = [];
+
+				if (target.isWisejComponent) {
+					var name = target.getName();
+					if (!name) {
+						var className = target.name.split(".");
+						name = className[className.length - 1];
+					}
+					if (name)
+						names.push(name);
+				}
+				else if (target.$$subcontrol) {
+					names.push(target.$$subcontrol);
+				}
+
+				for (var widget = target.getLayoutParent() ; widget != null; widget = widget.getLayoutParent()) {
+
+					if (widget.isWisejComponent) {
+						var name = widget.getName();
+						if (!name) {
+							var className = widget.name.split(".");
+							name = className[className.length - 1];
+						}
+						if (name)
+							names.push(name);
+					}
+
+					var parentEl = widget.getContentElement();
+					if (!containerName) {
+						containerName = parentEl.getAttribute("container");
+						if (containerName)
+							ids.push(containerName);
+					}
+					if (!ownerName) {
+						ownerName = parentEl.getAttribute("owner");
+						if (ownerName)
+							ids.push(ownerName);
+					}
+					if (!openerName) {
+						openerName = parentEl.getAttribute("opener");
+						if (openerName)
+							ids.push(openerName);
+					}
+				}
+				names.reverse();
+
+				var id = "";
+
+				if (ids.length == 0)
+					id = names.join("_");
+				else if (names.length == 0)
+					id = ids.join("_");
+				else
+					id = ids.join("_") + "_" + names.join("_");
+
+				// check collisions.
+				if (document.getElementById(id)) {
+					id = id + "_";
+					var counter = 1;
+					while (document.getElementById(id + counter)) {
+						counter++;
+					}
+					id = id + "_" + counter;
+				}
+
+				el.setAttribute("id", id);
+				target.setUserData("automationId", id);
+			}
+
+			// if the target has an accessibility element, ID that  one too.
+			var acc = target.getAccessibilityTarget ? target.getAccessibilityTarget() : null;
+			if (acc && acc != target) {
+				this.setAutomationID(acc);
+			}
 		}
 	}
 
 });
 
-
-/**
- * wisej.utils.FocusHandlerPatch
- *
- * Replaces the tab index comparer in qx.ui.core.FocusHandler to
- * take in consideration the widget's hierarchy.
- */
-qx.Mixin.define("wisej.utils.FocusHandlerPatch", {
-
-	statics: {
-
-		/**
-		 * Builds the tab index path array from the widget to the topmost parent.
-		 */
-		__collectTabIndexPath: function (widget) {
-			var path = [];
-
-			for (var parent = widget; parent != null; parent = parent.getLayoutParent()) {
-
-				var tabIndex = parent.getTabIndex();
-				if (tabIndex != null && tabIndex > -1)
-					path.push(tabIndex);
-			}
-
-			path.reverse();
-			return path;
-		},
-	},
-
-	members: {
-
-		/**
-		 * Compares the tabIndex of two widgets taking on consideration
-		 * their position as children widgets.
-		 *
-		 * @param widget1 {qx.ui.core.Widget} widget to compare.
-		 * @param widget1 {qx.ui.core.Widget} widget to compare.
-		 */
-		__compareTabOrder: function (widget1, widget2) {
-
-			if (widget1 == widget2)
-				return 0;
-
-			var tabPath1 = wisej.utils.FocusHandlerPatch.__collectTabIndexPath(widget1);
-			var tabPath2 = wisej.utils.FocusHandlerPatch.__collectTabIndexPath(widget2);
-
-			for (var i = 0; i < tabPath1.length && i < tabPath2.length; i++) {
-				if (tabPath1[i] != tabPath2[i]) {
-					return tabPath1[i] - tabPath2[i];
-				}
-			}
-
-			var z1 = widget1.getZIndex() || 0;
-			var z2 = widget2.getZIndex() || 0;
-			return z1 == z2
-				? tabPath1.length - tabPath2.length
-				: z1 - z2;
-		},
-	}
-});
-
-qx.Class.patch(qx.ui.core.FocusHandler, wisej.utils.FocusHandlerPatch);

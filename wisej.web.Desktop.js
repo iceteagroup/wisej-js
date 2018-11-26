@@ -349,13 +349,18 @@ qx.Class.define("wisej.web.Desktop", {
 
 			}
 			else {
+
+				var me = this;
 				var imageColor = qx.ui.basic.Image.resolveImage(value);
 
-				var el = this.getContentElement();
-				el.setStyles({
-					backgroundImage: "url('" + imageColor.source + "')",
-					backgroundSize: "cover",
-					backgroundPosition: "center center"
+				qx.io.ImageLoader.load(imageColor.source, function (url, entry) {
+					var el = me.getContentElement();
+					el.setStyles({
+						backgroundImage: "url(\"" + url + "\")",
+						backgroundSize: "cover",
+						backgroundPosition: "center center"
+					});
+
 				});
 			}
 		},
@@ -369,9 +374,9 @@ qx.Class.define("wisej.web.Desktop", {
 			switch (id) {
 				case "workspace":
 					// replace the window manager with ours.
-					var manager = new wisej.web.WindowManager();
-					control = new wisej.web.desktop.Workspace(this, manager).set({
-						anonymous: true
+					control = new wisej.web.desktop.Workspace(this).set({
+						anonymous: true,
+						enabled: true
 					});
 					this._add(control, { edge: "center" });
 					break;
@@ -495,6 +500,11 @@ qx.Class.define("wisej.web.DesktopTaskBarItem", {
 		 * the item is displayed in the "notifications" container.
 		 */
 		position: { init: "left", check: ["left", "right"] },
+
+		/**
+		 * Name property.
+		 */
+		name: { check: "String", apply: "_applyName" }
 	},
 
 	members: {
@@ -531,6 +541,20 @@ qx.Class.define("wisej.web.DesktopTaskBarItem", {
 				icon.resetWidth();
 				icon.resetHeight();
 				icon.getContentElement().setStyle("backgroundSize", "contain");
+			}
+		},
+
+		/**
+		 * Applies the name property.
+		 */
+		_applyName: function (value, old) {
+
+			var el = this.getContentElement();
+			if (el) {
+				if (value)
+					el.setAttribute("name", value, true);
+				else
+					el.removeAttribute("name", true);
 			}
 		},
 	}
@@ -864,9 +888,6 @@ qx.Class.define("wisej.web.desktop.TaskBar", {
 		// Listens to "changeRtl" to mirror the taskbar items.
 		_onRtlChange: function (e) {
 
-			if (!qx.core.Environment.get("qx.rtl.supported"))
-				return;
-
 			if (e.getData() === e.getOldData())
 				return;
 
@@ -945,8 +966,12 @@ qx.Class.define("wisej.web.desktop.TaskBarItem", {
 		this.window.addListener("close", this._onWindowClose, this);
 		this.window.addListener("disappear", this._onWindowDisappear, this);
 
-		// if window.showInTaskbar = false, attach to the minimize event and
-		// show in the taskbar only if minimized.
+		// set the "name" to the name of the related window for QA automation.
+		this.getContentElement().setAttribute("name", $window.getName());
+
+		// show in taskbar only when:
+		// - minimize, or
+		// - showInTaskbar is true, and it's visible
 		this.exclude();
 
 		if (this.window.getWindowState() == "minimized") {
@@ -1159,11 +1184,7 @@ qx.Class.define("wisej.web.desktop.TaskbarPreview", {
 		 * stretching. Also take a look at the related properties
 		 * {@link #minWidth} and {@link #maxWidth}.
 		 */
-		width:
-		{
-			init: 240,
-			refine: true
-		},
+		width: { init: 240, refine: true },
 
 		/**
 		 * The item's preferred height.
@@ -1172,11 +1193,7 @@ qx.Class.define("wisej.web.desktop.TaskbarPreview", {
 		 * stretching. Also take a look at the related properties
 		 * {@link #minHeight} and {@link #maxHeight}.
 		 */
-		height:
-		{
-			init: 200,
-			refine: true
-		},
+		height: { init: 200, refine: true },
 
 		/**
 		 * The delay before showing the preview window.
@@ -1266,6 +1283,11 @@ qx.Class.define("wisej.web.desktop.TaskbarPreview", {
 					return;
 
 				me.setVisibility("hidden");
+
+				var preview = me.getChildControl("preview");
+				var previewDom = preview.getContentElement().getDomElement();
+				if (previewDom)
+					previewDom.innerHTML = "";
 			},
 			this.getHideDelay());
 		},
@@ -1287,11 +1309,18 @@ qx.Class.define("wisej.web.desktop.TaskbarPreview", {
 		 */
 		__onTap: function (e) {
 
-			if (this.__window) {
-				this.__window.restore();
-				this.__window.setActive(true);
-			}
+			var window = this.__window;
 
+			if (window.isModal())
+				return;
+
+			if (window.getWindowState() == "minimized") {
+				window.restore();
+				window.setActive(true);
+			}
+			else {
+				window.setActive(true);
+			}
 		},
 
 		/**

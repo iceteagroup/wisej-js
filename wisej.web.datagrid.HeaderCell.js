@@ -210,7 +210,9 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 
 			// remove the previous widget.
 			if (this.__widget) {
-				this._remove(this.__widget);
+				if (this.__widget.getLayoutParent() == this)
+					this.remove(this.__widget);
+
 				this.__widget = null;
 			}
 

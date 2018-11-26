@@ -42,9 +42,10 @@ qx.Class.define("wisej.web.CheckBox", {
 		// the content according to wisej extended rules.
 		this._getLayout().dispose();
 		var layout = new qx.ui.layout.Grid(0);
-		layout.setRowFlex(2, 1);
-		layout.setRowFlex(3, 1);
-		layout.setColumnFlex(2, 1);
+		layout.setRowFlex(0, 0);
+		layout.setRowFlex(1, 1);
+		layout.setRowFlex(2, 0);
+		layout.setColumnFlex(1, 1);
 		this._setLayout(layout);
 
 		this._forwardStates.rightAligned = true;
@@ -137,10 +138,45 @@ qx.Class.define("wisej.web.CheckBox", {
 			return true;
 		},
 
-		// Override the execute method to disable the automatic check/uncheck behavior.
+		// override the execute method to disable the automatic check/uncheck behavior.
 		// It is handled on the server side.
 		_onExecute: function (e) {
 
+		},
+
+		/**
+		 * Listener method for "keydown" event.<br/>
+		 * Removes "abandoned" and adds "pressed" state
+		 * for the keys "Enter" or "Space"
+		 *
+		 * @param e {Event} Key event
+		 */
+		_onKeyDown: function (e) {
+			switch (e.getKeyIdentifier()) {
+				case "Space":
+					this.removeState("abandoned");
+					this.addState("pressed");
+					e.stopPropagation();
+			}
+		},
+
+		/**
+		 * Listener method for "keyup" event.<br/>
+		 * Removes "abandoned" and "pressed" state (if "pressed" state is set)
+		 * for the keys "Enter" or "Space"
+		 *
+		 * @param e {Event} Key event
+		 */
+		_onKeyUp: function (e) {
+			switch (e.getKeyIdentifier()) {
+				case "Space":
+					if (this.hasState("pressed")) {
+						this.removeState("abandoned");
+						this.removeState("pressed");
+						this.execute();
+						e.stopPropagation();
+					}
+			}
 		},
 
 		/**
@@ -200,65 +236,95 @@ qx.Class.define("wisej.web.CheckBox", {
 		 */
 		_applyCheckAlign: function (value, old) {
 
+			// when the label or the icon are in the middle column
+			// update the layout asynchronously to prevent cell collisions.
+			switch (value) {
+				case "topCenter":
+				case "middleCenter":
+				case "bottomCenter":
+					qx.ui.core.queue.Widget.add(this, "updateLayout");
+					break;
+
+				default:
+					this.__updateIconLayout();
+					break;
+			}
+		},
+
+		__updateIconLayout: function () {
+
 			var icon = this.getChildControl("icon");
 
 			// default to middle left.
 			var alignX = "left";
 			var alignY = "middle";
-			var rowCol = { row: 2, column: 0 };
+			var rowCol = { row: 1, column: 0 };
 
-			if (old)
+			switch (this.getCheckAlign()) {
+
+				case "topLeft":
+					alignY = "top";
+					alignX = "left";
+					rowCol = { row: 1, column: 0 };
+					break;
+
+				case "middleLeft":
+					alignY = "middle";
+					alignX = "left";
+					rowCol = { row: 1, column: 0 };
+					break;
+
+				case "bottomLeft":
+					alignY = "bottom";
+					alignX = "left";
+					rowCol = { row: 1, column: 0 };
+					break;
+
+				case "topRight":
+					alignY = "top";
+					alignX = "right";
+					rowCol = { row: 1, column: 2 };
+					break;
+
+				case "middleRight":
+					alignY = "middle";
+					alignX = "right";
+					rowCol = { row: 1, column: 2 };
+					break;
+
+				case "bottomRight":
+					alignY = "bottom";
+					alignX = "right";
+					rowCol = { row: 1, column: 2 };
+					break;
+
+				case "topCenter":
+					alignY = "top";
+					alignX = "center";
+					rowCol = { row: 1, column: 1 };
+					break;
+
+				case "middleCenter":
+					alignY = "middle";
+					alignX = "center";
+					rowCol = { row: 1, column: 1 };
+					break;
+
+				case "bottomCenter":
+					alignY = "bottom";
+					alignX = "center";
+					rowCol = { row: 1, column: 1 };
+					break;
+			}
+
+			if (alignX == "right")
+				this.addState("rightAligned");
+			else
 				this.removeState("rightAligned");
 
-			if (value) {
-
-
-				switch (value) {
-
-					case "topLeft":
-						rowCol = { row: 0, column: 0 };
-						break;
-					case "topCenter":
-						alignX = "center";
-						rowCol = { row: 0, column: 2 };
-						break;
-					case "topRight":
-						alignX = "right";
-						rowCol = { row: 0, column: 4 };
-						break;
-
-					case "middleLeft":
-						rowCol = { row: 2, column: 0 };
-						break;
-					case "middleCenter":
-						alignX = "center";
-						rowCol = { row: 2, column: 2 };
-						break;
-					case "middleRight":
-						alignX = "right";
-						rowCol = { row: 2, column: 4 };
-						break;
-
-					case "bottomLeft":
-						rowCol = { row: 5, column: 0 };
-						break;
-					case "bottomCenter":
-						alignX = "center";
-						rowCol = { row: 5, column: 2 };
-						break;
-					case "bottomRight":
-						alignX = "right";
-						rowCol = { row: 5, column: 4 };
-						break;
-				}
-
-				if (alignX == "right")
-					this.addState("rightAligned");
-
-				icon.setAlignX(alignX);
-				icon.setAlignY(alignY);
-				icon.setLayoutProperties(rowCol);
-			}
+			icon.setAlignX(alignX);
+			icon.setAlignY(alignY);
+			icon.setLayoutProperties(rowCol);
 		},
 
 		/**
@@ -266,80 +332,141 @@ qx.Class.define("wisej.web.CheckBox", {
 		 */
 		_applyTextAlign: function (value, old) {
 
-			var icon = this.getChildControl("icon");
+			// when the label or the icon are in the middle column
+			// update the layout asynchronously to prevent cell collisions.
+			switch (value) {
+				case "topCenter":
+				case "middleCenter":
+				case "bottomCenter":
+					qx.ui.core.queue.Widget.add(this, "updateLayout");
+					break;
+
+				default:
+					this.__updateLabelLayout();
+					break;
+			}
+		},
+
+		__updateLabelLayout: function () {
+
 			var label = this.getChildControl("label");
 
 			// default to middle center.
 			var alignX = "left";
 			var alignY = "middle";
-			var rowCol = { row: 0, column: 1 };
+			var colAdjust = 0;
+			var rowAdjust = 0;
+			var rowCol = { row: 1, column: 1 };
+			var checkAlign = this.getCheckAlign();
 
-			if (value) {
+			switch (this.getTextAlign()) {
 
-				switch (value) {
+				case "topLeft":
+					alignY = "top";
+					alignX = "left";
+					colAdjust = -1;
+					rowCol = { row: 1, column: 1 };
+					break;
 
-					case "topLeft":
-						rowCol = { row: 0, column: 1 };
-						break;
-					case "topCenter":
-						alignX = "center";
-						rowCol = { row: 0, column: 2 };
+				case "middleLeft":
+					alignY = "middle";
+					alignX = "left";
+					colAdjust = -1;
+					rowCol = { row: 1, column: 1 };
+					break;
 
-						// adjust the position if the icon and the label
-						// are in the same cell.
-						if (this.getCheckAlign() == value) {
-							rowCol.row++;
-							alignY = "top";
-						}
-						break;
-					case "topRight":
-						alignX = "right";
-						rowCol = { row: 0, column: 3 };
-						break;
+				case "bottomLeft":
+					alignY = "bottom";
+					alignX = "left";
+					colAdjust = -1;
+					rowCol = { row: 1, column: 1 };
+					break;
 
-					case "middleLeft":
-						rowCol = { row: 2, column: 1 };
-						break;
-					case "middleCenter":
-						alignX = "center";
-						rowCol = { row: 2, column: 2 };
+				case "topRight":
+					alignY = "top";
+					alignX = "right";
+					colAdjust = +1;
+					rowCol = { row: 1, column: 1 };
+					break;
 
-						// adjust the position if the icon and the label
-						// are in the same cell.
-						if (this.getCheckAlign() == value) {
-							rowCol.row++;
-							alignY = "top";
-							icon.setAlignY("bottom");
-						}
-						break;
-					case "middleRight":
-						alignX = "right";
-						rowCol = { row: 2, column: 3 };
-						break;
+				case "middleRight":
+					alignY = "middle";
+					alignX = "right";
+					colAdjust = +1;
+					rowCol = { row: 1, column: 1 };
+					break;
 
-					case "bottomLeft":
-						rowCol = { row: 5, column: 1 };
-						break;
-					case "bottomCenter":
-						alignX = "center";
-						rowCol = { row: 5, column: 2 };
+				case "bottomRight":
+					alignY = "bottom";
+					alignX = "right";
+					colAdjust = +1;
+					rowCol = { row: 1, column: 1 };
+					break;
 
-						// adjust the position if the icon and the label
-						// are in the same cell.
-						if (this.getCheckAlign() == value) {
-							rowCol.row--;
-							alignY = "bottom";
-						}
-						break;
-					case "bottomRight":
-						alignX = "right";
-						rowCol = { row: 5, column: 3 };
-						break;
-				}
+				case "topCenter":
+					alignY = "top";
+					alignX = "center";
+					rowCol = { row: 1, column: 1 };
 
-				label.setAlignX(alignX);
-				label.setAlignY(alignY);
-				label.setLayoutProperties(rowCol);
+					rowAdjust = -1;
+					if (checkAlign == "topCenter")
+						rowAdjust = +1;
+					break;
+
+				case "middleCenter":
+					alignY = "middle";
+					alignX = "center";
+					rowCol = { row: 1, column: 1 };
+
+					rowAdjust = -1;
+					if (checkAlign == "topCenter")
+						rowAdjust = +1;
+					break;
+
+				case "bottomCenter":
+					alignY = "bottom";
+					alignX = "center";
+					rowCol = { row: 1, column: 1 };
+
+					rowAdjust = +1;
+					if (checkAlign == "bottomCenter")
+						rowAdjust = -1;
+					break;
+			}
+
+			// resolve layout collisions with the icon.
+			var layout = this._getLayout();
+			layout.setRowFlex(0, 0);
+			layout.setRowFlex(2, 0);
+			switch (checkAlign) {
+
+				case "topCenter":
+				case "middleCenter":
+				case "bottomCenter":
+					layout.setRowFlex(rowCol.row, 0);
+					rowCol.row += rowAdjust;
+					rowCol.column += colAdjust;
+					layout.setRowFlex(rowCol.row, 1);
+					break;
+			}
+
+			// when both the text and the icon are in the middle, align them to the center.
+			if (checkAlign == "middleCenter" && this.getTextAlign() == "middleCenter") {
+				alignY = "bottom";
+				layout.setRowFlex(1, 1);
+				this.getChildControl("icon").setAlignY("top");
+			}
+
+			label.setAlignX(alignX);
+			label.setAlignY(alignY);
+			label.setLayoutProperties(rowCol);
+		},
+
+		syncWidget: function (jobs) {
+
+			if (jobs && jobs["updateLayout"]) {
+				this.__updateIconLayout();
+				this.__updateLabelLayout();
 			}
 		},
 

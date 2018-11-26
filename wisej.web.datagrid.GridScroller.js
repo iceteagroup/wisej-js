@@ -62,7 +62,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		this._headerClipper.addListener("pointerout", this.__handleHeaderEvent, this);
 	},
 
-
 	properties: {
 
 		/**
@@ -81,9 +80,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 		// the coordinates (row, col) of the cell under the pointer.
 		__lastPointerCell: null,
-
-		// true when the pointer is down and a column or row are being resized.
-		__isResizing: false,
 
 		// the row being resize.
 		__resizeRow: null,
@@ -144,6 +140,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					// editor widget is also disposed, causing an error
 					// the next time the grid tries to enter edit mode on a column
 					// with a disposed editor widget.
+
 					if (this.__focusIndicator._indexOf(editor) > -1)
 						this.__focusIndicator._remove(editor);
 
@@ -208,6 +205,9 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 								wisej.web.datagrid.EditorFactory.setCellEditorValue(editor, pendingEditorText);
 							else
 								wisej.web.datagrid.EditorFactory.selectAllText(editor);
+
+							// inform the editor that it has been initialized in a grid cell.
+							editor.fireDataEvent("cellBeginEdit", table);
 						}
 
 						return true;
@@ -344,7 +344,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				var prevCol = table.getFocusedColumn();
 
 				// the pointer is over the data -> update the focus cell.
-				table.setFocusedCell(col, row, true);
+				// notify the server only when the row is unchanged and the column has changed
+				// when the row changed we fire "selectionChanged" which will also update
+				// the current cell.
+				// NOTE: this will change when the selection model will support cell and column selection.
+				var notify = (prevRow == row) && (prevCol != col);
+				table.setFocusedCell(col, row, true /*scrollVisible*/, notify);
 
 				// update the selection.
 				// chances are it has already changed on the server through the "selectionChanged" event.
@@ -440,6 +445,8 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			this._updateScrollerType();
 			this._updateFocusIndicator();
+			this.updateHorScrollBarMaximum();
+			this._updateFocusIndicator();
 			this.__header.onTableModelMetaDataChanged();
 			this.__tablePane.onTableModelMetaDataChanged();
 		},
@@ -470,24 +477,53 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			if (wasRowHeader != this.__isRowHeader || wasFrozenPane != this.__isFrozenPane) {
 
-				this.setShowCellFocusIndicator(!this.__isRowHeader);
-				this.__showScrollbarFiller(this.__isFrozenPane || this.__isRowHeader);
+				this.__showHorizontalScrollbarFiller(this.__isFrozenPane || this.__isRowHeader);
+
+				// hide the focus indicator on row header panels and show it on the regular panels.
+				// but preserve the table's showCellFocusIndicator property value.
+				this.setShowCellFocusIndicator(!this.__isRowHeader && table.getShowCellFocusIndicator());
 			}
 		},
 
-		// property modifier
+		// overridden.
 		_applyHorizontalScrollBarVisible: function (value, old) {
 
-			this.__horScrollBar.setVisibility(value ? "visible" : "excluded");
+			this.base(arguments, value, old);
 
 			var filler = this.getChildControl("filler", true);
 			if (filler)
 				filler.setVisibility(value ? "visible" : "excluded");
 		},
 
+		// overridden.
+		_applyVerticalScrollBarVisible: function (value, old) {
+
+			this.base(arguments, value, old);
+
+			var widget = this.getTopRightWidget();
+			var vscrollVisible = this.getVerticalScrollBarVisible();
+			var headerVisible = this.getTable().getHeaderCellsVisible();
+			if (widget && !widget.isVisible()) {
+
+
+				if (headerVisible) {
+					if (vscrollVisible && qx.bom.element.Scroll.getScrollbarWidth() > 0)
+						// keep the widget space above the scrollbar.
+						widget.hide();
+					else
+						// hide and remove from the layout since we don't have the scrollbar.
+						widget.exclude();
+				}
+				else {
+					// hide and remove from the layout since we don't have a header.
+					widget.exclude();
+				}
+			}
+		},
+
 		// show a filler instead of the horizontal scrollbar
 		// for the frozen or row-header panes.
-		__showScrollbarFiller: function (show) {
+		__showHorizontalScrollbarFiller: function (show) {
 
 			var filler = this.getChildControl("filler", true);
 			if (show) {
@@ -499,19 +535,17 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				filler.addState("horizontal");
 
 				var layoutProps = this.__horScrollBar.getLayoutProperties();
-				if (this.__clipperContainer != null)
+				if (this.__clipperContainer != null) {
 					this.__clipperContainer.add(filler, layoutProps);
-				else
-					this._add(filler, layoutProps);
+				}
+				else {
+					this._add(filler, { row: layoutProps.row, column: layoutProps.column, colSpan: 2 });
+				}
 			}
 			else if (filler != null) {
 
 				this._remove(filler);
-
-				if (this.__clipperContainer != null)
-					this.__clipperContainer.add(this.__horScrollBar, layoutProps);
-				else
-					this._add(this.__horScrollBar, layoutProps);
+				this._add(this.__horScrollBar);
 			}
 		},
 
@@ -604,18 +638,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				return;
 			}
 
-			if (table.isEditing()) {
-				table.stopEditing(false /*notify*/);
-			}
-
-			this.base(arguments, e);
-
 			var pageX = e.getDocumentLeft();
 			var pageY = e.getDocumentTop();
 
-			// pointer is over the resize area?
-			var row = this._getRowForPagePos(pageX, pageY);
+			// pointer is over the resize are between rows?
 			var col = this._getColumnForPageX(pageX)
+			var row = this._getRowForPagePos(pageX, pageY);
 			if (row != null && col != null && col >= 0 && row >= 0) {
 
 				if (col == 0) {
@@ -628,12 +656,26 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 							return;
 						}
 
-						// the pointer is over a resize region -> start resizing
+						// the pointer is over a resize region -> start resizing the row.
 						this._startResizeRow(resizeRow, pageY);
 						e.stop();
+
+						return;
 					}
 				}
 			}
+
+			if (table.isEditing()) {
+				// notify the server if the user tapped
+				// outside of a valid cell, otherwise
+				// we don't process the "endEdit" event waiting
+				// for the "focusCellChanged" event instead.
+				var notify = (row == null || col == null);
+
+				table.stopEditing(notify);
+			}
+
+			this.base(arguments, e);
 		},
 
 		/**
@@ -665,8 +707,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			this.base(arguments, resizeCol, pageX);
 
-			this.__isResizing = true;
-
 			// show the resize line immediately on pointer down.
 			this.__handleResizeColumn(pageX);
 		},
@@ -685,7 +725,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			var rowHeight = dataModel.getRowHeight(resizeRow);
 
 			// The pointer is over a resize region -> Start resizing
-			this.__isResizing = true;
 			this.__resizeRow = resizeRow;
 			this.__lastResizePointerPageY = pageY;
 			this.__lastResizeRowHeight = rowHeight;
@@ -836,7 +875,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			var regionRadius = qx.ui.table.pane.Scroller.RESIZE_REGION_RADIUS;
 			var currX = this.__tablePane.getContentLocation().left;
 
-			for (var x = 0; x < colCount; x++) {
+			var rtl = this.isRtl();
+
+			for (var x =
+			  rtl ? (colCount - 1) : (0) ;
+			  rtl ? (x > -1) : (x < colCount) ;
+			  rtl ? (x--) : (x++)) {
 
 				var col = paneModel.getColumnAtX(x);
 				var colWidth = columnModel.getColumnWidth(col);
@@ -919,7 +963,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		  */
 		_updateContent: function () {
 
-			var paneSize = this.__getPaneClipperSize(false);
+			var paneSize = this.__getPaneClipperSize();
 			if (!paneSize) {
 				// will be called on the next resize event.
 				return;
@@ -981,7 +1025,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		 */
 		updateVerScrollBarMaximum: function () {
 
-			var paneSize = this.__getPaneClipperSize(false);
+			var paneSize = this.__getPaneClipperSize();
 			if (!paneSize)
 				// will be called on the next resize event.
 				return;
@@ -1046,8 +1090,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			if (!this.__isRowHeader && !this.__isFrozenPane && scrollBars > 0) {
 
-				// get the size of the view pane including the vertical scrollbar.
-				var clipperSize = this.__getPaneClipperSize(verBarMask);
+				var clipperSize = this.__getPaneClipperSize();
 				var viewWidth = clipperSize ? clipperSize.width : 0;
 
 				//
@@ -1093,7 +1136,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			if (xPos != -1) {
 
-				var clipperSize = this.__getPaneClipperSize(false);
+				var clipperSize = this.__getPaneClipperSize();
 				if (!clipperSize)
 					return;
 
@@ -1102,8 +1145,10 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 				// scroll the cell horizontally to ensure its visibility.
 				var scrollX = this.getScrollX();
-				var colLeft = paneModel.getColumnLeft(col);
 				var colWidth = columnModel.getColumnWidth(col);
+				var colLeft = (!this.isRtl())
+					? paneModel.getColumnLeft(col)
+					: paneModel.getTotalWidth() - paneModel.getColumnLeft(col) - colWidth;
 				var minScrollX = Math.min(colLeft, colLeft + colWidth - clipperSize.width);
 				var newScrollX = Math.max(minScrollX, Math.min(colLeft, scrollX))
 				if (newScrollX != scrollX)
@@ -1201,6 +1246,13 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			return null;
 		},
 
+		/** 
+		 * keeps track of the pixel reminder when touch scrolling.
+		 * our grid scroller can only scroll by whole rows but mobile
+		 * devices generate multiple small steps (1px) when touch scrolling.
+		 */
+		__scrollReminderY: 0,
+
 		/**
 		 * Event handler. Called when the user moved the mouse wheel.
 		 *
@@ -1213,23 +1265,33 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				return;
 
 			var delta = e.getDelta();
+			var rowHeight = table.getRowHeight();
 
 			// calculate the number of rows to scroll.
-			var scrollY = parseInt(delta.y, 10);
-			scrollY = scrollY / table.getRowHeight();
+			// this scroller can only scroll by row, not by pixels because
+			// of the support for variable row height.
+			var scrollY = delta.y;
+			scrollY += this.__scrollReminderY;
+			scrollY = (scrollY / rowHeight) | 0;
 
-			// normalize that at least one step is scrolled at a time.
-			if (scrollY > 0)
-				scrollY = Math.ceil(scrollY);
-			else
-				scrollY = Math.floor(scrollY);
+			// calculate the number of pixels left after the normalization.
+			this.__scrollReminderY = (delta.y + this.__scrollReminderY) % rowHeight;
+
+			var me = this;
+			clearTimeout(this.__scrollReminderTimer);
+			this.__scrollReminderTimer = setTimeout(function () {
+				me.__scrollReminderY = 0;
+			}, 250);
 
 			// scroll vertically.
 			this.__verScrollBar.scrollBy(scrollY);
-			var scrolled = scrollY != 0 && !this.__isAtEdge(this.__verScrollBar, scrollY);
+			var scrolled =
+				this.__scrollReminderY != 0 ||
+				(scrollY != 0 && !this.__isAtEdge(this.__verScrollBar, scrollY));
 
 			// calculate number of pixels to scroll.
-			var scrollX = parseInt(delta.x, 10);
+			var scrollX = parseInt(delta.x, 10) | 0;
+
 			if (scrollX > 0)
 				scrollX = Math.ceil(scrollX);
 			else
@@ -1245,11 +1307,10 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			}
 
 			// pass the event to the parent if the scrollbar is at an edge
-			if (scrolled) {
-				e.stop();
-			} else {
+			if (!scrolled)
 				e.stopMomentum();
-			}
+
+			e.stop();
 		},
 
 		/**
@@ -1284,7 +1345,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 							clipperSize.width += verScrollBarWidth;
 						}
 					}
-
 				}
 			}
 
@@ -1323,7 +1383,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		__getFirstVisibleRow: function () {
 
 			var scrollY = this.__verScrollBar.getPosition();
-			return scrollY;
+			return scrollY | 0;
 
 		},
 
@@ -1406,17 +1466,14 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					break;
 
 				case "click":
-					// update the status of the resizing flag and skip the event.
-					if (this.__isResizing) {
-						this.__isResizing = this.__resizeColumn != null || this.__resizeRow != null;
+					var pageX = e.getDocumentLeft();
+					var pageY = e.getDocumentTop();
+					if (this._getResizeRowForPageX(pageX, pageY) > -1 || this._getResizeColumnForPageX(pageX) > -1)
 						return;
-					}
-
 					break;
 			}
 
-			if (!this.__isResizing) {
-
+			if (this.__resizeRow == null && this.__resizeColumn == null) {
 				var pageX = e.getDocumentLeft();
 				var pageY = e.getDocumentTop();
 				var column = this._getColumnForPageX(pageX);
@@ -1454,16 +1511,13 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					break;
 
 				case "click":
-					// update the status of the resizing flag and skip the event.
-					if (this.__isResizing) {
-						this.__isResizing = this.__resizeColumn != null || this.__resizeRow != null;
+					var pageX = e.getDocumentLeft();
+					if (this._getResizeColumnForPageX(pageX) > -1)
 						return;
-					}
-
 					break;
 			}
 
-			if (!this.__isResizing) {
+			if (this.__resizeRow == null && this.__resizeColumn == null) {
 				var pageX = e.getDocumentLeft();
 				var column = this._getColumnForPageX(pageX);
 				this.__handleEvent(e, column, -1);
@@ -1656,11 +1710,14 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					});
 					if (this.__clipperContainer != null)
 						control.setMinHeight(qx.ui.core.scroll.AbstractScrollArea.DEFAULT_SCROLLBAR_WIDTH);
+
+					if (!this.getHorizontalScrollBarVisible())
+						control.exclude();
+
 					break;
 			}
 
 			return control || this.base(arguments, id);
 		},
 	},
-
 });

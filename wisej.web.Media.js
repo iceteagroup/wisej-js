@@ -37,7 +37,7 @@ qx.Class.define("wisej.web.Media", {
 
 		this.base(arguments);
 
-		this._media = this.__createMediaElement();
+		this._media = this._createMediaElement();
 
 		// initialize the volume with the default value.
 		this.initVolume();
@@ -119,6 +119,9 @@ qx.Class.define("wisej.web.Media", {
 
 	members: {
 
+		/** the media element */
+		_media: null,
+
 		/**
 		 * Starts playing the audio/video.
 		 */
@@ -138,9 +141,9 @@ qx.Class.define("wisej.web.Media", {
 		/**
 		 * Creates the inner media element.
 		 */
-		__createMediaElement: function () {
+		_createMediaElement: function () {
 
-			throw new Error("__createMediaElement is not implemented.");
+			throw new Error("_createMediaElement is not implemented.");
 		},
 
 		_onAppear: function (e) {
@@ -260,6 +263,10 @@ qx.Class.define("wisej.web.Media", {
 		},
 
 	},
+
+	destruct: function() {
+		this._disposeObjects("_media");
+	}
 });
 
 
@@ -287,7 +294,7 @@ qx.Class.define("wisej.web.Video", {
 		/**
 		 * Creates the inner media element.
 		 */
-		__createMediaElement: function () {
+		_createMediaElement: function () {
 
 			return new qx.bom.media.Video();
 
@@ -361,7 +368,7 @@ qx.Class.define("wisej.web.Audio", {
 		/**
 		 * Creates the inner media element.
 		 */
-		__createMediaElement: function () {
+		_createMediaElement: function () {
 
 			return new qx.bom.media.Audio();
 

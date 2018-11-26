@@ -254,21 +254,30 @@ qx.Class.define("wisej.web.ToolBar", {
 			var overflow = new qx.ui.menubar.Button();
 			overflow.setAppearance("menubar/overflow");
 			overflow.__spacer = new qx.ui.core.Spacer();
-			overflow.addListener("changeVisibility", this.__onOverflowChangeVisibility, this);
+
+			var overflowMenu = new qx.ui.menu.Menu().set({
+				position: "bottom-right"
+			});
+			overflow.setMenu(overflowMenu);
+
 			this.add(overflow);
 			this.setOverflowIndicator(overflow);
 
 			// create the cloned overflow items.
 			this.__updateOverflowItems();
 
+			// update the overflow items when the overflow button or the overflow menu become visible.
+			overflow.addListener("changeVisibility", this.__onOverflowChangeVisibility, this);
+			overflowMenu.addListener("changeVisibility", this.__onOverflowChangeVisibility, this);
 		},
 
 		__onOverflowChangeVisibility: function (e) {
 
-			if (e.getTarget().isVisible())
+			if (e.getData() == "visible") {
 				this.__updateOverflowItems();
-
+			}
 		},
+
 
 		// destroys the overflow item.
 		__destroyOverflowWidget: function () {
@@ -298,17 +307,9 @@ qx.Class.define("wisej.web.ToolBar", {
 			if (overflow == null)
 				return;
 
-			if (overflow.getMenu) {
-				var overflowMenu = overflow.getMenu();
-
-				if (overflowMenu == null) {
-					overflowMenu = new qx.ui.menu.Menu();
-					overflowMenu.setPosition("bottom-right");
-					overflow.setMenu(overflowMenu);
-				}
-			}
-
 			var toolItems = this.getChildren();
+			var overflowMenu = overflow.getMenu();
+
 			for (var i = 0; i < toolItems.length; i++) {
 
 				var toolItem = toolItems[i];
@@ -321,22 +322,29 @@ qx.Class.define("wisej.web.ToolBar", {
 					if (overflowItem == null) {
 
 						overflowItem = new wisej.web.menu.MenuItem();
-						overflowItem.setLabel(toolItem.getLabel());
-						overflowItem.setIcon(toolItem.getIcon());
-						overflowItem.setEnabled(toolItem.getEnabled());
-						overflowItem.setVisibility((toolItem.isHidden() || toolItem.isVisible()) ? "excluded" : "visible");
-						overflowItem.__menuItem = toolItem;
 						overflowMenu.add(overflowItem);
 
-						// shadow events.
-						overflowItem.addListener("execute", function () { this.__menuItem.fireEvent("execute"); });
-
+						overflowItem.__toolItem = toolItem;
 						toolItem.__overflowItem = overflowItem;
+
+						// shadow events.
+						overflowItem.addListener("execute", function () { this.__toolItem.fireEvent("execute"); });
 					}
 					else if (overflowMenu.indexOf(overflowItem) == -1) {
 
 						overflowMenu.add(overflowItem);
 					}
+
+					// sync the overflow item with the corresponding toolbar item.
+					overflowItem.setLabel(toolItem.getLabel());
+					overflowItem.setEnabled(toolItem.getEnabled());
+					overflowItem.setChecked(toolItem.getChecked());
+					overflowItem.setVisibility((toolItem.isHidden() || toolItem.isVisible()) ? "excluded" : "visible");
+
+					if (toolItem.getIcon())
+						overflowItem.setIcon(toolItem.getIcon());
+					else
+						overflowItem.resetIcon();
 				}
 				else if (toolItem instanceof wisej.web.toolbar.Separator)
 				{
@@ -346,7 +354,7 @@ qx.Class.define("wisej.web.ToolBar", {
 					if (overflowItem == null) {
 
 						overflowItem = new wisej.web.menu.MenuSeparator();
-						overflowItem.__menuItem = toolItem;
+						overflowItem.__toolItem = toolItem;
 						overflowMenu.add(overflowItem);
 
 						toolItem.__overflowItem = overflowItem;
@@ -355,6 +363,9 @@ qx.Class.define("wisej.web.ToolBar", {
 
 						overflowMenu.add(overflowItem);
 					}
+
+					// sync the overflow item with the corresponding toolbar item.
+					overflowItem.setVisibility((toolItem.isHidden() || toolItem.isVisible()) ? "excluded" : "visible");
 				}
 			}
 		},
@@ -401,8 +412,11 @@ qx.Class.define("wisej.web.ToolBar", {
 			// are displayed bottom-left aligned.
 			if (toolItem.getMenu) {
 				var popupMenu = toolItem.getMenu();
-				if (popupMenu)
+				if (popupMenu) {
+					toolItem.setMenu(popupMenu);
+					popupMenu.setOpener(toolItem);
 					popupMenu.setPosition("bottom-left");
+				}
 			}
 		},
 
@@ -419,8 +433,11 @@ qx.Class.define("wisej.web.ToolBar", {
 				// right-top aligned.
 				if (toolItem.getMenu) {
 					var popupMenu = toolItem.getMenu();
-					if (popupMenu)
+					if (popupMenu) {
+						overflowItem.setMenu(popupMenu);
+						popupMenu.setOpener(overflowItem);
 						popupMenu.setPosition("right-top");
+					}
 
 					// share the popup menu and show the overflow clone.
 					overflowItem.setMenu(popupMenu);
@@ -434,6 +451,8 @@ qx.Class.define("wisej.web.ToolBar", {
 		// together with a spacer to ensure that it's aligned to the right.
 		_recalculateOverflow: function (width, requiredWidth) {
 
+			if (this.isDisposed())
+				return;
 			if (this.__inRecalculateOverflow)
 				return;
 
@@ -580,6 +599,17 @@ qx.Class.define("wisej.web.toolbar.Button", {
 
 		},
 
+		// overridden.
+		_applyAppearance: function (value, old) {
+
+			if (value == null) {
+				this.resetAppearance();
+				return;
+			}
+
+			this.base(arguments, value, old);
+		},
+
 		/**
 		 * Applies the sizeMode property.
 		 */
@@ -644,6 +674,10 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 			center: true,
 			keepFocus: true
 		});
+
+		this.addListener("pointerdown", this._onPointerDown, this);
+		this.addListener("pointerup", this._onPointerUp, this);
+
 	},
 
 	properties: {
@@ -741,6 +775,17 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 
 		},
 
+		// overridden.
+		_applyAppearance: function (value, old) {
+
+			if (value == null) {
+				this.resetAppearance();
+				return;
+			}
+
+			this.base(arguments, value, old);
+		},
+
 		/**
 		 * Applies the sizeMode property.
 		 */
@@ -777,7 +822,6 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 			this.getChildControl("button").setIconPosition(value);
 
 		},
-
 
 		/**
 		 * Applies the IconSize property.
@@ -822,6 +866,26 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 				this.fireEvent("open");
 		},
 
+		/**
+		 * Listener method for "pointerup" just to
+		 * add/remove the pressed state.
+		 */
+		_onPointerDown: function (e) {
+
+			if (!e.isLeftPressed())
+				return;
+
+			this.addState("pressed");
+		},
+
+		/**
+		 * Listener method for "pointerup" just to
+		 * add/remove the pressed state.
+		 */
+		_onPointerUp: function (e) {
+			this.removeState("pressed");
+		},
+
 		// overridden
 		_createChildControlImpl: function (id, hash) {
 			var control;
@@ -831,6 +895,8 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 					control = this.base(arguments, id, hash);
 					control._forwardStates.checked = true;
 					control._forwardStates.pressed = true;
+					control.addListener("pointerdown", this._onPointerDown, this);
+					control.addListener("pointerup", this._onPointerUp, this);
 					break;
 
 				case "arrow":
@@ -882,6 +948,12 @@ qx.Class.define("wisej.web.toolbar.Separator", {
 
 	members: {
 
+		// cloned overflow item.
+		__overflowItem: null,
+
+		// shadowed hidden flag. used to preserve visibility in the overflow menu.
+		__hidden: false,
+
 		/**
 		 * Gets/Sets the visible property.
 		 */
@@ -892,8 +964,25 @@ qx.Class.define("wisej.web.toolbar.Separator", {
 		},
 		setVisible: function (value) {
 
+			this.__hidden = !value;
 			this.setVisibility(value ? "visible" : "excluded");
 
+			if (this.__overflowItem)
+				this.__overflowItem.setVisibility(value ? "visible" : "excluded");
+		},
+		isHidden: function () {
+			return this.__hidden;
+		},
+
+		// overridden.
+		_applyAppearance: function (value, old) {
+
+			if (value == null) {
+				this.resetAppearance();
+				return;
+			}
+
+			this.base(arguments, value, old);
 		},
 
 		/**

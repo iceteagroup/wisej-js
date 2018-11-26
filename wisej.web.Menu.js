@@ -49,20 +49,28 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 			overflow.setAppearance("menubar/overflow");
 			overflow.syncAppearance();
 			overflow.__spacer = new qx.ui.core.Spacer();
-			overflow.addListener("changeVisibility", this.__onOverflowChangeVisibility, this);
+
+			var overflowMenu = new qx.ui.menu.Menu().set({
+				position: "bottom-right"
+			});
+			overflow.setMenu(overflowMenu);
 
 			this.add(overflow);
 			this.setOverflowIndicator(overflow);
 
 			// create the cloned overflow items.
 			this.__updateOverflowItems();
+
+			// update the overflow items when the overflow button or the overflow menu become visible.
+			overflow.addListener("changeVisibility", this.__onOverflowChangeVisibility, this);
+			overflowMenu.addListener("changeVisibility", this.__onOverflowChangeVisibility, this);
 		},
 
 		__onOverflowChangeVisibility: function (e) {
 
-			if (e.getTarget().isVisible())
+			if (e.getData() == "visible") {
 				this.__updateOverflowItems();
-
+			}
 		},
 
 		// destroys the overflow item.
@@ -93,17 +101,9 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 			if (overflow == null)
 				return;
 
-			if (overflow.getMenu) {
-				var overflowMenu = overflow.getMenu();
-
-				if (overflowMenu == null) {
-					overflowMenu = new qx.ui.menu.Menu();
-					overflowMenu.setPosition("bottom-right");
-					overflow.setMenu(overflowMenu);
-				}
-			}
-
 			var menuItems = this.getChildren();
+			var overflowMenu = overflow.getMenu();
+
 			for (var i = 0; i < menuItems.length; i++) {
 
 				var menuItem = menuItems[i];
@@ -115,26 +115,27 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 					if (overflowItem == null) {
 
 						overflowItem = new wisej.web.menu.MenuItem();
-						overflowItem.setLabel(menuItem.getLabel());
-						overflowItem.setIcon(menuItem.getIcon());
-						overflowItem.setEnabled(menuItem.getEnabled());
-						overflowItem.setVisibility((menuItem.isHidden() || menuItem.isVisible()) ? "excluded" : "visible");
-						overflowItem.__menuItem = menuItem;
 						overflowMenu.add(overflowItem);
+
+						overflowItem.__menuItem = menuItem;
+						menuItem.__overflowItem = overflowItem;
 
 						// shadow events.
 						overflowItem.addListener("execute", function () { this.__menuItem.fireEvent("execute"); });
 						overflowItem.addListener("mouseover", function () { this.__menuItem.fireEvent("mouseover"); });
-
-						menuItem.__overflowItem = overflowItem;
 					}
 					else if (overflowMenu.indexOf(overflowItem) == -1) {
 
 						overflowMenu.add(overflowItem);
 					}
+
+					// sync the overflow item with the corresponding menu item.
+					overflowItem.setIcon(menuItem.getIcon());
+					overflowItem.setLabel(menuItem.getLabel());
+					overflowItem.setEnabled(menuItem.getEnabled());
+					overflowItem.setVisibility((menuItem.isHidden() || menuItem.isVisible()) ? "excluded" : "visible");
 				}
-				else if (menuItem instanceof wisej.web.menu.MenuSeparator)
-				{
+				else if (menuItem instanceof wisej.web.menu.MenuSeparator) {
 					var overflowItem = menuItem.__overflowItem;
 
 					// create the cloned overflow item if it didn't exist.
@@ -150,6 +151,8 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 						overflowMenu.add(overflowItem);
 					}
 
+					// sync the overflow item with the corresponding menu item.
+					overflowItem.setVisibility((menuItem.isHidden() || menuItem.isVisible()) ? "excluded" : "visible");
 				}
 			}
 		},
@@ -233,6 +236,8 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 		// together with a spacer to ensure that it's aligned to the right.
 		_recalculateOverflow: function (width, requiredWidth) {
 
+			if (this.isDisposed())
+				return;
 			if (this.__inRecalculateOverflow)
 				return;
 
@@ -280,7 +285,7 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 /**
  * wisej.web.menu.MainMenu
  * 
- *  Represents a menu bar component. It may be used as the main menu in a form.
+ *  Represents the main menu component in a form.
  */
 qx.Class.define("wisej.web.menu.MainMenu", {
 
@@ -314,23 +319,32 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 		/**
 		 * Shows the context menu at the position.
 		 *
-		 * @param widget {Widget} the widget used to position the context menu.
+		 * @param opener {Widget} the widget used to position the context menu.
 		 * @param offset {Array} shorthand "offsetTop", "offsetRight", "offsetBottom", "offsetLeft",
 		 * @param position {String} on of the placement values defined in {@link qx.ui.core.MPlacement.position}.
 		 */
-		show: function (widget, offset, position) {
+		show: function (opener, offset, position) {
 
 			this.setOffset(0);
 
-			if (widget) {
+			if (opener) {
+
+				// retrieve the header widget if the opened is a column header.
+				if (opener instanceof wisej.web.datagrid.ColumnHeader)
+					opener = opener.getHeaderWidget();
+				// retrieve the TabPage button, if the opener is a TabPage.
+				if (opener instanceof qx.ui.tabview.Page)
+					opener = opener.getButton();
+
+				this.setOpener(opener);
 
 				offset = offset || [0, 0, 0, 0];
-				widget = widget.getChildrenContainer();
+				opener = opener.getChildrenContainer ? opener.getChildrenContainer() : opener;
 
-				if (widget && widget.getBounds()) {
+				if (opener && opener.getBounds()) {
 
 					if (position == "rightTop")
-						offset[3] -= widget.getBounds().width;
+						offset[3] -= opener.getBounds().width;
 				}
 
 				this.setOffset(offset);
@@ -340,7 +354,7 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 
 				this.setPlacementModeX("best-fit");
 				this.setPlacementModeY("best-fit");
-				this.placeToWidget(widget, true);
+				this.placeToWidget(opener, true);
 			}
 			else if (offset != null) {
 
@@ -348,6 +362,30 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 			}
 
 			this.base(arguments);
+
+			this.fireDataEvent("show", this.getOpener());
+		},
+
+		/**
+		 * Opens the menu at the pointer position
+		 *
+		 * @param e {qx.event.type.Pointer} Pointer event to align to
+		 */
+		openAtPointer: function (e) {
+
+			var opener = e.getTarget();
+			opener = wisej.utils.Widget.findWisejComponent(opener, true /* excludeInner */);
+
+			this.setOffset(0);
+			this.setOpener(opener);
+			this.placeToPointer(e);
+			this.__updateSlideBar();
+			this.show();
+
+			this._placementTarget = {
+				left: e.getDocumentLeft(),
+				top: e.getDocumentTop()
+			};
 		},
 
 		/**
@@ -372,9 +410,7 @@ qx.Class.define("wisej.web.menu.MenuBarItem", {
 
 	// All Wisej menu classes must include this mixin
 	// to provide services to the Wisej core.
-	include: [
-		wisej.mixin.MWisejMenu
-	],
+	include: [wisej.mixin.MWisejMenu],
 
 	properties: {
 
@@ -442,7 +478,7 @@ qx.Class.define("wisej.web.menu.MenuBarItem", {
 		 */
 		executeMnemonic: function () {
 
-			if (!this.isEnabled() || !this.isSeeable())
+			if (!this.isEnabled() || !this.isVisible())
 				return false;
 
 			// a parent menu item should open the child menu popup.
@@ -480,9 +516,7 @@ qx.Class.define("wisej.web.menu.MenuItem", {
 
 	// All Wisej menu classes must include this mixin
 	// to provide services to the Wisej core.
-	include: [
-		wisej.mixin.MWisejMenu
-	],
+	include: [wisej.mixin.MWisejMenu],
 
 	construct: function (label, icon, command, menu) {
 
@@ -504,6 +538,9 @@ qx.Class.define("wisej.web.menu.MenuItem", {
 
 		// enable html content.
 		this.getChildControl("label").setRich(true);
+
+		// update the UI when the shortcut changes.
+		this.addListener("changeShortcut", this._onChangeShortcut, this);
 	},
 
 	properties: {
@@ -550,6 +587,7 @@ qx.Class.define("wisej.web.menu.MenuItem", {
 			var menu = this.getMenu();
 
 			if (menu) {
+
 				menu.open();
 
 				// select first item.
@@ -575,11 +613,19 @@ qx.Class.define("wisej.web.menu.MenuItem", {
 			// don't close menus if the button is a sub menu button
 			if (e.isLeftPressed() && this.getMenu()) {
 				this.execute();
-				this.getMenu().open();
+				this.open();
 				return;
 			}
 
 			this.base(arguments, e);
+		},
+
+		// update the UI when the shortcut changes.
+		_onChangeShortcut: function (e) {
+
+			var shortcut = e.getData();
+			var cmdString = shortcut != null ? shortcut.toString() : "";
+			this.getChildControl("shortcut").setValue(cmdString);
 		},
 
 		/**
@@ -587,10 +633,10 @@ qx.Class.define("wisej.web.menu.MenuItem", {
 		 */
 		_applyChecked: function (value, old) {
 
-			//// reset the icon to the theme.
-			//// the app may change the icon after setting the checked property
-			//// to change the check mark icon.
-			//this.resetIcon();
+			// reset the icon to the theme.
+			// the app may change the icon after setting the checked property
+			// to change the check mark icon.
+			this.resetIcon();
 
 			value
 				? this.addState("checked")
@@ -624,7 +670,7 @@ qx.Class.define("wisej.web.menu.MenuItem", {
 		 */
 		executeMnemonic: function () {
 
-			if (!this.isEnabled() || !this.isSeeable())
+			if (!this.isEnabled() || !this.isVisible())
 				return false;
 
 			// mnemonics on a parent menu item should open the child menu popup.
@@ -669,6 +715,12 @@ qx.Class.define("wisej.web.menu.MenuSeparator", {
 
 	members: {
 
+		// cloned overflow item.
+		__overflowItem: null,
+
+		// shadowed hidden flag. used to preserve visibility in the overflow menu.
+		__hidden: false,
+
 		/**
 		 * Gets/Sets the visible property.
 		 */
@@ -679,8 +731,15 @@ qx.Class.define("wisej.web.menu.MenuSeparator", {
 		},
 		setVisible: function (value) {
 
+			this.__hidden = !value;
 			this.setVisibility(value ? "visible" : "excluded");
-		}
+
+			if (this.__overflowItem)
+				this.__overflowItem.setVisibility(value ? "visible" : "excluded");
+		},
+		isHidden: function () {
+			return this.__hidden;
+		},
 	}
 });
 

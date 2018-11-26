@@ -37,7 +37,6 @@ qx.Class.define("wisej.web.WindowManager", {
 			qx.ui.core.queue.Widget.add(this);
 		},
 
-
 		/**
 		 * This method is called during the flush of the
 		 * {@link qx.ui.core.queue.Widget widget queue}.
@@ -50,8 +49,8 @@ qx.Class.define("wisej.web.WindowManager", {
 
 			// z-index for all three window kinds.
 			var zIndex = this._minZIndex;
-			var zIndexModal = zIndex + windows.length * 2;
-			var zIndexOnTop = zIndex + windows.length * 4;
+			var zIndexOnTop = zIndex + windows.length * 2;
+			var zIndexModal = zIndex + windows.length * 4;
 
 			// marker if there is an active window.
 			var active = null;
@@ -101,5 +100,11 @@ qx.Class.define("wisej.web.WindowManager", {
 			// set the active window or null.
 			this.__desktop.setActiveWindow(active);
 		},
+	},
+
+	defer: function (statics) {
+
+		// replace the default window manager.
+		qx.ui.window.Window.DEFAULT_MANAGER_CLASS = wisej.web.WindowManager;
 	}
 });

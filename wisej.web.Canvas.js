@@ -72,10 +72,10 @@ qx.Class.define("wisej.web.Canvas", {
 				return;
 
 			// preload any image that may be referenced in the actions.
-			this.__loadImages(actions);
+			var images = this.__loadImages(actions);
 
 			// make sure that all the images have been loaded before proceeding.
-			if (this.__isLoadingImages()) {
+			if (this.__isLoadingImages(images)) {
 
 				var me = this;
 				setTimeout(function () {
@@ -121,6 +121,7 @@ qx.Class.define("wisej.web.Canvas", {
 		 */
 		__loadImages: function (actions, callback) {
 
+			var images = [];
 			var aliasMgr = qx.util.AliasManager.getInstance();
 
 			for (var i = 0; i < actions.length; i++) {
@@ -130,21 +131,23 @@ qx.Class.define("wisej.web.Canvas", {
 					if (a.args && a.args.length > 0) {
 						var image = aliasMgr.resolve(a.args[0]);
 						qx.io.ImageLoader.load(image);
+						images.push(image);
 					}
 				}
 			}
+
+			return images;
 		},
 
 		/**
 		 * Checks if we are still loading images.
 		 */
-		__isLoadingImages: function () {
+		__isLoadingImages: function (images) {
 
 			var images = qx.io.ImageLoader.__data;
-			if (images) {
-				for (var name in images) {
-					var entry = images[name];
-					if (entry && entry.loading)
+			if (images && images.length > 0) {
+				for (var i = 0; i < images.length; i++) {
+					if (qx.io.ImagesLoader.isLoading(images[i]))
 						return true;
 				}
 			}
@@ -257,7 +260,7 @@ qx.Class.define("wisej.web.Canvas", {
 			// needs to refresh its content.
 			if (jobs && jobs["drawActions"]) {
 				var actionsUrl = this.getActions();
-				if (typeof actionsUrl == "string")
+				if (typeof actionsUrl === "string")
 					this.__drawActionsUrl(actionsUrl);
 			}
 
@@ -358,7 +361,7 @@ qx.Class.define("wisej.web.Canvas", {
 				return null;
 
 			// is it a color string?
-			if (typeof value == "string") {
+			if (typeof value === "string") {
 				return qx.theme.manager.Color.getInstance().resolve(value);
 			}
 

@@ -38,7 +38,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 	include: [
 		wisej.mixin.MWisejControl,
 		wisej.mixin.MBorderStyle,
-		qx.ui.form.MForm
+		qx.ui.form.MForm,
+		qx.ui.core.MContentPadding
 	],
 
 	/**
@@ -214,9 +215,14 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * Applies the readOnly property.
 		 */
 		_applyReadOnly: function (value, old) {
+
+			if (value)
+				this.addState("readonly");
+			else
+				this.removeState("readonly");
+
 			var textField = this.getChildControl("textfield");
 			textField.setReadOnly(value);
-			textField.setFocusable(false);
 		},
 
 		/**
@@ -281,6 +287,11 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 			if (this.hasChildControl("textfield"))
 				this.getChildControl("textfield").setNativeContextMenu(value);
+
+			if (value)
+				this.addListener("contextmenu", this._onContextMenu);
+			else
+				this.removeListener("contextmenu", this._onContextMenu);
 		},
 
 		/**
@@ -406,6 +417,32 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		_onPointerOut: function (e) {
 
 			this.removeState("hovered");
+		},
+
+		/**
+		 * Handles "contextmenu" to stop the bubbling of the event
+		 * when nativeContextMenu is enabled and the widget doesn't even
+		 * its own context menu.
+		 */
+		_onContextMenu: function (e) {
+
+			if (!this.getContextMenu() && this.getNativeContextMenu())
+				e.stopPropagation();
+		},
+
+		/**
+		 * Returns the target for the accessibility properties.
+		 */
+		getAccessibilityTarget: function () {
+			return this.getChildControl("textfield");
+		},
+
+		/*---------------------------------------------------------------------------
+		  qx.ui.core.MContentPadding
+		---------------------------------------------------------------------------*/
+
+		_getContentPaddingTarget: function () {
+			return this.getChildControl("textfield");
 		},
 
 		/*---------------------------------------------------------------------------
@@ -594,6 +631,7 @@ qx.Class.define("wisej.web.TextArea", {
 		this.addState("multiline");
 
 		// handles "Enter" and "Tab" according to the acceptsReturn and acceptsTab properties.
+		this.addListener("keydown", this._onKeyDown);
 		this.addListener("keypress", this._onKeyPress);
 
 	},
@@ -653,25 +691,75 @@ qx.Class.define("wisej.web.TextArea", {
 			return new qx.ui.form.TextArea();
 		},
 
+		_onKeyDown: function (e) {
+
+			var modifiers = e.getModifiers();
+			var identifier = e.getKeyIdentifier();
+
+			switch (identifier) {
+
+				case "Enter":
+					if (modifiers == 0) {
+						if (this.getAcceptsReturn())
+							e.stopPropagation();
+						else if (!this.__hasAcceptButton())
+							e.stopPropagation();
+					}
+					break;
+			}
+		},
+
 		_onKeyPress: function (e) {
 
 			var modifiers = e.getModifiers();
-			if (modifiers == 0) {
+			var identifier = e.getKeyIdentifier();
 
-				var identifier = e.getKeyIdentifier();
-				switch (identifier) {
-					case "Enter":
+			switch (identifier) {
+
+				case "Enter":
+					if (modifiers == 0) {
 						if (this.getAcceptsReturn())
 							e.stopPropagation();
-						break;
-
-					case "Tab":
-						if (this.getAcceptsTab())
+						else if (!this.__hasAcceptButton())
 							e.stopPropagation();
-						break;
-				}
+					}
+					break;
+
+				case "Tab":
+
+					if (this.getAcceptsTab()) {
+
+						if (modifiers == 0) {
+
+							e.stop();
+
+							// insert the \t character.
+							var value = this.getValue();
+							var start = this.getTextSelectionStart();
+							var end = this.getTextSelectionEnd();
+
+							value = value.substring(0, start) + "\t" + value.substring(end);
+							this.setValue(value);
+							this.setTextSelection(start + 1, start + 1);
+
+						} else if (modifiers == qx.event.type.Dom.SHIFT_MASK) {
+
+							e.stop();
+							qx.ui.core.FocusHandler.getInstance().focusNext(this);
+						}
+					}
+					break;
 			}
 		},
+
+		__hasAcceptButton: function () {
+
+			var container = this.getTopLevelContainer();
+			if (container && container.getAcceptButton)
+				return container.getAcceptButton() != null;
+
+			return false;
+		}
 	}
 });
 
@@ -690,7 +778,7 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		this.addState("masked");
 
 		// create the mask provider instance.
-		this.__maskProvider = this._createMaskProvider();
+		this._createMaskProvider();
 	},
 
 	properties: {
@@ -766,7 +854,8 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		 */
 		_createMaskProvider: function () {
 
-			return new wisej.utils.MaskProvider(this.getChildControl("textfield"));
+			if (this.__maskProvider == null)
+				this.__maskProvider = new wisej.utils.MaskProvider(this.getChildControl("textfield"));
 		},
 
 		/**

@@ -121,6 +121,10 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 		 */
 		getCellSize: function (cellInfo) {
 
+			// update the cell's width and height before
+			// forwarding the call to the specific renderer.
+			this.__updateCellBounds(cellInfo);
+
 			return this.__getCellRenderer(cellInfo).getCellSize(cellInfo);
 		},
 
@@ -209,18 +213,25 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 
 						var cellHeight = 0;
 						var rowCount = dataModel.getRowCount();
-						for (var rowIndex = row, maxIndex = Math.min(rowCount, rowIndex + rowSpan) ; rowIndex < maxIndex; rowIndex++)
-							cellHeight += dataModel.getRowHeight(rowIndex) - insets.top - insets.bottom;
+						for (var rowIndex = row, maxIndex = Math.min(rowCount, rowIndex + rowSpan) ;
+							rowIndex < maxIndex; rowIndex++) {
+							cellHeight += dataModel.getRowHeight(rowIndex);
+						}
+						cellHeight = cellHeight - insets.top - insets.bottom;
 
 						var cellWidth = 0;
 						var colCount = paneModel.getColumnCount();
-						for (var colPos = cellInfo.xPos, maxIndex = Math.min(colCount, colPos + colSpan) ; colPos < maxIndex; colPos++)
-							cellWidth += columnModel.getColumnWidth(paneModel.getColumnAtX(colPos)) - insets.left - insets.right;
+						for (var colPos = cellInfo.xPos, maxIndex = Math.min(colCount, colPos + colSpan);
+							colPos < maxIndex; colPos++) {
+							cellWidth += columnModel.getColumnWidth(paneModel.getColumnAtX(colPos));
+						}
+						cellWidth = cellWidth - insets.left - insets.right;
 
 						cellInfo.colSpan = colSpan;
 						cellInfo.rowSpan = rowSpan;
 						cellInfo.styleWidth = cellWidth;
 						cellInfo.styleHeight = cellHeight;
+
 						return;
 					}
 				}
@@ -504,10 +515,15 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		 */
 		_getCellSizeStyle: function (width, height, insetX, insetY) {
 
-			var style = "width:" + width + "px;";
+			var style = "";
 
-			if (height != null)
-				style += ";height:" + height + "px;";
+			if (width != null) {
+
+				style += "width:" + width + "px;";
+
+				if (height != null)
+					style += ";height:" + height + "px;";
+			}
 
 			return style;
 
@@ -680,7 +696,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 							if (cachedStyle.backgroundImage.indexOf("postback.wx") > -1) {
 
 								this.__updateUserPaintPostback(cellInfo, cachedStyle);
-								cachedStyle.backgroundImage = "url(" + cachedStyle.backgroundImage + ")";
+								cachedStyle.backgroundImage = "url(\"" + cachedStyle.backgroundImage + "\")";
 
 							}
 							else {
@@ -774,7 +790,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 					if (svg)
 						imageColor.source = imageUtils.getSvgDataUri(imageUtils.setSvgColor(svg, imageColor.color));
 				}
-				return "url(" + imageColor.source + ")";
+				return "url(\"" + imageColor.source + "\")";
 			}
 			else if (imageLoader.isLoading(imageColor.source)) {
 
@@ -791,7 +807,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 					}
 
 					// callback with the resolved image.
-					callback.call(me, "url(" + imageColor.source + ")");
+					callback.call(me, "url(\"" + imageColor.source + "\")");
 				});
 			}
 		},
@@ -825,17 +841,17 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				if (style.padding)
 					this._translatePadding(style, style.padding);
 
-				if (style.backgroundLayout)
-					this._translateBackgroundLayout(style, style.backgroundLayout);
-
-				if (style.backgroundPosition)
-					this._translateBackgroundPosition(style, style.backgroundPosition);
-
 				if (style.whiteSpace)
 					this._translateWhiteSpace(style, style.whiteSpace);
 
 				if (style.textAlign)
-					this._translateTextAlign(style, style.textAlign);
+					this._translateTextAlign(style, style.textAlign, cellInfo.rightToLeft);
+
+				if (style.backgroundLayout)
+					this._translateBackgroundLayout(style, style.backgroundLayout, cellInfo.rightToLeft);
+
+				if (style.backgroundPosition)
+					this._translateBackgroundPosition(style, style.backgroundPosition, cellInfo.rightToLeft);
 			}
 
 			return style;
@@ -865,14 +881,17 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			}
 		},
 
-		_translateBackgroundLayout: function (style, value) {
+		_translateBackgroundLayout: function (style, value, rightToLeft) {
 
 			delete style.backgroundLayout;
 
 			switch (value) {
 
 				case "none":
-					style.backgroundPosition = "top left";
+					if (rightToLeft)
+						style.backgroundPosition = "top right";
+					else
+						style.backgroundPosition = "top left";
 					break;
 
 				case "tile":
@@ -902,33 +921,36 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			}
 		},
 
-		_translateBackgroundPosition: function (style, value) {
+		_translateBackgroundPosition: function (style, value, rightToLeft) {
+
+			var left = rightToLeft ? "right": "left";
+			var right = rightToLeft ? "left" : "right";
 
 			switch (value) {
 
 				case "topRight":
-					style.backgroundPosition = "top right";
+					style.backgroundPosition = "top " + right;
 					break;
 				case "middleRight":
-					style.backgroundPosition = "center right";
+					style.backgroundPosition = "center " + right;
 					break;
 				case "bottomRight":
-					style.backgroundPosition = "bottom right";
+					style.backgroundPosition = "bottom " + right;
 					break;
 				case "topLeft":
-					style.backgroundPosition = "top left";
+					style.backgroundPosition = "top " + left;
 					break;
 				case "topCenter":
 					style.backgroundPosition = "top center";
 					break;
 				case "middleLeft":
-					style.backgroundPosition = "center left";
+					style.backgroundPosition = "center " + left;
 					break;
 				case "middleCenter":
 					style.backgroundPosition = "center center";
 					break;
 				case "bottomLeft":
-					style.backgroundPosition = "bottom left";
+					style.backgroundPosition = "bottom " + left;
 					break;
 				case "bottomCenter":
 					style.backgroundPosition = "bottom center";
@@ -951,38 +973,41 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			}
 		},
 
-		_translateTextAlign: function (style, value) {
+		_translateTextAlign: function (style, value, rightToLeft) {
+
+			var left = rightToLeft ? "right" : "left";
+			var right = rightToLeft ? "left" : "right";
 
 			switch (value) {
 
 				case "topRight":
 					style.verticalAlign = "top";
-					style.textAlign = "right";
+					style.textAlign = right;
 					break;
 
 				case "middleRight":
 					style.verticalAlign = "middle";
-					style.textAlign = "right";
+					style.textAlign = right;
 					break;
 
 				case "bottomRight":
 					style.verticalAlign = "bottom";
-					style.textAlign = "right";
+					style.textAlign = right;
 					break;
 
 				case "topLeft":
 					style.verticalAlign = "top";
-					style.textAlign = "left";
+					style.textAlign = left;
 					break;
 
 				case "middleLeft":
 					style.verticalAlign = "middle";
-					style.textAlign = "left";
+					style.textAlign = left;
 					break;
 
 				case "bottomLeft":
 					style.verticalAlign = "bottom";
-					style.textAlign = "left";
+					style.textAlign = left;
 					break;
 
 				case "topCenter":
@@ -1085,11 +1110,22 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		 */
 		getCellSize: function (cellInfo) {
 
-			var size = wisej.utils.Widget.measure(
-				cellInfo.value,
-				this._getCellClass(cellInfo),
-				this._getCellStyle(cellInfo));
+			var htmlArr = [];
+			htmlArr.push(
+				"<div role='cell' ",
+				"col='", cellInfo.col, "' ",
+				"row='", cellInfo.row, "' ",
+				"class='",
+				this._getCellClass(cellInfo), "' ",
+				"style='",
+					this._getCellStyle(cellInfo),
+				"'>",
+				this._getContentHtml(cellInfo),
+				"</div>"
+			);
+			var html = htmlArr.join("");
 
+			var size = wisej.utils.Widget.measure(html);
 			return size;
 		},
 
@@ -1109,8 +1145,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 			// content element.
 			this._contentClassName = styleMgr.getCssClass(appearance + "/content", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS);
-			this._contentMiddleClassName = styleMgr.getCssClass(appearance + "/content/middle", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:50%;transform:translateY(-46%);-webkit-transform:translateY(-46%);max-height:100%;white-space:inherit;word-wrap:inherit");
-			this._contentBottomClassName = styleMgr.getCssClass(appearance + "/content/bottom", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:100%;transform:translateY(-100%);-webkit-transform:translateY(-100%);max-height:100%;white-space:inherit;word-wrap:inherit");
+			this._contentMiddleClassName = styleMgr.getCssClass(appearance + "/content/middle", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:50%;transform:translateY(-46%);-webkit-transform:translateY(-46%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
+			this._contentBottomClassName = styleMgr.getCssClass(appearance + "/content/bottom", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:100%;transform:translateY(-100%);-webkit-transform:translateY(-100%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
 			this._contentSpacerClassName = styleMgr.getCssClass(appearance + "/spacer", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
 			this._contentButtonSpacerClassName = styleMgr.getCssClass(appearance + "/open", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
 			this._contentExpandedClassName = styleMgr.getCssClass(appearance + "/open", { expanded: true }, wisej.web.datagrid.CellRenderer.DEFAULT_OPEN_CSS);
@@ -1258,8 +1294,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ImageCell", {
 					// inherit shared value from column and translate the
 					// layout and alignment to css styles.
 					var colData = cellInfo.columnModel.getColumnData(cellInfo.col) || {};
-					this._translateBackgroundLayout(imageStyle, value.layout || colData.layout);
-					this._translateBackgroundPosition(imageStyle, value.alignment || colData.alignment);
+					this._translateBackgroundLayout(imageStyle, value.layout || colData.layout, cellInfo.rightToLeft);
+					this._translateBackgroundPosition(imageStyle, value.alignment || colData.alignment, cellInfo.rightToLeft);
 					var imageCss = qx.bom.element.Style.compile(imageStyle);
 
 					htmlArr.push(
@@ -1529,7 +1565,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.RowHeader", {
 				state.new = true;
 
 			// is any cell in the row being edited?
-			if (cellInfo.focusedRow && cellInfo.table.isEditing())
+			if (cellInfo.focusedRow && cellInfo.table && cellInfo.table.isEditing())
 				state.editing = true;
 
 			// right to left?
