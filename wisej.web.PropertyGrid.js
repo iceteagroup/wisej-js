@@ -308,13 +308,6 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 			var html = "";
 			var htmlArr = [];
 
-			// if the cell style contains verticalAlign different from top, we wrap
-			// the cell content into a div to set the vertical alignment.
-			// NOTE: "middle" is the default.
-
-			var cellStyle = this._resolveContentStyle(cellInfo);
-			var cellCss = cellStyle ? cellStyle.css : "";
-
 			var data = cellInfo.rowData;
 
 			// add the open/close/spacer div before the content for the name column.
@@ -325,10 +318,10 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 				//  - rendering the header cell for a category with children (col = 0 and level is undefined).
 				//  - rendering the header cell for a first level row with children (col = 0 and level is 0).
 				//  - rendering the name call for a second level or above row with children (col = 1 and level > 0).
-				var addOpenClose = (cellInfo.col == 0 && !data.level) || (cellInfo.col == 1 && data.level > 0);
+				var addOpenClose = (cellInfo.col === 0 && !data.level) || (cellInfo.col === 1 && data.level > 0);
 
 				var paddingLeft = 0;
-				if (cellInfo.col == 1)
+				if (cellInfo.col === 1)
 					paddingLeft = (data.level - 1) * cellInfo.table.getIndent();
 
 				if (data.expanded === true && addOpenClose) {
@@ -346,8 +339,7 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 			}
 
 			htmlArr.push(
-				"<div role='content' class='", this._contentClassName, "' ",
-				"style='", cellCss, "'>",
+				"<div role='content' class='", this._contentClassName, "'>",
 				"<div class='", this._contentMiddleClassName, "'>",
 				cellInfo.value,
 				"</div></div>");

@@ -456,7 +456,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				// add the widget to the root container and set the correct layout
 				// according to the dock property.
 				var dock = cellElem.getAttribute("qx-widget-dock");
-				if (!dock || dock == "none") {
+				if (!dock || dock === "none") {
 					var layout = root._getLayout();
 					if (!(layout instanceof qx.ui.layout.Basic)) {
 						if (layout)
@@ -481,10 +481,14 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 						case "right": edge = "east"; break;
 					}
 
-					if (edge == "center") {
+					if (edge === "center") {
 						widget.resetWidth();
 						widget.resetHeight();
 					}
+
+					// transfer the cell padding to the hosting root container.
+					var rowIndex = parseInt(cellElem.getAttribute("row"));
+					root.setPadding(this.__getCellPadding(table, colIndex, rowIndex));
 
 					root.add(widget, { edge: edge, left: null, top: null });
 
@@ -496,6 +500,26 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				}
 				return widget;
 			}
+		},
+
+		// reads the padding css computed for the cell and converts it to
+		// an array of integers (trbl).
+		__getCellPadding: function (table, colIndex, rowIndex) {
+
+			var rowData = table.getTableModel().getRowData(rowIndex);
+			if (rowData) {
+				var cellStyle = rowData.cachedStyles[colIndex];
+				if (cellStyle && cellStyle.padding) {
+					var px = cellStyle.padding.split(" ");
+					var padding = [];
+					for (var i = 0; i < px.length; i++) {
+						padding.push(parseInt(px[i]));
+					}
+					return padding;
+				}
+			}
+
+			return 0;
 		},
 
 		// send the "resize" event to the sever to adjust the

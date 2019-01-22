@@ -156,16 +156,12 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 					// switch the current theme.
 					themeMgr.setTheme(themeRoller);
 				}
-
-				return;
 			}
+			else {
+				// otherwise, create a new theme roller class.
 
-			// otherwise, create a new theme roller class.
-			{
 				var themeRoller = this.__createTheme(theme);
 				themeMgr.setTheme(themeRoller);
-
-				return;
 			}
 		},
 
@@ -298,10 +294,6 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 						this.__setImages(themeRoller, theme[name]);
 						break;
 
-					case "settings":
-						this.__setSettings(themeRoller, theme[name]);
-						break;
-
 					case "appearances":
 						this.__setAppearances(themeRoller, theme[name]);
 						break;
@@ -359,17 +351,6 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 				}
 
 				target[name] = img;
-			}
-		},
-
-		__setSettings: function (themeRoller, fonts) {
-
-			var settings = themeRoller.meta.settings;
-			settings.values = {};
-
-			var target = font.values;
-			for (var name in settings) {
-				target[name] = settings[name];
 			}
 		},
 

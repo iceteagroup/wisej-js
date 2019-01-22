@@ -250,7 +250,7 @@ qx.Class.define("wisej.web.listview.ColumnModel", {
 		init: function (colCount, table) {
 
 			this.base(arguments, colCount, table, new wisej.web.datagrid.CellRenderer(new wisej.web.listview.CellRenderer()));
-		},
+		}
 	}
 });
 
@@ -365,17 +365,17 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 		 */
 		_getContentHtml: function (cellInfo) {
 
-			var cellStyle = this._resolveContentStyle(cellInfo);
-			var cellCss = cellStyle ? cellStyle.css : "";
-			var cellValue = this._getCellValue(cellInfo, cellStyle);
+			var cellStyle = this._resolveCellStyle(cellInfo);
+			var cellValue = this._getCellValue(cellInfo);
 
 			var htmlArr =
 			  [
-				"<div role='content' class='", this._contentClassName, "' ",
-				"style='white-space:nowrap;", cellCss, "'>"
+					"<div role='content' class='",
+					this._contentClassName,
+					"'>"
 			  ];
 
-			if (cellInfo.col == 0 && cellInfo.rowData) {
+			if (cellInfo.col === 0 && cellInfo.rowData) {
 
 				var data = cellInfo.rowData.data;
 
@@ -445,14 +445,14 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 
 		// overridden to add support for data.icon and data.stateIcon.
 		// resolves the style and returns a style map with the "css" set to the compiled css string.
-		_resolveContentStyle: function (cellInfo) {
+		_resolveCellStyle: function (cellInfo) {
 
 			var cachedStyle = this.base(arguments, cellInfo);
 
 			if (cellInfo.rowData) {
 
 				var data = cellInfo.rowData.data;
-				if (data && cellInfo.col == 0 && (data.icon || data.stateIcon)) {
+				if (data && cellInfo.col === 0 && (data.icon || data.stateIcon)) {
 
 					var itemIcon = data.icon;
 					var stateIcon = data.stateIcon;
@@ -496,7 +496,7 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 			this._stateIconClassName = styleMgr.getCssClass(appearance + "/stateIcon", {}, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
 			this._checkBoxClassName = styleMgr.getCssClass(appearance + "/checkbox", {}, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
 			this._checkBoxCheckedClassName = styleMgr.getCssClass(appearance + "/checkbox", { checked: true }, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
-		},
+		}
 	}
 });
 
@@ -531,17 +531,17 @@ qx.Class.define("wisej.web.listview.ImageCellRenderer", {
 		 */
 		_getContentHtml: function (cellInfo) {
 
-			var cellStyle = this._resolveContentStyle(cellInfo);
-			var cellCss = cellStyle ? cellStyle.css : "";
+			var cellStyle = this._resolveCellStyle(cellInfo);
 			var cellValue = this._getCellValue(cellInfo);
 
 			var htmlArr =
 			  [
-				"<div role='content' class='", this._contentClassName, "' ",
-				"style='white-space:nowrap;", cellCss, "'>"
+					"<div role='content' class='",
+					this._contentClassName,
+					"'>"
 			  ];
 
-			if (cellInfo.col == 0 && cellInfo.rowData) {
+			if (cellInfo.col === 0 && cellInfo.rowData) {
 
 				var data = cellInfo.rowData.data;
 

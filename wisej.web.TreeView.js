@@ -84,6 +84,13 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		indent: { init: null, check: "PositiveInteger", apply: "_applyIndent", nullable: true },
 
+		/** 
+		 *  ItemHeight property.
+		 *  
+		 *  Default item height.
+		 */
+		itemHeight: { check: "Integer", init: 25, apply: "_applyItemHeight", themeable: true },
+
 		/**
 		 * Scrollable property.
 		 *
@@ -181,6 +188,35 @@ qx.Class.define("wisej.web.TreeView", {
 
 		// keep track if the nodes are being selected from the _applySelectedNodes method.
 		__inApplySelectedNodes: false,
+
+		/**
+		 * Scrolls the node into view.
+		 * 
+		 * @param node {wisej.web.TreeNode} node to scroll into view.
+		 */
+		ensureVisible: function (node) {
+
+			if (node)
+				this.scrollChildIntoView(node);
+		},
+
+		/**
+		 * Edits the label of the specified node.
+		 * 
+		 * @param {wisej.web.TreeNode} node to edit.
+		 */
+		editNode: function (node) {
+
+			if (node && this.isLabelEdit()) {
+				qx.event.Timer.once(function () {
+
+					this.scrollChildIntoView(node);
+					var editor = this.getChildControl("editor");
+					editor.editNode(node);
+
+				}, this, 1);
+			}
+		},
 
 		/**
 		 * Applies the root node.
@@ -322,6 +358,24 @@ qx.Class.define("wisej.web.TreeView", {
 				else
 					node.setIndent(value);
 			});
+		},
+
+		/**
+		 * Applies the itemHeight property.
+		 */
+		_applyItemHeight: function (value, old) {
+
+			if (value == old)
+				return;
+
+			if (value == null || value == -1) {
+				this.resetItemHeight();
+			}
+			else {
+				this.__forEachNode(function (node) {
+					node.setHeight(value);
+				});
+			}
 		},
 
 		/**
@@ -489,6 +543,7 @@ qx.Class.define("wisej.web.TreeView", {
 			node.setBlockToolTip(!this.getShowNodeToolTips());
 			node.setFileAppearance(this.getFileAppearance());
 			node.setFolderAppearance(this.getFolderAppearance());
+			node.setHeight(this.getItemHeight());
 
 			if (node.hasChildren()) {
 				var nodes = node.getItems(false);
@@ -627,7 +682,7 @@ qx.Class.define("wisej.web.TreeView", {
 					switch (e.getKeyIdentifier()) {
 						case "F2":
 							if (!this.isWired("beginEdit")) {
-								node.editLabel();
+								this.editNode(node);
 							}
 							else {
 								this.fireDataEvent("beginEdit", node);
@@ -657,12 +712,26 @@ qx.Class.define("wisej.web.TreeView", {
 		},
 
 		/**
+		 * Process dragstart events to fire our "itemDrag" event
+		 * when a tree child node is being dragged.
+		 */
+		_onItemDrag: function (e) {
+
+			clearTimeout(this.__editNodeTimer);
+			this.__editNodeTimer = 0;
+
+			var node = this.getTreeItem(e.getOriginalTarget());
+			if (node)
+				this.fireDataEvent("itemDrag", node);
+		},
+
+		/**
 		 * Starts the timer to start editing the node.
 		 */
-		_editNode: function (node) {
+		_beginEditNode: function (node) {
 
 			if (!this.isWired("beginEdit")) {
-				node.editLabel();
+				this.editNode(node);
 			}
 			else {
 
@@ -677,22 +746,8 @@ qx.Class.define("wisej.web.TreeView", {
 		},
 
 		// timer used to start editing the current node.
-		__editNodeTimer: 0,
-
-		/**
-		 * Process dragstart events to fire our "itemDrag" event
-		 * when a tree child node is being dragged.
-		 */
-		_onItemDrag: function (e) {
-
-			clearTimeout(this.__editNodeTimer);
-			this.__editNodeTimer = 0;
-
-			var node = this.getTreeItem(e.getOriginalTarget());
-			if (node)
-				this.fireDataEvent("itemDrag", node);
-		},
-	},
+		__editNodeTimer: 0
+	}
 });
 
 
@@ -937,31 +992,6 @@ qx.Class.define("wisej.web.TreeNode", {
 		setVisible: function (value) {
 
 			this.setVisibility(value ? "visible" : "excluded");
-		},
-
-		/**
-		 * Starts the editor on the label of this tree node.
-		 */
-		editLabel: function () {
-
-			var treeView = this.getTree();
-			if (treeView != null) {
-				if (treeView.isLabelEdit()) {
-
-					var editor = treeView.getChildControl("editor");
-					editor.editNode(this);
-				}
-			}
-		},
-
-		/**
-		* Scrolls this node into view.
-		 */
-		scrollIntoView: function () {
-
-			var treeView = this.getTree();
-			if (treeView != null)
-				treeView.scrollChildIntoView(this);
 		},
 
 		/**
@@ -1567,7 +1597,7 @@ qx.Class.define("wisej.web.TreeNode", {
 					e.getTarget().addListenerOnce("pointerup", function (e) {
 
 						if (posX == e.getDocumentLeft() && posY == e.getDocumentTop()) {
-							treeView._editNode(this);
+							treeView._beginEditNode(this);
 						}
 
 					}, this);
@@ -1629,8 +1659,8 @@ qx.Class.define("wisej.web.TreeNode", {
 				parent.remove(this);
 
 			this.base(arguments);
-		},
-	},
+		}
+	}
 
 });
 
@@ -1658,7 +1688,7 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 	properties: {
 
 		// Appearance override
-		appearance: { refine: true, init: "label-editor" },
+		appearance: { refine: true, init: "label-editor" }
 	},
 
 	members: {
@@ -1668,21 +1698,17 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 		 */
 		editNode: function (node) {
 
-			// already editing?
-			if (this.isVisible())
-				return;
-
 			// find the label, the edit control will replace it.
 			var label = node.getChildControl("label");
-			var labelBounds = label.getBounds();
 			var nodeBounds = node.getBounds();
+			var labelBounds = label.getBounds();
+
 			label.hide();
 
 			node._add(this);
-			this.setPaddingLeft(label.getPaddingLeft());
-			this.setPaddingRight(label.getPaddingRight());
+			node.addState("editing");
 			this.setValue(qx.bom.String.unescape(label.getValue()));
-			this.setUserBounds(labelBounds.left, labelBounds.top, nodeBounds.width - labelBounds.left, labelBounds.height);
+			this.setUserBounds(labelBounds.left, 0, nodeBounds.width - labelBounds.left, nodeBounds.height);
 
 			this.show();
 			this.focus();
@@ -1690,18 +1716,25 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 
 		endEdit: function (cancel) {
 
-			this.exclude();
-
 			// get the owner node.
 			var node = this.getLayoutParent();
+			if (node) {
 
-			// restore the label.
-			var label = node.getChildControl("label");
-			label.show();
+				// restore the label.
+				var label = node.getChildControl("label");
+				label.show();
+				node._remove(this);
+				node.removeState("editing");
+
+				this._fireEndEdit(node, cancel === true ? null : this.getValue());
+			}
+		},
+
+		_fireEndEdit: function (node, text) {
 
 			this.fireDataEvent("endEdit", {
 				node: node,
-				text: cancel === true ? null : this.getValue()
+				text: text
 			});
 		},
 
@@ -1722,12 +1755,12 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 				case "Enter":
 					this.endEdit();
 					break;
-			};
+			}
 
 			e.stopPropagation();
-		},
+		}
 
-	},
+	}
 });
 
 

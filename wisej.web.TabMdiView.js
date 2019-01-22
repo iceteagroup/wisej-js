@@ -447,7 +447,7 @@ qx.Class.define("wisej.web.tabmdiview.ThumbnailPage", {
 			switch (id) {
 
 				case "pane":
-					var control = new qx.ui.container.Scroll();
+					control = new qx.ui.container.Scroll();
 					var clientArea = new qx.ui.container.Composite(new qx.ui.layout.Flow());
 					control.add(clientArea);
 					this._add(control);

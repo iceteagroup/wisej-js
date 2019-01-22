@@ -315,6 +315,7 @@ qx.Class.define("wisej.utils.Widget", {
 		 * @param html {String} html text to measure.
 		 * @param className {String} name of the css class to use.
 		 * @param style {String} css style definition of the element to measure.
+		 * 
 		 * @returns {Map} the size of the element: {width, height}.
 		 */
 		measure: function (html, className, style) {
@@ -338,8 +339,8 @@ qx.Class.define("wisej.utils.Widget", {
 			elStyle.display = "block";
 			elStyle.whiteSpace = "normal";
 
-			el.className = className;
 			el.innerHTML = html;
+			el.className = className || "";
 
 			// detect size
 			var firstChild = el.firstChild;
@@ -602,9 +603,9 @@ qx.Class.define("wisej.utils.Widget", {
 
 				var id = "";
 
-				if (ids.length == 0)
+				if (ids.length === 0)
 					id = names.join("_");
-				else if (names.length == 0)
+				else if (names.length === 0)
 					id = ids.join("_");
 				else
 					id = ids.join("_") + "_" + names.join("_");

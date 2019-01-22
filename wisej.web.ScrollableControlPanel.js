@@ -811,10 +811,10 @@ qx.Class.define("wisej.web.Panel", {
 							// when unfloating a panel collapsed to the right or to the bottom, reset the
 							// captionbar location since it was changed in __float.
 							var captionEl = captionbar.getContentElement();
-							if (dockSide == "right") {
+							if (dockSide === "right") {
 								captionEl.setStyles({ right: null, left: captionEl.__leftPosPx });
 							}
-							else if (dockSide == "bottom") {
+							else if (dockSide === "bottom") {
 								captionEl.setStyles({ bottom: null, top: captionEl.__topPosPx });
 							}
 						}
@@ -837,10 +837,10 @@ qx.Class.define("wisej.web.Panel", {
 				// when unfloating a panel collapsed to the right or to the bottom, reset the
 				// captionbar location since it was changed in __float.
 				var captionEl = captionbar.getContentElement();
-				if (dockSide == "right") {
+				if (dockSide === "right") {
 					captionEl.setStyles({ right: null, left: captionEl.__leftPosPx });
 				}
-				else if (dockSide == "bottom") {
+				else if (dockSide === "bottom") {
 					captionEl.setStyles({ bottom: null, top: captionEl.__topPosPx });
 				}
 			}
@@ -934,7 +934,7 @@ qx.Class.define("wisej.web.Panel", {
 			if (!this.isCollapsed())
 				return;
 
-			if (this.getAutoShow() != "onClick")
+			if (this.getAutoShow() !== "onClick")
 				return;
 
 			if (this.__captionTapTimer > 0) {
@@ -959,7 +959,7 @@ qx.Class.define("wisej.web.Panel", {
 			if (!this.isCollapsed())
 				return;
 
-			if (this.getAutoShow() != "onPointerOver")
+			if (this.getAutoShow() !== "onPointerOver")
 				return;
 
 			if (this.__floating)
@@ -1052,7 +1052,7 @@ qx.Class.define("wisej.web.Panel", {
 			switch (id) {
 
 				case "pane":
-					var control = new wisej.web.panel.FloatableScroll();
+					control = new wisej.web.panel.FloatableScroll();
 					var pane = control.getChildControl("pane");
 					pane._getLayout().dispose();
 					pane._setLayout(new qx.ui.layout.Basic());
@@ -1067,6 +1067,8 @@ qx.Class.define("wisej.web.Panel", {
 					this._add(control, { edge: "center" });
 
 					control.addListener("resize", this._onScrollerResize, this);
+					control.addListener("scrollX", this._onScrollBarX, this);
+					control.addListener("scrollY", this._onScrollBarY, this);
 					control.addListener("changeScrollbarXVisibility", this._onScrollerResize, this);
 					control.addListener("changeScrollbarXVisibility", this._onScrollerResize, this);
 
@@ -1160,7 +1162,7 @@ qx.Class.define("wisej.web.panel.FloatableScroll", {
 			}
 
 			return this.base(arguments, left, top, width, height);
-		},
+		}
 	}
 
 });

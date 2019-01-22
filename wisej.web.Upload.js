@@ -381,7 +381,7 @@ qx.Class.define("wisej.web.Upload", {
 				if (!this.getHideValue())
 					button.setAllowGrowX(false);
 
-				if (value == "middleLeft" || value == "middleRight") {
+				if (value === "middleLeft" || value === "middleRight") {
 					// HBox
 					if (!(layout instanceof qx.ui.layout.HBox)) {
 						layout.dispose();

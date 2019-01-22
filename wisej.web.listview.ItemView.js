@@ -218,9 +218,8 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		setFocusedItem: function (index) {
 
-			this.__selectionManager._setLeadItem(index);
 			this.scrollIntoView(index);
-
+			this.__selectionManager.replaceSelection([index]);
 		},
 
 		/**
@@ -398,7 +397,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			// select the first selectable item.
 			if (this.hasState("focused")) {
 				var selection = this.__selectionManager.getSelection();
-				if (selection && selection.length == 0) {
+				if (selection && selection.length === 0) {
 					index = this.__selectionManager._getFirstSelectable();
 				}
 			}
@@ -724,7 +723,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		setSelectionRanges: function (ranges) {
 
-			if (!ranges || ranges.length == 0) {
+			if (!ranges || ranges.length === 0) {
 				this.__selectionManager.clearSelection();
 			}
 			else {

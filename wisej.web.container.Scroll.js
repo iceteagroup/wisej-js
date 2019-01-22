@@ -48,7 +48,7 @@ qx.Class.define("wisej.web.container.Scroll", {
 		/**
 		 * Returns the horizontal scrollbar widget.
 		 */
-		getScrollBarX: function () {
+		getHorizontalScrollbar: function () {
 
 			return this.getChildControl("scrollbar-x");
 		},
@@ -56,7 +56,7 @@ qx.Class.define("wisej.web.container.Scroll", {
 		/**
 		 * Returns the vertical scrollbar widget.
 		 */
-		getScrollBarY: function () {
+		getVerticalScrollbar: function () {
 
 			return this.getChildControl("scrollbar-y");
 		},

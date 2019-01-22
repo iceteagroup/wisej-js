@@ -116,7 +116,7 @@ qx.Class.define("wisej.web.Line", {
 
 			switch (id) {
 				case "line":
-					var control = new qx.ui.core.Widget().set({
+					control = new qx.ui.core.Widget().set({
 						alignX: "center",
 						alignY: "middle"
 					})

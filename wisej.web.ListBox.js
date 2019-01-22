@@ -40,6 +40,10 @@ qx.Class.define("wisej.web.ListBox", {
 		// adds the inner target to the drop & drop event object.
 		this.addListener("drop", this._onDragEvent, this);
 		this.addListener("dragover", this._onDragEvent, this);
+
+		// auto select the item when dragging starts.
+		this.addListener("dragstart", this._onDragStart, this);
+
 	},
 
 	properties: {
@@ -383,6 +387,14 @@ qx.Class.define("wisej.web.ListBox", {
 				e.setUserData("eventData", target.getIndex());
 			}
 		},
+
+		// select the item that initiated the drag operation.
+		_onDragStart: function (e) {
+
+			var item = e.getOriginalTarget();
+			if (item instanceof qx.ui.form.ListItem)
+				this.setSelection([item]);
+		}
 
 	}
 

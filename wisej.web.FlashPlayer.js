@@ -159,7 +159,7 @@ qx.Class.define("wisej.web.FlashPlayer", {
 					if (wisej.web.DesignMode) {
 
 						this._setLayout(new qx.ui.layout.Grow());
-						var control = new qx.ui.basic.Atom().set({
+						control = new qx.ui.basic.Atom().set({
 							rich: true,
 							padding: 20,
 							center: true,
@@ -172,7 +172,7 @@ qx.Class.define("wisej.web.FlashPlayer", {
 					else {
 
 						this._setLayout(new qx.ui.layout.Grow());
-						var control = new qx.ui.embed.Flash("");
+						control = new qx.ui.embed.Flash("");
 						this._add(control);
 					}
 					break;

@@ -621,7 +621,7 @@ qx.Class.define("wisej.web.ListView", {
 					break;
 
 				case "item-view":
-					var control = new wisej.web.listview.ItemView(this).set({
+					control = new wisej.web.listview.ItemView(this).set({
 						focusable: false,
 						visibility: "excluded",
 					});
@@ -630,7 +630,7 @@ qx.Class.define("wisej.web.ListView", {
 					break;
 
 				case "grid-view":
-					var control = new wisej.web.listview.GridView(this).set({
+					control = new wisej.web.listview.GridView(this).set({
 						focusable: false,
 						visibility: "excluded",
 						columnVisibilityButtonVisible: false,

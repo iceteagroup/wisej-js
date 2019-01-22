@@ -50,6 +50,12 @@ qx.Class.define("wisej.web.datagrid.ColumnModel", {
 			this.__editorFactory = editorFactory || this.__editorFactory || new wisej.web.datagrid.EditorFactory();
 			this.__headerRenderer = headerRenderer || this.__headerRenderer || new wisej.web.datagrid.HeaderRenderer();
 
+			if (!this.hasListener("dataChanged")) {
+				this.addListener("dataChanged", table._onColDataChanged, table);
+				this.addListener("styleChanged", table._onColStyleChanged, table);
+				this.addListener("selectionChanged", table._onColSelectionChanged, table);
+			}
+
 			this.base(arguments, colCount, table);
 		},
 

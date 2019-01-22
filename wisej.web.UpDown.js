@@ -84,7 +84,7 @@ qx.Class.define("wisej.web.UpDownBase", {
 		 *
 		 * Values: Left, Right.
 		 */
-		upDownAlign: { init: "right", check: "String", apply: "_applyUpDownAlign", themeable: true },
+		upDownAlign: { init: "right", check: ["left", "right", "center"], apply: "_applyUpDownAlign", themeable: true },
 
 		/**
 		 * ReadOnly property.
@@ -295,50 +295,69 @@ qx.Class.define("wisej.web.UpDownBase", {
 			var downButton = this.getChildControl("downbutton");
 			var horizontal = this.getButtonsLayout() == "horizontal";
 			var layout = this._getLayout();
+			var align = this.getUpDownAlign();
 
-			if (this.getUpDownAlign() == "right") {
+			switch (align) {
+				case "left":
+					{
+						if (horizontal) {
+							layout.setColumnFlex(0, 0);
+							layout.setColumnFlex(1, 0);
+							layout.setColumnFlex(2, 1);
 
-				if (horizontal) {
-					layout.setColumnFlex(0, 1);
-					layout.setColumnFlex(1, 0);
-					layout.setColumnFlex(2, 0);
+							this._add(upButton, { column: 0, row: 0 });
+							this._add(downButton, { column: 1, row: 0 });
+							this._add(textField, { column: 2, row: 0, rowSpan: 1 });
 
-					this._add(upButton, { column: 1, row: 0 });
-					this._add(downButton, { column: 2, row: 0 });
-					this._add(textField, { column: 0, row: 0, rowSpan: 1 });
-				}
-				else {
-					layout.setColumnFlex(0, 1);
-					layout.setColumnFlex(1, 0);
+						}
+						else {
+							layout.setColumnFlex(0, 0);
+							layout.setColumnFlex(1, 1);
 
-					this._add(upButton, { column: 1, row: 0 });
-					this._add(downButton, { column: 1, row: 1 });
-					this._add(textField, { column: 0, row: 0, rowSpan: 2 });
-				}
+							this._add(upButton, { column: 0, row: 0 });
+							this._add(downButton, { column: 0, row: 1 });
+							this._add(textField, { column: 1, row: 0, rowSpan: 2 });
+						}
+					}
+					break;
+
+				case "center":
+					{
+						layout.setColumnFlex(0, 0);
+						layout.setColumnFlex(1, 1);
+						layout.setColumnFlex(2, 0);
+
+						this._add(upButton, { column: 0, row: 0 });
+						this._add(downButton, { column: 2, row: 0 });
+						this._add(textField, { column: 1, row: 0, rowSpan: 1 });
+					}
+					break;
+
+				default:
+				case "right":
+					{
+						if (horizontal) {
+							layout.setColumnFlex(0, 1);
+							layout.setColumnFlex(1, 0);
+							layout.setColumnFlex(2, 0);
+
+							this._add(upButton, { column: 1, row: 0 });
+							this._add(downButton, { column: 2, row: 0 });
+							this._add(textField, { column: 0, row: 0, rowSpan: 1 });
+						}
+						else {
+							layout.setColumnFlex(0, 1);
+							layout.setColumnFlex(1, 0);
+
+							this._add(upButton, { column: 1, row: 0 });
+							this._add(downButton, { column: 1, row: 1 });
+							this._add(textField, { column: 0, row: 0, rowSpan: 2 });
+						}
+					}
+					break;
 			}
-			else {
-
-				if (horizontal) {
-					layout.setColumnFlex(0, 0);
-					layout.setColumnFlex(1, 0);
-					layout.setColumnFlex(2, 1);
-
-					this._add(upButton, { column: 0, row: 0 });
-					this._add(downButton, { column: 1, row: 0 });
-					this._add(textField, { column: 2, row: 0, rowSpan: 1 });
-
-				}
-				else {
-					layout.setColumnFlex(0, 0);
-					layout.setColumnFlex(1, 1);
-
-					this._add(upButton, { column: 0, row: 0 });
-					this._add(downButton, { column: 0, row: 1 });
-					this._add(textField, { column: 1, row: 0, rowSpan: 2 });
-				}
-			}
-		},
-	},
+		}
+	}
 
 });
 
@@ -555,7 +574,7 @@ qx.Class.define("wisej.web.DomainUpDown", {
 			this._index = this.__findItem(e.getData());
 			this._updateButtons();
 
-			this.fireDataEvent("changeValue", e.getData());
+			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
 		},
 
 		// overridden
@@ -657,8 +676,8 @@ qx.Class.define("wisej.web.DomainUpDown", {
 				return -1;
 
 			return items.indexOf(text);
-		},
+		}
 
-	},
+	}
 
 });

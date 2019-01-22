@@ -136,9 +136,9 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 
 			if (this instanceof qx.ui.core.Widget) {
 				var parent = this;
-				for (parent = parent.getLayoutParent() ;
-						parent != null && !(parent.isWisejControl && parent.isTopLevel()) ;
-							parent = parent.getLayoutParent());
+				for (parent = parent.getLayoutParent();
+					parent != null && !(parent.isWisejControl && parent.isTopLevel());
+					parent = parent.getLayoutParent());
 
 				return parent;
 			}
@@ -309,7 +309,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 
 			var key = this.getAppearance();
 
-			if (key && key.indexOf("$parent/") == 0) {
+			if (key && key.indexOf("$parent/") === 0) {
 				key = key.substr("$parent/".length);
 				this.$$subcontrol = key;
 				this.$$subparent = parent;
@@ -440,221 +440,245 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 				}
 			}
 
+			//
+			// handler closure.
+			//
+			function makeHandler(descriptor) {
+
+				// argument value converters.
+				function convertData(data) {
+
+					if (data == null)
+						return;
+
+					// wisej control? return the id.
+					if (data.isWisejComponent)
+						return data.getId();
+
+					// primitive?
+					if ((data instanceof String || data instanceof Date || data instanceof Boolean)
+						|| ("string,number,boolean".indexOf(typeof data) > -1))
+						return data;
+
+					// array or map?
+					if (data instanceof Array) {
+						var array = null;
+						for (var i = 0; i < data.length; i++) {
+							var value = convertData(data[i]);
+							if (value != null) {
+								if (array == null)
+									array = new Array();
+
+								array.push(value);
+							}
+						}
+
+						return array;
+					}
+					else {
+
+						// don't serialize complex QX objects.
+						if (data.classname && qx.Class.isDefined(data.classname))
+							return null;
+
+						var map = null;
+						for (var name in data) {
+							var value = convertData(data[name]);
+							if (value != null) {
+								if (map == null)
+									map = {};
+
+								map[name] = value;
+							}
+						}
+
+						return map;
+					}
+				}
+
+				//
+				// event handler.
+				//
+				function handler(ev) {
+
+					var target = this;
+					var type = ev.getType();
+
+					// don't route any event back to the server
+					// while the component is in the middle of updating its state.
+					if (this.__inSetState)
+						return;
+
+					// find the original wisej target for the event.
+					var originalTarget = wisej.utils.Widget.findWisejComponent(ev.getOriginalTarget());
+
+					// dispatch bubbled events only to the actual target and not the bubbled up target, otherwise
+					// a parent control will get the events on the child controls.
+					if (originalTarget && originalTarget !== target) {
+
+						// these are the events that cannot fire when bubbled. others, like "drop", can.
+						switch (type) {
+
+							case "keyup":
+							case "keydown":
+							case "keypress":
+							case "focusin":
+							case "focusout":
+
+								// if the event bubbled because the target is disabled, fire the
+								// event to the new target and stop bubbling...
+								if (!originalTarget.isEnabled() || originalTarget.hasState("inner")) {
+									ev.stopPropagation();
+									break;
+								}
+
+								// block the event.
+								return;
+
+							case "tap":
+							case "dbltap":
+							case "click":
+							case "dblclick":
+							case "mouseout":
+							case "mouseover":
+							case "mouseup":
+							case "mousedown":
+							case "mousemove":
+							case "mousewheel":
+
+								// if the event bubbled because the target is disabled or anonymous, fire the
+								// event to the new target and stop bubbling...
+								if (!originalTarget.isEnabled() || originalTarget.isAnonymous() || originalTarget.hasState("inner")) {
+									ev.stopPropagation();
+									break;
+								}
+
+								// block the event.
+								return;
+						}
+					}
+
+					// stop "keypress: when keyCode is a not a printable character.
+					if (ev instanceof qx.event.type.KeySequence
+						&& type === "keypress"
+						&& wisej.utils.Widget.isInputKey(ev.getKeyIdentifier())) {
+						return;
+					}
+
+					// normalize the event args
+					// and assign them to the corresponding argument name.
+					var args = null;
+
+					if (descriptor.argNames.length > 0) {
+						var data = ev.getData ? ev.getData() : null;
+						var value = convertData(data);
+						args = args || {};
+						args[descriptor.argNames[0]] = value;
+					}
+
+					// add standard arguments
+					if (ev.getButton) {
+						var button = 0;
+						switch (ev.getButton()) {
+							case "right": button = 2; break;
+							case "middle": button = 1; break;
+						}
+						args = args || {};
+						args.button = button;
+						args.modifiers = ev.getModifiers();
+					}
+					else if (window.event) {
+						if (window.event.button !== undefined) {
+							args = args || {};
+							args.button = window.event.button | 0;
+						}
+					}
+
+					if (ev.getDocumentTop) {
+						args = args || {};
+						args.y = ev.getDocumentTop() | 0;
+						args.x = ev.getDocumentLeft() | 0;
+					}
+					else if (window.event) {
+						if (window.event.pageX !== undefined) {
+							args = args || {};
+							args.y = window.event.pageY | 0;
+							args.x = window.event.pageX | 0;
+						}
+					}
+
+					// detect the keyboard
+					if (ev.getKeyCode) {
+						args = args || {};
+						args.keyCode = ev.getKeyCode();
+						args.key = ev.getKeyIdentifier();
+						args.modifiers = ev.getModifiers();
+					}
+					else if (window.event instanceof KeyboardEvent) {
+						if (window.event) {
+							args = args || {};
+							args.key = window.event.keyIdentifier;
+							args.keyCode = window.event.keyCode || window.event.charCode;
+							args.modifiers =
+								window.event.shiftKey ? 1 : 0
+									| window.event.ctrlKey ? 2 : 0
+										| window.event.altKey ? 4 : 0
+											| window.event.metaKey ? 8 : 0;
+						}
+					}
+					else if (window.event) {
+						if (window.event.shiftKey !== undefined) {
+							args = args || {};
+							args.modifiers =
+								window.event.shiftKey ? 1 : 0
+									| window.event.ctrlKey ? 2 : 0
+										| window.event.altKey ? 4 : 0
+											| window.event.metaKey ? 8 : 0;
+						}
+					}
+
+					// mouse wheel.
+					if (ev.getWheelDelta) {
+						args = args || {};
+						args.wheelDelta = ev.getWheelDelta() | 0;
+					}
+
+					// add the original target, if any.
+					if (originalTarget != null && originalTarget !== target) {
+						args = args || {};
+						args.originalId = originalTarget.getId();
+					}
+
+					// detect the role of the element that caused the event.
+					if (ev.getNativeEvent) {
+						var role = wisej.utils.Widget.getTargetRole(ev.getOriginalTarget());
+						if (role) {
+							args = args || {};
+							args.role = role;
+						}
+					}
+
+					// add custom event data.
+					// used to pass information about the a drag drop target
+					// but it can be used for other purposed.
+					var eventData = ev.getUserData("eventData");
+					if (eventData != null) {
+						args = args || {};
+						args.eventData = eventData;
+						ev.setUserData("eventData", null);
+					}
+
+					this.core.fireEvent(target.getId(), descriptor.type, args, target);
+				}
+				return handler;
+			}
+
 			// attach the new event handlers.
 			if (newDescriptors != null) {
 
 				for (var type in newDescriptors) {
 
 					var descr = newDescriptors[type];
-
-					//
-					// handler closure.
-					//
-					function makeHandler(descriptor) {
-
-						// argument value converters.
-						function convertData(data) {
-
-							if (data == null)
-								return;
-
-							// wisej control? return the id.
-							if (data.isWisejComponent)
-								return data.getId();
-
-							// primitive?
-							if ((data instanceof String || data instanceof Date || data instanceof Boolean)
-									|| ("string,number,boolean".indexOf(typeof data) > -1))
-								return data;
-
-							// array or map?
-							if (data instanceof Array) {
-								var array = null;
-								for (var i = 0; i < data.length; i++) {
-									var value = convertData(data[i]);
-									if (value != null) {
-										if (array == null)
-											array = new Array();
-
-										array.push(value);
-									}
-								}
-
-								return array;
-							}
-							else {
-
-								// don't serialize complex QX objects.
-								if (data.classname && qx.Class.isDefined(data.classname))
-									return null;
-
-								var map = null;
-								for (var name in data) {
-									var value = convertData(data[name]);
-									if (value != null) {
-										if (map == null)
-											map = {};
-
-										map[name] = value;
-									}
-								}
-
-								return map;
-							}
-
-							return null;
-						};
-
-						//
-						// event handler.
-						//
-						function handler(ev) {
-
-							var target = this;
-							var type = ev.getType();
-
-							// don't route any event back to the server
-							// while the component is in the middle of updating its state.
-							if (this.__inSetState)
-								return;
-
-							// find the original wisej target for the event.
-							var originalTarget = wisej.utils.Widget.findWisejComponent(ev.getOriginalTarget());
-
-							// dispatch bubbled events only to the actual target and not the bubbled up target, otherwise
-							// a parent control will get the events on the child controls.
-							if (originalTarget && originalTarget != target) {
-
-								// these are the events that cannot fire when bubbled. others, like "drop", can.
-								switch (type) {
-
-									case "keyup":
-									case "keydown":
-									case "keypress":
-									case "focusin":
-									case "focusout":
-
-										// if the event bubbled because the target is disabled, fire the
-										// event to the new target and stop bubbling...
-										if (!originalTarget.isEnabled() || originalTarget.hasState("inner")) {
-											ev.stopPropagation();
-											break;
-										}
-
-										// block the event.
-										return;
-
-									case "tap":
-									case "dbltap":
-									case "click":
-									case "dblclick":
-									case "mouseout":
-									case "mouseover":
-									case "mouseup":
-									case "mousedown":
-									case "mousemove":
-									case "mousewheel":
-
-										// if the event bubbled because the target is disabled or anonymous, fire the
-										// event to the new target and stop bubbling...
-										if (!originalTarget.isEnabled() || originalTarget.isAnonymous() || originalTarget.hasState("inner")) {
-											ev.stopPropagation();
-											break;
-										}
-
-										// block the event.
-										return;
-								}
-							}
-
-							// stop "keypress: when keyCode is a not a printable character.
-							if (ev instanceof qx.event.type.KeySequence
-								&& type == "keypress"
-								&& wisej.utils.Widget.isInputKey(ev.getKeyIdentifier())) {
-								return;
-							}
-
-							// normalize the event args
-							// and assign them to the corresponding argument name.
-							var args = null;
-
-							if (descriptor.argNames.length > 0) {
-								var data = ev.getData ? ev.getData() : null;
-								var value = convertData(data);
-								args = args || {};
-								args[descriptor.argNames[0]] = value;
-							}
-
-							// add standard arguments
-							if (ev.getButton) {
-								var button = 0
-								switch (ev.getButton()) {
-									case "right": button = 2; break;
-									case "middle": button = 1; break;
-								}
-								args = args || {};
-								args.button = button;
-								args.modifiers = ev.getModifiers();
-							}
-							if (ev.getDocumentTop) {
-								args = args || {};
-								args.y = ev.getDocumentTop() | 0;
-								args.x = ev.getDocumentLeft() | 0;
-							}
-
-							// detect the keyboard
-							if (ev.getKeyCode) {
-								args = args || {};
-								args.keyCode = ev.getKeyCode();
-								args.key = ev.getKeyIdentifier();
-								args.modifiers = ev.getModifiers();
-							}
-							else if (window.event instanceof KeyboardEvent) {
-								args = args || {};
-								args.key = window.event.keyIdentifier;
-								args.keyCode = window.event.keyCode || window.event.charCode;
-								args.modifiers =
-									window.event.shiftKey ? 1 : 0
-									| window.event.ctrlKey ? 2 : 0
-									| window.event.altKey ? 4 : 0
-									| window.event.metaKey ? 8 : 0;
-							}
-
-							// mouse wheel.
-							if (ev.getWheelDelta) {
-								args = args || {};
-								args.wheelDelta = ev.getWheelDelta() | 0;
-							}
-
-							// add the original target, if any.
-							if (originalTarget != null && originalTarget != target) {
-								args = args || {};
-								args.originalId = originalTarget.getId();
-							}
-
-							// detect the role of the element that caused the event.
-							if (ev.getNativeEvent) {
-								var role = wisej.utils.Widget.getTargetRole(ev.getOriginalTarget());
-								if (role) {
-									args = args || {};
-									args.role = role;
-								}
-							}
-
-							// add custom event data.
-							// used to pass information about the a drag drop target
-							// but it can be used for other purposed.
-							var eventData = ev.getUserData("eventData");
-							if (eventData != null) {
-								args = args || {};
-								args.eventData = eventData;
-								ev.setUserData("eventData", null);
-							}
-
-							this.core.fireEvent(target.getId(), descriptor.type, args, target);
-						}
-						return handler;
-					}
 
 					// attach the handler closure to the event
 					var handler = makeHandler(descr);
@@ -679,8 +703,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 		 */
 		destroyChildren: function (container) {
 
-			var container =
-				(container == null) ? this : container;
+			container = container == null ? this : container;
 
 			if (!container.getChildren || !container.remove)
 				return;
@@ -777,12 +800,9 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 		// remove the css rule associated with this component.
 		var stylesheet = wisej.mixin.MBackgroundImage.__stylesheet;
-
-		if (stylesheet) {
-			var selector = ".wisej-background-" + this.$$hash;
-			qx.bom.Stylesheet.removeRule(stylesheet, selector + "::after");
+		if (stylesheet && this.__cssRuleSelector) {
+			qx.bom.Stylesheet.removeRule(stylesheet, this.__cssRuleSelector);
 		}
-
 	},
 
 	properties: {
@@ -808,7 +828,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 	statics: {
 
 		// the stylesheet used for all background images.
-		__stylesheet: null,
+		__stylesheet: null
 
 	},
 
@@ -816,6 +836,9 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 		// saves a reference to the widget's syncWidget method.
 		__syncWidgetBase: null,
+
+		// name of the css rule used to set the background image.
+		__cssRuleSelector: null,
 
 		/**
 		 * Transforms incoming values for the backgroundImage property:
@@ -910,7 +933,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 								}
 
 								// update the css rules once all images have been loaded.
-								if (count == 0)
+								if (count === 0)
 									me.__updateBackgroundCssRule(images);
 							});
 						}
@@ -921,7 +944,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 				}
 
 				// update the css rules once all images have been loaded.
-				if (count == 0)
+				if (count === 0)
 					this.__updateBackgroundCssRule(images);
 			}
 			else {
@@ -951,7 +974,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 				target.getPaddingTop() + "px " +
 				target.getPaddingRight() + "px " +
 				target.getPaddingBottom() + "px " +
-				target.getPaddingLeft() + "px"
+				target.getPaddingLeft() + "px";
 
 			cssRuleAfter.padding = padding;
 		},
@@ -1043,7 +1066,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 			styles.backgroundImage.push("url(\"" + image.image + "\")");
 
-			if (image.layout && image.layout != "none") {
+			if (image.layout && image.layout !== "none") {
 
 				styles.boxSizing = "border-box";
 				styles.backgroundOrigin.push("padding-box");
@@ -1126,12 +1149,10 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 		__getCssRule: function (target, pseudo) {
 
 			var stylesheet = null;
-			var firstTime = false;
 
 			// create the shared stylesheet.
 			var stylesheet = wisej.mixin.MBackgroundImage.__stylesheet;
 			if (!stylesheet) {
-				firstTime = true;
 				stylesheet = qx.bom.Stylesheet.createElement("");
 				wisej.mixin.MBackgroundImage.__stylesheet = stylesheet;
 			}
@@ -1145,10 +1166,11 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 			for (var i = 0; i < count; i++) {
 
 				var rule = rules[i];
-				if (rule.selectorText == selector) {
+				if (rule.selectorText === selector) {
 					var el = target.getContentElement();
 					if (el)
 						el.addClass(className);
+
 					return rule;
 				}
 			}
@@ -1162,8 +1184,9 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 				target.getPaddingTop() + "px " +
 				target.getPaddingRight() + "px " +
 				target.getPaddingBottom() + "px " +
-				target.getPaddingLeft() + "px"
+				target.getPaddingLeft() + "px";
 
+			this.__cssRuleSelector = selector;
 			qx.bom.Stylesheet.addRule(stylesheet,
 				selector,
 				"content:\"\"; display:block;position:absolute;top:0px;left:0px;width:100%;height:100%;z-index:-1;padding:" + padding);
@@ -1173,41 +1196,29 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 			// attach to the change of the padding to copy the padding to the
 			// background image overlay :after element.
-			if (firstTime) {
-				this.addListener("changePadding", function (e) {
+			this.addListener("changePadding", function (e) {
 
-					var cssRuleAfter = this.__getCssRule(target, "::after").style;
-					if (cssRuleAfter) {
+				var cssRuleAfter = this.__getCssRule(target, "::after").style;
+				if (cssRuleAfter) {
 
-						// update the padding.
-						var padding =
-							target.getPaddingTop() + "px " +
-							target.getPaddingRight() + "px " +
-							target.getPaddingBottom() + "px " +
-							target.getPaddingLeft() + "px"
+					// update the padding.
+					var padding =
+						target.getPaddingTop() + "px " +
+						target.getPaddingRight() + "px " +
+						target.getPaddingBottom() + "px " +
+						target.getPaddingLeft() + "px";
 
-						cssRuleAfter.padding = padding;
-					}
-				});
+					cssRuleAfter.padding = padding;
+				}
+			});
 
-				// detect changes the text color to update the fill on svg background images.
-				this.addListener("changeTextColor", function (e) {
-					this._updateBackgroundImages();
-				});
-			}
+			// detect changes the text color to update the fill on svg background images.
+			this.addListener("changeTextColor", function (e) {
+				this._updateBackgroundImages();
+			});
 
 			return this.__getCssRule(target, pseudo);
-		},
-
-		__removeCssRule: function (target, pseudo) {
-
-			// create the shared stylesheet.
-			var stylesheet = wisej.mixin.MBackgroundImage.__stylesheet;
-			if (stylesheet) {
-				var selector = "." + this.__getBackgroundClassName() + pseudo;
-				qx.bom.Stylesheet.removeRule(stylesheet, selector);
-			}
-		},
+		}
 	}
 });
 
@@ -1428,6 +1439,15 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		accessibility: { init: null, check: "Map", apply: "_applyAccessibility" },
 
 		/**
+		 * showLoader property.
+		 * 
+		 * When true, the ajax loader blocks the browser when the "execute" event is
+		 * fired. NOTE: It's up to the server control to hide the loader once
+		 * execution is completed.
+		 */
+		showLoader: { init: false, check: "Boolean", apply: "_applyShowLoader" },
+
+		/**
 		 * EnableTouchEvents property.
 		 *
 		 * When true, we attach to the touch events and convert them to data events
@@ -1544,48 +1564,6 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		},
 
 		/**
-		 * showLoader
-		 *
-		 * Blocks the component and shows a modal mask
-		 * with the themed loader "ajax-loader".
-		 */
-		showLoader: function () {
-
-			if (this.isWisejControl) {
-
-				var loader = this.$$loader;
-				if (loader == null) {
-
-					loader = this.$$loader = new qx.ui.core.Blocker(this);
-
-					loader.addListener("unblocked", function (e) {
-						if (this.$$loader) {
-							this.$$loader.dispose();
-							this.$$loader = null;
-						}
-					}, this);
-				}
-
-				loader.block();
-				loader.setColor("loaderBackground");
-				loader.setLoaderImage("ajax-loader");
-
-			}
-		},
-
-		/**
-		 * hideLoader
-		 *
-		 * Unblocks the component when the blocking count reaches zero.
-		 */
-		hideLoader: function () {
-
-			var loader = this.$$loader;
-			if (loader != null)
-				loader.unblock();
-		},
-
-		/**
 		 * Returns whether the widget is reachable by pressing the TAB key.
 		 *
 		 * Tests for both, the focusable property and a positive or
@@ -1600,7 +1578,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				return false;
 
 			// not tabable if an UserControl widget in the parent path has tabStop = false.
-			for (var parent = this.getParent() ; parent != null; parent = parent.getParent()) {
+			for (var parent = this.getParent(); parent != null; parent = parent.getParent()) {
 				if (parent instanceof wisej.web.UserControl && !parent.isTabStop())
 					return false;
 			}
@@ -1645,7 +1623,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 			if (!parent)
 				return 0;
 
-			var children = parent.getChildren();
+			var children = parent.getControls();
 			var index = children.indexOf(this);
 
 			if (parent.isReverseControls()) {
@@ -1664,7 +1642,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				var count = parent.getControls().length;
 				index = Math.max(0, Math.min(index, count - 1));
 
-				if (index == currentIndex)
+				if (index === currentIndex)
 					return;
 
 				var forward = (index < currentIndex);
@@ -1791,6 +1769,26 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		},
 
 		/**
+		 * Applies the showLoader property.
+		 */
+		_applyShowLoader: function (value, old) {
+
+			if (this.__showLoaderListenerId) {
+				this.removeListenerById(this.__showLoaderListenerId);
+				this.__showLoaderListenerId = null;
+			}
+
+			if (value) {
+				this.__showLoaderListenerId = this.addListener("execute", function (e) {
+					this.core.showLoader(true);
+				});
+			}
+		},
+
+		/** id of the showLoader "execute" handler. */
+		__showLoaderListenerId: null,
+
+		/**
 		 * Applies the accessibility attributes.
 		 */
 		_applyAccessibility: function (value, old) {
@@ -1860,7 +1858,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 
 			// dispatch bubbled events only to the actual target and not the bubbled up target, otherwise
 			// a parent control will get the events on the child controls.
-			if (originalTarget && originalTarget != this && !originalTarget.hasState("inner"))
+			if (originalTarget && originalTarget !== this && !originalTarget.hasState("inner"))
 				return;
 
 			switch (e.getType()) {
@@ -2247,7 +2245,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		 *
 		 * Identifies the container widget that is using this menu element.
 		 */
-		container: {init: null, nullable: true, check:"String"},
+		container: { init: null, nullable: true, check: "String" },
 
 		/**
 		 * Index property.
@@ -2272,6 +2270,15 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		shortcut: { check: "String", apply: "_applyShortcut", event: "changeShortcut" },
 
 		/**
+		 * showLoader property.
+		 * 
+		 * When true, the ajax loader blocks the browser when the "execute" event is
+		 * fired. NOTE: It's up to the server control to hide the loader once
+		 * execution is completed.
+		 */
+		showLoader: { init: false, check: "Boolean", apply: "_applyShowLoader" },
+
+		/**
 		 * Accessibility property.
 		 *
 		 * Sets the combination  of accessibility attributes on the current element:
@@ -2280,7 +2287,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		 *    description = the alt attribute.
 		 *    role = the role attribute.
 		 */
-		accessibility: { init: null, check: "Map", apply: "_applyAccessibility" },
+		accessibility: { init: null, check: "Map", apply: "_applyAccessibility" }
 	},
 
 	statics: {
@@ -2430,6 +2437,26 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 			parent.addAt(this, value);
 		},
+
+		/**
+		 * Applies the showLoader property.
+		 */
+		_applyShowLoader: function (value, old) {
+
+			if (this.__showLoaderListenerId) {
+				this.removeListenerById(this.__showLoaderListenerId);
+				this.__showLoaderListenerId = null;
+			}
+
+			if (value) {
+				this.__showLoaderListenerId = this.addListener("execute", function (e) {
+					this.core.showLoader(true);
+				});
+			}
+		},
+
+		/** id of the showLoader "execute" handler. */
+		__showLoaderListenerId: null,
 
 		/**
 		 * Applies the shortcut property.
@@ -2587,7 +2614,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 			var container = this.core.getComponent(this.getContainer());
 
 			if (container == null) {
-				for (var parent = this.getParent() ; parent != null; parent = parent.getParent()) {
+				for (var parent = this.getParent(); parent != null; parent = parent.getParent()) {
 					if (parent.getParent() == null) {
 						container = parent;
 						break;
@@ -2959,9 +2986,11 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 
 				// find the target of the keypress event,
 				var target = wisej.utils.Widget.findWisejComponent(e.getTarget());
+				if (!target)
+					return;
 
 				// process only accelerator keys from child widgets.
-				if (this != target
+				if (this !== target
 					&& this instanceof qx.ui.core.Widget
 					&& !qx.ui.core.Widget.contains(this, target)) {
 
@@ -2976,7 +3005,7 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 					this.fireDataEvent("accelerator", { code: code, target: id });
 
 					// prevent default for Ctrl accelerators to prevent the browser's default actions.
-					if (e.getModifiers() == qx.event.type.Dom.CTRL_MASK)
+					if (e.getModifiers() === qx.event.type.Dom.CTRL_MASK)
 						e.preventDefault();
 				}
 				else {
@@ -2987,7 +3016,7 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 
 						// prevent default for browser keys or we get the search box on F3
 						// and the tools on F12, etc...
-						if (key.length > 1 && key[0] == "F")
+						if (key.length > 1 && key[0] === "F")
 							e.preventDefault();
 					}
 				}

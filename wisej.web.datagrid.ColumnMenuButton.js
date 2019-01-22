@@ -94,5 +94,19 @@ qx.Class.define("wisej.web.datagrid.ColumnMenuItem", {
 			this.base(e);
 		},
 
+		// overridden
+		_createChildControlImpl: function (id, hash) {
+			var control;
+
+			switch (id) {
+				case "label":
+					control = this.base(arguments, id);
+					control.setRich(true);
+					break;
+			}
+
+			return control || this.base(arguments, id);
+		}
+
 	}
 });

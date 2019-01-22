@@ -195,7 +195,11 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		/**
 		 * The autoSize property.
 		 */
-		sizeMode: { init: "none", check: ["none", "columnHeader", "allCellsExceptHeader", "allCells", "displayedCellsExceptHeader", "displayedCells", "fill"], apply: "_applyProperty" },
+		sizeMode: {
+			init: "none",
+			check: ["none", "columnHeader", "allCellsExceptHeader", "allCells", "displayedCellsExceptHeader", "displayedCells", "fill"],
+			apply: "_applyProperty"
+		},
 
 		/**
 		 * The fillWeight property.
@@ -318,15 +322,15 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 				// setting the sort order of a column by itself
 				// should not change the sort order in the data model.
 
-				if (dataModel.getSortColumnIndex() == -1
-					|| dataModel.getSortColumnIndex() == this.getIndex()) {
+				if (dataModel.getSortColumnIndex() === -1
+					|| dataModel.getSortColumnIndex() === this.getIndex()) {
 
-					if (value == "none" && old != "none") {
+					if (value === "none" && old !== "none") {
 						dataModel._setSortColumnIndex(-1);
 					}
-					else if (value != "none") {
+					else if (value !== "none") {
 						dataModel._setSortColumnIndex(this.getIndex());
-						dataModel._setSortAscending(value == "ascending");
+						dataModel._setSortAscending(value === "ascending");
 					}
 				}
 
@@ -363,12 +367,6 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 
 			if (!jobs)
 				return;
-
-			if (jobs["autoSizeColumns"]) {
-				var table = this.getTable();
-				if (table)
-					table.autoSizeColumns();
-			}
 
 			if (jobs["setCellWidget"]) {
 				var headerWidget = this.getHeaderWidget();
@@ -429,9 +427,9 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 					table.getTableColumnModel().setColumnData(index, value);
 					break;
 
-				case "autoSizeMode":
+				case "sizeMode":
 				case "fillWeight":
-					qx.ui.core.queue.Widget.add(this, "autoSizeColumns");
+					qx.ui.core.queue.Widget.add(table, "autoSizeColumns");
 					break;
 
 				case "widget":

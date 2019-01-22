@@ -1490,7 +1490,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			if (target) {
 				var parent = target.getLayoutParent();
 				if (parent instanceof wisej.web.datagrid.HeaderCell) {
-					if (parent.getCellWidget() == target)
+					if (parent.getCellWidget() === target)
 						return;
 				}
 			}

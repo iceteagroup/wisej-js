@@ -47,7 +47,7 @@ qx.Class.define("wisej.web.DragDrop", {
 	construct: function () {
 
 		if (wisej.web.DragDrop.__singleton)
-			throw new Error("Only once instance of wisej.web.DragDrop is allowed.");
+			throw new Error("Only one instance of wisej.web.DragDrop is allowed.");
 
 		wisej.web.DragDrop.__singleton = this;
 

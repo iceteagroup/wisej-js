@@ -150,9 +150,9 @@ qx.Class.define("wisej.web.AlertBox", {
 		__setIcon: function (value) {
 
 			var image = this.getChildControl("icon");
-			var iconPane = this.getChildControl("iconPane")
+			var iconPane = this.getChildControl("iconPane");
 
-			if (!value || value == "none") {
+			if (!value || value === "none") {
 				iconPane.exclude();
 			}
 			else {
@@ -170,7 +170,7 @@ qx.Class.define("wisej.web.AlertBox", {
 
 				case "iconPane":
 					control = new qx.ui.container.Composite(new qx.ui.layout.HBox());
-					this.add(control, { column: 0, row: 0 })
+					this.add(control, { column: 0, row: 0 });
 					break;
 
 				case "icon":
@@ -183,8 +183,8 @@ qx.Class.define("wisej.web.AlertBox", {
 						rich: true,
 						allowGrowX: true,
 						allowGrowY: true
-					})
-					this.add(control, { column: 1, row: 0 })
+					});
+					this.add(control, { column: 1, row: 0 });
 					break;
 
 				case "close":
@@ -194,7 +194,7 @@ qx.Class.define("wisej.web.AlertBox", {
 						allowGrowY: false
 					});
 					control.addListener("execute", this._onCloseButton, this);
-					this.add(control, { column: 2, row: 0 })
+					this.add(control, { column: 2, row: 0 });
 					break;
 
 				case "progressbar":

@@ -47,7 +47,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		this.setStateProperties(this.getStateProperties().concat(["value", "checked", "text"]));
 
 		// add local state events.
-		this.setStateEvents(this.getStateEvents().concat(["valueChanged", "textChanged"]));
+		this.setStateEvents(this.getStateEvents().concat(["changeValue", "changeText"]));
 
 		// hovered event handlers.
 		this.addListener("pointerover", this._onPointerOver);
@@ -69,7 +69,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 * Works together with the ShowCheckBox property. It marks the checkbox as checked/unchecked.
 		 * When unchecked and if showCheckBox is true, the textfield is disabled.
 		 */
-		checked: { init: false, check: "Boolean", apply: "_applyChecked" },
+		checked: { init: false, check: "Boolean", apply: "_applyChecked", event: "changeChecked" },
 
 		/**
 		 * ShowCheckBox property.
@@ -186,8 +186,23 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 *
 		 * Collection of tool definitions to display next to the edit field.
 		 */
-		tools: { check: "Array", apply: "_applyTools" },
+		tools: { check: "Array", apply: "_applyTools" }
 
+	},
+
+	events:
+	{
+		/** Whenever the text is changed this event is fired
+		 *
+		 *  Event data: The new text value of the field.
+		 */
+		"changeText": "qx.event.type.Data",
+
+		/** Whenever the value is changed this event is fired
+		 *
+		 *  Event data: The new value.
+		 */
+		"changeValue": "qx.event.type.Data"
 	},
 
 	members: {
@@ -379,6 +394,9 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		_applyValue: function (value, old) {
 
 			// do nothing, simply store the date value.
+
+			if (value === null || old === null || value.getTime() !== old.getTime())
+				this.fireDataEvent("changeValue", value, old);
 		},
 
 		/** 
@@ -488,7 +506,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		// overridden.
 		// handles changes in the textfield.
 		//
-		// when the text changes, we fire "textChanged" to let the
+		// when the text changes, we fire "changeText" to let the
 		// server parse the text to a date, format it according to the
 		// current culture and format and set the text back.
 		_onTextFieldChangeValue: function (e) {
@@ -501,9 +519,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 				return;
 			}
 
-			var textfield = this.getChildControl("textfield");
-			this.fireDataEvent("textChanged", textfield.getValue());
-
+			this.fireDataEvent("changeText", e.getData(), e.getOldData());
 		},
 
 		// overridden.
@@ -537,7 +553,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 				}
 			}
 
-			this.fireDataEvent("valueChanged", selectedDate);
+			this.setValue(selectedDate);
 			this.selectAllText();
 
 			this.close();
@@ -671,8 +687,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		__onCheckboxTap: function (e) {
 
 			this.toggleChecked();
-			this.fireDataEvent("checkedChanged", this.getChecked());
-
 		},
 
 		// overridden.

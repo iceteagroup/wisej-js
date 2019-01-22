@@ -31,6 +31,17 @@ qx.Class.define("wisej.web.PdfViewer", {
 		wisej.mixin.MBorderStyle
 	],
 
+	construct: function () {
+
+		this.base(arguments);
+
+		qx.event.Registration.addListener(document.body, "pointerdown", this.block, this, true);
+		qx.event.Registration.addListener(document.body, "pointerup", this.release, this, true);
+		qx.event.Registration.addListener(document.body, "losecapture", this.release, this, true);
+
+		this.__blockerElement = this._createBlockerElement();
+	},
+
 	properties: {
 
 		appearance: { init: "panel", refine: true },
@@ -69,6 +80,8 @@ qx.Class.define("wisej.web.PdfViewer", {
 
 	members: {
 
+		__blockerElement: null,
+
 		/**
 		 * Applies the viewer's property.
 		 */
@@ -104,7 +117,6 @@ qx.Class.define("wisej.web.PdfViewer", {
 			// build the url depending on the type of viewer to use.
 			switch (this.getViewerType()) {
 				case "auto":
-					var url = this.getSource();
 					break;
 
 				case "google":
@@ -123,18 +135,24 @@ qx.Class.define("wisej.web.PdfViewer", {
 					break;
 			}
 
-			var childEl = new qx.html.Element("object", {
+			if (this.__objectEl)
+				this.__objectEl.dispose();
+
+			this.__objectEl = new qx.html.Element("object", {
 				overflowX: "hidden",
 				overflowY: "hidden",
 				width: "100%",
 				height: "100%"
 			}, {
-				data: url
-			});
+					data: url
+				}
+			);
 
-			el.removeAll();
-			el.add(childEl);
+			el.add(this.__objectEl);
 		},
+
+		/** the inner element that displays the pdf viewer. */
+		__objectEl: null,
 
 		/**
 		 * Overridden to create the design time label.
@@ -145,20 +163,17 @@ qx.Class.define("wisej.web.PdfViewer", {
 			switch (id) {
 				case "design-view":
 
-					if (wisej.web.DesignMode) {
+					this._setLayout(new qx.ui.layout.Grow());
+					control = new qx.ui.basic.Atom().set({
+						rich: true,
+						padding: 20,
+						center: true,
+						alignX: "center",
+						iconPosition: "left",
+						gap: 10
+					});
 
-						this._setLayout(new qx.ui.layout.Grow());
-						var control = new qx.ui.basic.Atom().set({
-							rich: true,
-							padding: 20,
-							center: true,
-							alignX: "center",
-							iconPosition: "left",
-							gap: 10
-						});
-
-						this._add(control);
-					}
+					this._add(control);
 					break;
 			}
 
@@ -176,27 +191,108 @@ qx.Class.define("wisej.web.PdfViewer", {
 
 			// handle absolute URLs (with protocol-relative prefix)
 			// example: //domain.com/file.png
-			if (url.search(/^\/\//) != -1) {
-				return window.location.protocol + url
+			if (url.search(/^\/\//) === 0) {
+				return window.location.protocol + url;
 			}
 
 			// handle absolute URLs (with explicit origin)
 			// example: http://domain.com/file.png
-			if (url.search(/:\/\//) != -1) {
-				return url
+			if (url.search(/:\/\//) > 0) {
+				return url;
 			}
 
 			// handle absolute URLs (without explicit origin)
 			// example: /file.png
-			if (url.search(/^\//) != -1) {
-				return window.location.origin + url
+			if (url.search(/^\//) === 0) {
+				return window.location.origin + url;
 			}
 
 			// handle relative URLs
 			// example: file.png
-			var base = window.location.href.match(/(.*\/)/)[0]
-			return base + url
-		}
+			return window.location.origin + window.location.pathname + url;
+		},
+
+		/**
+		 * Creates <div> element which is aligned over object node to avoid losing pointer events.
+		 *
+		 * @return {Object} Blocker element node
+		 */
+		_createBlockerElement: function () {
+			var el = new qx.html.Blocker();
+			el.setStyles({
+				"zIndex": 20,
+				"display": "none"
+			});
+
+			return el;
+		},
+
+		/**
+		 * Cover the object with a transparent blocker div element. This prevents
+		 * pointer or key events to be handled by the iframe. To release the blocker
+		 * use {@link #release}.
+		 *
+		 */
+		block: function (e) {
+
+			// don't block when the pointer event is originated by the object element, or we disable embedded content.
+			if (e.getTarget().tagName === "OBJECT")
+				return;
+
+
+			this.__blockerElement.setStyle("display", "block");
+
+			// adjust the blocker z-index, otherwise the fixed z-index at 20 blocks all clicks on all overlapping widgets.
+			this.__blockerElement.setStyle("z-index", this.getZIndex());
+		},
+
+		/**
+		 * Release the blocker set by {@link #block}.
+		 *
+		 */
+		release: function () {
+			this.__blockerElement.setStyle("display", "none");
+		},
+
+		// overridden
+		renderLayout: function (left, top, width, height) {
+			this.base(arguments, left, top, width, height);
+
+			var pixel = "px";
+			var insets = this.getInsets();
+
+			this.__blockerElement.setStyles({
+				"left": (left + insets.left) + pixel,
+				"top": (top + insets.top) + pixel,
+				"width": (width - insets.left - insets.right) + pixel,
+				"height": (height - insets.top - insets.bottom) + pixel
+			});
+		},
+
+		// overridden
+		setLayoutParent: function (parent) {
+			// remove the blocker element from the layout parent, and avoid adding it twice causing a js error.
+			var oldParent = this.getLayoutParent();
+			if (oldParent)
+				oldParent.getContentElement().remove(this.__blockerElement);
+
+			this.base(arguments, parent);
+
+			if (parent) {
+				parent.getContentElement().add(this.__blockerElement);
+			}
+		},
 	},
+
+	destruct: function () {
+		if (this.getLayoutParent() && this.__blockerElement.getParent()) {
+			this.getLayoutParent().getContentElement().remove(this.__blockerElement);
+		}
+		this._disposeObjects("__blockerElement");
+
+		qx.event.Registration.removeListener(document.body, "pointerdown", this.block, this, true);
+		qx.event.Registration.removeListener(document.body, "pointerup", this.release, this, true);
+		qx.event.Registration.removeListener(document.body, "losecapture", this.release, this, true);
+	}
 
 });

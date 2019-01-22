@@ -259,7 +259,7 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 			switch (id) {
 
 				case "html":
-					var control = new qx.ui.embed.Html().set({
+					control = new qx.ui.embed.Html().set({
 						width: 1,
 						height: 1
 					});

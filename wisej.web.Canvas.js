@@ -537,7 +537,7 @@ qx.Class.define("wisej.web.Canvas", {
 
 					if (wisej.web.DesignMode) {
 						this._setLayout(new qx.ui.layout.Canvas());
-						var control = new qx.ui.basic.Atom().set({
+						control = new qx.ui.basic.Atom().set({
 							rich: true,
 							padding: 20,
 							center: true,

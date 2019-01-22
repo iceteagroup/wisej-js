@@ -176,7 +176,15 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 		_applyIconSize: function (value, old) {
 
 			var size = value;
-			var icon = this.getChildControl("icon");
+			var icon = this.getChildControl("icon", true);
+
+			if (icon) {
+				this.__setIconSize(icon, value);
+			}
+		},
+
+		// sets or resets the size of the child "icon" widget.
+		__setIconSize: function (icon, size) {
 
 			icon.resetMaxWidth();
 			icon.resetMaxHeight();
@@ -314,6 +322,7 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 						allowShrinkX: true
 					});
 					this._add(control, { row: 1, column: 1 });
+					this.__setIconSize(control, this.getIconSize());
 					break;
 			}
 

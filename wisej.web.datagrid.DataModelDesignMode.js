@@ -267,7 +267,7 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 		 */
 		reloadData: function () {
 
-			if (this.getRowCount() == 0) {
+			if (this.getRowCount() === 0) {
 
 				var table = this.__table;
 				if (table) {
@@ -278,6 +278,18 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 				}
 			}
 		},
+
+		/**
+		 * Iterates through all cached rows.
+		 *
+		 * Empty iterator for design mode data set.
+		 *
+		 * @param iterator {Function} The iterator function to call.
+		 * @param object {Object} context of the iterator
+		 */
+		iterateCachedRows: function (iterator, object) {
+
+		}
 
 	}
 

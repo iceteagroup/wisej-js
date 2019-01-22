@@ -228,7 +228,7 @@ qx.Class.define("wisej.web.IFrame", {
 					if (wisej.web.DesignMode) {
 
 						this._setLayout(new qx.ui.layout.Grow());
-						var control = new qx.ui.basic.Atom().set({
+						control = new qx.ui.basic.Atom().set({
 							rich: true,
 							padding: 20,
 							center: true,

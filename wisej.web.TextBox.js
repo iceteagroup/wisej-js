@@ -469,7 +469,6 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 			var oldValue = this.getValue();
 			this.getChildControl("textfield").setValue(value);
-			this.fireDataEvent("changeValue", value, oldValue);
 		},
 		getValue: function () {
 
@@ -843,9 +842,7 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		setValue: function (value) {
 
 			this.setDirty(true);
-			var oldValue = this.getValue();
 			this.__maskProvider.setValue(value, true);
-			this.fireDataEvent("changeValue", value, oldValue);
 		},
 
 		/**

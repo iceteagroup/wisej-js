@@ -47,7 +47,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		this.base(arguments, dataModel || new wisej.web.datagrid.DataModel());
 
 		// add local state properties.
-		this.setStateProperties(this.getStateProperties().concat(["firstVisibleRow", "firstVisibleColumn", "visibleRowCount"]));
+		this.setStateProperties(this.getStateProperties().concat(["firstVisibleRow", "scrollX", "visibleRowCount"]));
 
 		// use our row renderer.
 		this.getDataRowRenderer().dispose();
@@ -425,10 +425,10 @@ qx.Class.define("wisej.web.DataGrid", {
 
 					// update the table now.
 					this._updateTableData(
-					  firstRow,
-					  lastRow,
-					  0,
-					  model.getColumnCount() - 1);
+						firstRow,
+						lastRow,
+						0,
+						model.getColumnCount() - 1);
 				}
 				finally {
 
@@ -741,11 +741,9 @@ qx.Class.define("wisej.web.DataGrid", {
 				// reset the column model.
 				this.setMetaColumnCounts([0]);
 
-				// destroy the current column model.
-				var isNewColumnModel = false;
+				// destroy the current column model when the column list has changed.
 				if (old != null && old.length > 0) {
 
-					isNewColumnModel = true;
 					this.__columnModel.dispose();
 					this.__columnModel = null;
 
@@ -818,14 +816,6 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				// prepare the meta columns.
 				this._updateMetaColumns();
-
-				// detect if this is the first time the column model is
-				// created, in which case we have to attach to the events.
-				if (isNewColumnModel) {
-					columnModel.addListener("dataChanged", this._onColDataChanged, this);
-					columnModel.addListener("styleChanged", this._onColStyleChanged, this);
-					columnModel.addListener("selectionChanged", this._onColSelectionChanged, this);
-				}
 			}
 			finally {
 				this.__updateMode = false;
@@ -1373,7 +1363,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		/**
 		 * FirstVisibleColumn property getter.
 		 *
-		 * This is a read-only property that returns the first visible column.
+		 * Returns the first visible column.
 		 * This is also a state property that is returned to the server with all updates.
 		 */
 		getFirstVisibleColumn: function () {
@@ -1392,6 +1382,29 @@ qx.Class.define("wisej.web.DataGrid", {
 		},
 
 		/**
+		 * FirstVisibleColumn property setter.
+		 * 
+		 * @param col {Integer} Index of the column to scroll into view to the left-most position.
+		 */
+		setFirstVisibleColumn: function (col) {
+
+			var scroller = null;
+			var scrollers = this._getPaneScrollerArr();
+			var columnModel = this.getTableColumnModel();
+			for (var i = 0; i < scrollers.length; i++) {
+				scroller = scrollers[i];
+				if (!scroller.isFrozenPane() && !scroller.isRowHeaderPane()) {
+					var paneModel = scroller.getTablePaneModel();
+					var columnLeft = paneModel.getColumnLeft(col);
+					if (columnLeft >= 0) {
+						scroller.setScrollX(columnLeft);
+						break;
+					}
+				}
+			}
+		},
+
+		/**
 		 * VisibleRows property getter.
 		 *
 		 * This is a read-only property that returns the number of visible rows.
@@ -1400,6 +1413,25 @@ qx.Class.define("wisej.web.DataGrid", {
 		getVisibleRowCount: function () {
 
 			return this.getPaneScroller(0).getTablePane().getVisibleRowCount();
+		},
+
+		/**
+		 * ScrollX property getter.
+		 * 
+		 * Returns the scroll X position of the first scrollable panel.
+		 */
+		getScrollX: function () {
+
+			var scroller = null;
+			var scrollers = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollers.length; i++) {
+				scroller = scrollers[i];
+				if (!scroller.isFrozenPane() && !scroller.isRowHeaderPane()) {
+					return scroller.getScrollX();
+				}
+			}
+
+			return 0;
 		},
 
 		/**
@@ -1575,7 +1607,7 @@ qx.Class.define("wisej.web.DataGrid", {
 					case "PageUp":
 					case "PageDown":
 						var scroller = this.getPaneScroller(0);
-						var direction = (identifier == "PageUp") ? -1 : 1;
+						var direction = (identifier === "PageUp") ? -1 : 1;
 						var visibleCount = this.getVisibleRowCount() - 1;
 						scroller.setScrollY(scroller.getScrollY() + direction * visibleCount);
 						this.moveFocusedCell(0, direction * visibleCount);
@@ -1592,9 +1624,9 @@ qx.Class.define("wisej.web.DataGrid", {
 						break;
 
 					default:
-						if (editMode == "editOnKeystroke" || editMode == "editOnKeystrokeOrF2" || editMode == "editOnEnter") {
+						if (editMode === "editOnKeystroke" || editMode === "editOnKeystrokeOrF2" || editMode === "editOnEnter") {
 
-							if (identifier.length == 1) {
+							if (identifier.length === 1) {
 								if ((identifier >= "A" && identifier <= "Z") || (identifier >= "0" && identifier <= "9")) {
 
 									consumed = true;
@@ -1816,7 +1848,7 @@ qx.Class.define("wisej.web.DataGrid", {
 							var newWidth = data.newWidth;
 							var oldWidth = data.oldWidth;
 
-							if (column.getSizeMode() == "fill") {
+							if (column.getSizeMode() === "fill") {
 								column.setFillWeight(newWidth / oldWidth * column.getFillWeight());
 							}
 
@@ -1826,7 +1858,7 @@ qx.Class.define("wisej.web.DataGrid", {
 								if (col2 != null) {
 
 									var column2 = this.getColumns()[col2];
-									if (column2.getSizeMode() == "fill") {
+									if (column2.getSizeMode() === "fill") {
 
 										this.__resizingSecondFillColumn = true;
 										try {
@@ -1835,6 +1867,7 @@ qx.Class.define("wisej.web.DataGrid", {
 											// when re-entering this method when calling model.setColumnWidth()
 											// below with the last argument set to true (pointer event).
 											newWidth = model.getColumnWidth(col2) - (newWidth - oldWidth);
+											newWidth = Math.max(column2.getMinWidth(), newWidth, 2);
 											model.setColumnWidth(col2, newWidth, true);
 
 										} finally {
@@ -1891,11 +1924,16 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (!data)
 				return;
 
+			// update the column component.
+			var column = this.getColumns()[data.col];
+			if (column)
+				column.setVisible(data.visible);
+
 			// if the column being hidden/shown is the
 			// row header column, we need to change the
 			// meta column model as well, or the first visible column
 			// will be rendered in the first band.
-			if (data.col == this._rowHeaderColIndex) {
+			if (data.col === this._rowHeaderColIndex) {
 
 				this.setFocusedCell(null, null);
 				this.setMetaColumnCounts([0]);
@@ -1903,7 +1941,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 
 			// if the column being hidden has a cell in edit mode, cancel editing.
-			if (this.getFocusedColumn() == data.col) {
+			if (this.getFocusedColumn() === data.col) {
 
 				if (this.isEditing())
 					this.cancelEditing();
@@ -2141,7 +2179,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				var weight = column.getFillWeight() / totalFillWeight;
 				var oldWidth = columnModel.getColumnWidth(colIndex);
 				var newWidth = (Math.max(availableWidth * weight, column.getMinWidth())) | 0;
-				if (newWidth != oldWidth && newWidth > 0) {
+				if (newWidth !== oldWidth && newWidth > 0) {
 					column.setWidth(newWidth);
 					this.fireDataEvent("columnWidthChanged", { col: colIndex, width: newWidth });
 				}
@@ -2159,10 +2197,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				if (!this.getBounds())
 					return;
 
-				var me = this;
-				setTimeout(function () {
-					qx.ui.core.queue.Widget.add(me, "autoSizeColumns");
-				}, 1);
+				qx.ui.core.queue.Widget.add(this, "autoSizeColumns");
 			}
 		},
 
@@ -2173,7 +2208,9 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * @param autoSizeRowMode {String} Autosize mode: one of "rowHeader", "allCellsExceptHeader", "allCells".
 		 */
 		autoResizeRows: function (rowIndex, autoSizeRowMode) {
-			// TODO: Implement.
+
+			// not supported.
+			this.core.logError("The method autoResizeRows is not supported in 1.5. It will be supported starting from 2.0.");
 		},
 
 		/**
@@ -2183,7 +2220,9 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * @param autoSizeColumnMode {String} Autosize mode: one of "allCellsExceptHeader","allCells", "displayedCellsExceptHeader", "displayedCells".
 		 */
 		autoResizeColumns: function (columnIndex, autoSizeColumnMode) {
-			// TODO: Implement.
+
+			// not supported.
+			this.core.logError("The method autoResizeColumns is not supported in 1.5. It will be supported starting from 2.0.");
 		},
 
 		/**
@@ -2193,7 +2232,9 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * @param autoSizeRowMode {String} Autosize mode: one of "autoSizeToAllHeaders", "autoSizeToDisplayedHeaders", "autoSizeToFirstHeader".
 		 */
 		autoResizeRowHeaders: function (rowIndex, autoSizeRowMode) {
-			// TODO: Implement.
+
+			// not supported.
+			this.core.logError("The method autoResizeRowHeaders is not supported in 1.5. It will be supported starting from 2.0.");
 		},
 
 		/**
@@ -2202,7 +2243,9 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
 		 */
 		autoResizeColumnHeaders: function (columnIndex) {
-			// TODO: Implement.
+
+			// not supported.
+			this.core.logError("The method autoResizeColumnHeaders is not supported in 1.5. It will be supported starting from 2.0.");
 		},
 
 		/**
@@ -2507,36 +2550,36 @@ qx.Class.define("wisej.web.DataGrid", {
 			};
 
 			var columnHeaders = this.getColumns();
-			for (var col = 0, l = tableModel.getColumnCount() ; col < l; col++) {
+			for (var col = 0, l = tableModel.getColumnCount(); col < l; col++) {
 
 				// skip excluded columns.
 				if (columnHeaders[col].getShowInMenu() === false)
 					continue;
 
 				var menuButton =
-				  columnButton.factory(
-					"menu-button", {
-						text: tableModel.getColumnName(col),
-						column: col,
-						bVisible: columnModel.isColumnVisible(col)
-					});
+					columnButton.factory(
+						"menu-button", {
+							text: tableModel.getColumnName(col),
+							column: col,
+							bVisible: columnModel.isColumnVisible(col)
+						});
 
 				qx.core.Assert.assertInterface(menuButton, qx.ui.table.IColumnMenuItem);
 
 				menuButton.addListener(
-				  "changeVisible",
-				  this._createColumnVisibilityCheckBoxHandler(col), this);
+					"changeVisible",
+					this._createColumnVisibilityCheckBoxHandler(col), this);
 
 				this.__columnMenuButtons[col] = menuButton;
 			}
 
 			// Inform listeners who may want to insert menu items at the end
 			data =
-			{
-				table: this,
-				menu: menu,
-				columnButton: columnButton
-			};
+				{
+					table: this,
+					menu: menu,
+					columnButton: columnButton
+				};
 			this.fireDataEvent("columnVisibilityMenuCreateEnd", data);
 		},
 
@@ -2595,8 +2638,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			for (var i = 0; i < scrollerArr.length; i++) {
 				var col = scrollerArr[i]._getColumnForPageX(pageX);
 				var row = scrollerArr[i]._getRowForPagePos(pageX, pageY);
-				if (col != null && row != null)
-				{
+				if (col != null && row != null) {
 					e.setUserData("eventData", { col: col, row: row });
 					break;
 				}
@@ -2610,7 +2652,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			this.autoSizeColumns();
 			this.fireEvent("render");
 
-		},
+		}
 
 	},
 

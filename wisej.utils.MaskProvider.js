@@ -355,7 +355,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				mask = this.__getNextMask();
 			}
 
-			return result.trim();
+			return result.trimEnd();
 		},
 
 		/**	
@@ -480,7 +480,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				}
 			}
 
-			return result.trim();
+			return result.trimEnd();
 		},
 
 		/**
@@ -495,10 +495,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			if (old) {
 
 				var text = this.getValue(true);
-				var text = this.unmask(text, {
+				text = this.unmask(text, {
 					prompt: old,
 					keepPrompt: false,
-					keepLiterals: false,
+					keepLiterals: false
 				});
 				this.setValue(text);
 			}
@@ -582,7 +582,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		__getNextInsertPosition: function (pos) {
 
 			for (var mask = this.__maskChars[pos];
-					mask != null && !this.__isMaskChar(mask) ;
+					mask != null && !this.__isMaskChar(mask);
 						mask = this.__maskChars[++pos]);
 
 			return pos;

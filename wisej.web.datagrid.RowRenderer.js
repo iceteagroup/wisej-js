@@ -143,7 +143,7 @@ qx.Class.define("wisej.web.datagrid.RowRenderer", {
 				var rowStyle = rowData.style;
 
 				// see if the cell or the column specified a renderer class name.
-				var className = rowStyle != null ? rowStyle.renderer : null;
+				className = rowStyle != null ? rowStyle.renderer : null;
 
 				if (className) {
 					if (className.indexOf(".") == -1)

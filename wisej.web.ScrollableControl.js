@@ -272,7 +272,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 				return;
 
 			var scrollContainer = e.getTarget();
-			var scrollbar = vertical ? scrollContainer.getScrollBarY() : scrollContainer.getScrollBarX();
+			var scrollbar = vertical ? scrollContainer.getVerticalScrollbar() : scrollContainer.getHorizontalScrollbar();
 
 			var data = {};
 			data.old = old;
@@ -290,7 +290,7 @@ qx.Class.define("wisej.web.ScrollableControl", {
 
 			switch (id) {
 				case "pane":
-					var control = new wisej.web.container.Scroll();
+					control = new wisej.web.container.Scroll();
 					var pane = control.getChildControl("pane");
 					pane._getLayout().dispose();
 					pane._setLayout(new qx.ui.layout.Basic());

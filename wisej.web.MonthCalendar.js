@@ -726,7 +726,7 @@ qx.Class.define("wisej.web.MonthCalendar", {
 			switch (id) {
 
 				case "datechooser":
-					var control = new wisej.web.monthCalendar.DateChooser(this).set({
+					control = new wisej.web.monthCalendar.DateChooser(this).set({
 						today: this.getToday(),
 						minValue: this.getMinValue(),
 						maxValue: this.getMaxValue(),
@@ -738,7 +738,7 @@ qx.Class.define("wisej.web.MonthCalendar", {
 					break;
 
 				case "today":
-					var control = new wisej.web.monthCalendar.Today();
+					control = new wisej.web.monthCalendar.Today();
 					this._add(control, { row: 1, column: 1 });
 					control.addListener("tap", this.__onTodayTap, this);
 					break;

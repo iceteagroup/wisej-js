@@ -1320,7 +1320,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					break;
 
 				case "pane":
-					var control = new qx.ui.container.Scroll();
+					control = new qx.ui.container.Scroll();
 					var pane = control.getChildControl("pane");
 					pane._getLayout().dispose();
 					pane._setLayout(new qx.ui.layout.Basic());

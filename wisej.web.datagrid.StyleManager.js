@@ -40,6 +40,11 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 			qx.theme.manager.Meta.getInstance().addListener("changeTheme", this._onChangeTheme, this);
 		}
 
+		// retrieve the theme managers.
+		this.__fontMgr = qx.theme.manager.Font.getInstance();
+		this.__colorMgr = qx.theme.manager.Color.getInstance();
+		this.__appearanceMgr = qx.theme.manager.Appearance.getInstance();
+		this.__decorationMgr = qx.theme.manager.Decoration.getInstance();
 	},
 
 	members: {
@@ -50,6 +55,12 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 		// list of registered classes. they will be recreated when the theme changes.
 		// the map is { appearance: "", states: {}, defaultCss: "" }.
 		__classNames: {},
+
+		// theme managers.
+		__fontMgr: null,
+		__colorMgr: null,
+		__appearanceMgr: null,
+		__decorationMgr: null,
 
 		/**
 		 * Retrieves or creates the css class corresponding to the appearance and the states.
@@ -100,15 +111,12 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 
 		__getCssClass: function (className, sheet, appearance, states, css) {
 
-			// retrieve the theme managers.
-			var appearanceMgr = qx.theme.manager.Appearance.getInstance();
-			var decorationMgr = qx.theme.manager.Decoration.getInstance();
 
 			// create the cell class from the theme.
 			var decorator = null;
-			var themeData = appearanceMgr.styleFrom(appearance, states, null, "");
+			var themeData = this.__appearanceMgr.styleFrom(appearance, states, null, "");
 			if (themeData && themeData.decorator)
-				decorator = decorationMgr.resolve(themeData.decorator);
+				decorator = this.__decorationMgr.resolve(themeData.decorator);
 
 			// cache the class in the list of registered classes.
 			this.__classNames[className] = { appearance: appearance, states: states, defaultCss: css, decorator: decorator };
@@ -123,18 +131,10 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 				}
 			}
 
-			// create the new rule.
-			qx.bom.Stylesheet.addRule(sheet, selector, css);
-			var rule = sheet.cssRules[sheet.cssRules.length - 1];
-
 			// apply properties from the theme.
 			if (decorator) {
 				var styles = decorator.getStyles(true);
 				for (var key in styles) {
-
-					// don't override default rules.
-					if (rule.style[key])
-						continue;
 
 					// if we find a map value, use it as pseudo class
 					if (qx.Bootstrap.isObject(styles[key])) {
@@ -145,14 +145,16 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 							inner = true;
 							innerCss += innerKey + ":" + innerStyles[innerKey] + ";";
 						}
-						var innerSelector = this.__legacyIe ? selector : selector + (inner ? ":" : "");
+						var innerSelector = selector + (inner ? ":" : "");
 						qx.bom.Stylesheet.addRule(sheet, innerSelector + key, innerCss);
 						continue;
 					}
 
-					rule.style[key] = styles[key];
+					css = key + ":" + styles[key] + ";" + css;
 				}
 			}
+			qx.bom.Stylesheet.addRule(sheet, selector, css);
+			var rule = sheet.cssRules[sheet.cssRules.length - 1];
 
 			if (themeData) {
 
@@ -196,7 +198,7 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 			if (states) {
 
 				for (var name in states) {
-					if (name != "default" && states[name])
+					if (name !== "default" && states[name])
 						className += "-" + name;
 				}
 			}
@@ -209,8 +211,7 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 
 			var font = data["font"];
 			if (font) {
-				var fontMgr = qx.theme.manager.Font.getInstance();
-				font = fontMgr.resolve(font);
+				font = this.__fontMgr.resolve(font);
 				if (font) {
 					var styles = font.getStyles();
 					for (var name in styles)
@@ -239,8 +240,7 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 
 			var color = data["textColor"];
 			if (color) {
-				var colorMgr = qx.theme.manager.Color.getInstance();
-				style.color = colorMgr.resolve(color);
+				style.color = this.__colorMgr.resolve(color);
 			}
 		},
 
@@ -248,8 +248,7 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 
 			var color = data["backgroundColor"];
 			if (color) {
-				var colorMgr = qx.theme.manager.Color.getInstance();
-				style.backgroundColor = colorMgr.resolve(color);
+				style.backgroundColor = this.__colorMgr.resolve(color);
 			}
 		},
 

@@ -116,7 +116,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		 *
 		 * Gets or sets the index of the selected item.
 		 */
-		selectedIndex: { init: -1, check: "Integer", apply: "_applySelectedIndex" },
+		selectedIndex: { init: -1, check: "Integer", apply: "_applySelectedIndex", event: "changeSelectedIndex" },
 
 		/**
 		 * Selection(start, length) property.
@@ -292,7 +292,7 @@ qx.Class.define("wisej.web.ComboBox", {
 						if (index < 0 || index >= children.length)
 							throw new Error("index out of bounds: " + index + " (0.." + children.length + ")");
 
-						children[index].set(list[i])
+						children[index].set(list[i]);
 					}
 				}
 
@@ -987,14 +987,14 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		_onTextFieldChangeValue: function (e) {
 
-			if (this.__suspendEvents)
-				return;
+			if (!this.__suspendEvents) {
 
-			// select the first item that matches the text.
-			var text = e.getData();
-			this.__synchListWithText(text);
+				// select the first item that matches the text.
+				var text = e.getData();
+				this.__synchListWithText(text);
+			}
 
-			this.fireDataEvent("textChanged", text);
+			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
 		},
 
 		/***/
