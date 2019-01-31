@@ -170,7 +170,18 @@ qx.Class.define("wisej.web.DataGrid", {
 		topScrollOffset: { init: 0, check: "PositiveInteger", apply: "_applyTopScrollOffset" },
 
 		/**
-		 * keepSameRowHeight
+		 * AutoSizeRowsMode
+		 * 
+		 * Sets the auto sizing of the rows.
+		 */
+		autoSizeRowsMode: {
+			init: "none",
+			check: ["none", "rowHeader", "allCellsExceptHeaders", "allCells", "doubleClick"],
+			apply: "_applyAutoSizeRowsMode"
+		},
+
+		/**
+		 * KeepSameRowHeight
 		 *
 		 * Gets or sets a value indicating that all the rows should resize together.
 		 */
@@ -202,7 +213,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		rowHeadersVisible: { init: true, check: "Boolean", apply: "_applyRowHeadersVisible" },
 
 		/**
-		 * Determines which scrollbars should be visible: 1 = Horizontal, 2 = Vertical, 3 = Both.
+		 * Determines which scrollbars should be visible: 0 = None, 1 = Horizontal, 2 = Vertical, 3 = Both, 4 = Hidden.
 		 */
 		scrollBars: { init: 3, check: "PositiveInteger", apply: "_applyScrollBars" },
 
@@ -499,6 +510,26 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 		},
 
+		/**
+		 * To update the table if the table model has changed and remove selection.
+		 *
+		 * @param firstRow {Integer} The index of the first row that has changed.
+		 * @param lastRow {Integer} The index of the last row that has changed.
+		 * @param firstColumn {Integer} The model index of the first column that has changed.
+		 * @param lastColumn {Integer} The model index of the last column that has changed.
+		 * @param removeStart {Integer ? null} The first index of the interval (including), to remove selection.
+		 * @param removeCount {Integer ? null} The count of the interval, to remove selection.
+		 */
+		_updateTableData: function (firstRow, lastRow, firstColumn, lastColumn, removeStart, removeCount) {
+
+			this.base(arguments, firstRow, lastRow, firstColumn, lastColumn, removeStart, removeCount);
+
+			var sizeMode = this.getAutoSizeRowsMode();
+			if (sizeMode !== "none" && sizeMode !== "doubleClick") {
+				qx.ui.core.queue.Widget.add(this, "autoSizeRows");
+			}
+		},
+	
 		// overridden.
 		_applyBackgroundColor: function (value, old) {
 
@@ -1040,6 +1071,15 @@ qx.Class.define("wisej.web.DataGrid", {
 		},
 
 		/**
+		 * Applies the AutoSizeRowsMode property.
+		 */
+		_applyAutoSizeRowsMode: function (value, old) {
+
+			if (value !== "none" && value !== "doubleClick")
+				qx.ui.core.queue.Widget.add(this, "autoSizeRows");
+		},
+
+		/**
 		 * Applies the Indent property.
 		 */
 		_applyIndent: function (value, old) {
@@ -1246,11 +1286,14 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		_onTableModelRowHeightChanged: function (e) {
 
+			if (!this.__updateMode) {
+
 			this._updateScrollBarVisibility();
 
 			var scrollerArr = this._getPaneScrollerArr();
 			for (var i = 0; i < scrollerArr.length; i++) {
 				scrollerArr[i].onTableModelRowHeightChanged();
+			}
 			}
 
 			// fire rowHeightChanged.
@@ -1328,6 +1371,9 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			if (jobs["autoSizeColumns"])
 				this.autoSizeColumns();
+
+			if (jobs["autoSizeRows"])
+				this.autoSizeRows();
 		},
 
 		/**
@@ -1956,8 +2002,216 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 		},
 
+		// overridden to resize the columns when
+		// the scrollbar visibility changes.
+		_updateScrollBarVisibility: function () {
+
+			this.base(arguments);
+
+			if (!this.__internalChange) {
+
+				if (!this.getBounds())
+					return;
+
+				qx.ui.core.queue.Widget.add(this, "autoSizeColumns");
+			}
+		},
+
+		/* =======================================================================
+		 * AutoSize implementation
+		 * =======================================================================*/
+
 		/**
-		 * Automatically resizes all the columns according to the sizeMode property.
+		 * Resize the columns width according to the specified parameters.
+		 *
+		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
+		 * @param autoSizeMode {String} Autosize mode: one of "columnHeader", "allCellsExceptHeader","allCells", "displayedCellsExceptHeader", "displayedCells".
+		 */
+		autoResizeColumns: function (columnIndex, autoSizeMode) {
+
+			var columns = this.getColumns();
+			if (columns == null || columns.length === 0)
+				return;
+
+			this.__internalChange++;
+			try {
+				var resizeData = [];
+
+				for (var i = this._rowHeaderColIndex + 1, l = columns.length; i < l; i++) {
+
+
+					var column = columns[i];
+					var sizeMode = autoSizeMode;
+
+					switch (sizeMode) {
+
+						case "allCells":
+						case "columnHeader":
+						case "displayedCells":
+						case "allCellsExceptHeader":
+						case "displayedCellsExceptHeader":
+
+							if (columnIndex > -1 && columnIndex !== i)
+								continue;
+
+							if (!column.isFrozen() && column.getSizeMode() === "fill")
+								continue;
+
+							resizeData.push({
+								column: column,
+								sizeMode: sizeMode,
+								colIndex: column.getIndex()
+							});
+
+							break;
+
+						default:
+							return;
+					}
+				}
+
+				if (resizeData.length > 0) {
+
+					this.__autoSizeColumns(resizeData);
+
+					this.autoSizeFillColumns();
+				}
+
+			}
+			finally {
+				this.__internalChange--;
+			}
+		},
+
+		/**
+		 * Resize the rows height according to the specified parameters.
+		 *
+		 * @param rowIndex {Integer} Index of the row to resize. -1 for all rows.
+		 * @param autoSizeMode {String} Autosize mode: one of "rowHeader", "allCellsExceptHeader", "allCells".
+		 */
+		autoResizeRows: function (rowIndex, autoSizeMode) {
+
+			var columns = this.getColumns();
+			if (columns == null || columns.length === 0)
+				return;
+
+			var resizeData = {};
+			var sizeMode = autoSizeMode;
+			var rowHeaderColIndex = this._rowHeaderColIndex;
+
+			switch (sizeMode) {
+
+				case "allCells":
+					resizeData = {
+						sizeMode: sizeMode,
+						rowIndex: rowIndex,
+						colIndex: rowHeaderColIndex
+					};
+					break;
+
+				case "rowHeader":
+					resizeData = {
+						sizeMode: sizeMode,
+						rowIndex: rowIndex,
+						colIndex: rowHeaderColIndex,
+						maxColumns: 1
+					};
+					break;
+
+				case "allCellsExceptHeader":
+					resizeData = {
+						sizeMode: sizeMode,
+						rowIndex: rowIndex,
+						colIndex: rowHeaderColIndex + 1
+					};
+					break;
+
+				default:
+					return;
+			}
+
+			this.__autoSizeRows(resizeData);
+		},
+
+		/**
+		 * Resize the row headers width according to the specified parameters.
+		 *
+		 * @param rowIndex {Integer} Index of the row to resize. -1 for all rows.
+		 * @param autoSizeMode {String} Autosize mode: one of "autoSizeToAllHeaders", "autoSizeToDisplayedHeaders", "autoSizeToFirstHeader".
+		 */
+		autoResizeRowHeaders: function (rowIndex, autoSizeMode) {
+
+			if (this._rowHeaderColIndex !== 0)
+				return;
+
+			var columns = this.getColumns();
+			if (columns == null || columns.length === 0)
+				return;
+
+			this.__internalChange++;
+			try {
+				var resizeData = [];
+				var column = columns[0];
+				var sizeMode = autoSizeMode;
+
+				switch (sizeMode) {
+					case "autoSizeToAllHeaders":
+					case "autoSizeToFirstHeader":
+					case "autoSizeToDisplayedHeaders":
+						resizeData.push({
+							column: column,
+							sizeMode: sizeMode,
+							rowIndex: rowIndex,
+							colIndex: column.getIndex()
+						});
+						break;
+
+					default:
+						return;
+				}
+
+				this.__autoSizeColumns(resizeData);
+			}
+			finally {
+				this.__internalChange--;
+			}
+		},
+
+		/**
+		 * Resize the column headers's height according to the specified parameters.
+		 *
+		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
+		 */
+		autoResizeColumnHeaders: function (columnIndex) {
+
+			var columns = this.getColumns();
+			if (columns == null || columns.length === 0)
+				return;
+
+			var me = this;
+			setTimeout(function () {
+
+				var newHeight = 0;
+				var oldHeight = this.getHeaderCellHeight();
+
+				for (var i = 0; i < columns.length; i++) {
+
+					if (columnIndex > -1 && columnIndex !== i)
+						continue;
+
+					newHeight = Math.max(newHeight, me.__getColumnHeaderSizeHint(columns[columnIndex]).height);
+				}
+
+				if (newHeight !== oldHeight && newHeight > 0) {
+					me.setHeaderCellHeight(newHeight);
+					me.fireDataEvent("rowHeightChanged", { row: -1, height: newHeight });
+				}
+
+			}, 1);
+		},
+
+		/**
+		 * Automatically resizes the columns according to the sizeMode property on each column.
 		 */
 		autoSizeColumns: function () {
 
@@ -1965,7 +2219,59 @@ qx.Class.define("wisej.web.DataGrid", {
 				return;
 
 			var columns = this.getColumns();
-			if (columns == null || columns.length == 0)
+			if (columns == null || columns.length === 0)
+				return;
+
+			var columnModel = this.getTableColumnModel();
+			if (!columnModel)
+				return;
+
+			this.__internalChange++;
+			try {
+				var sizefillColumns = false;
+				for (var i = this._rowHeaderColIndex + 1, length = columns.length; i < length; i++) {
+
+					var column = columns[i];
+
+					if (column.isVisible()) {
+
+						var sizeMode = column.getSizeMode();
+						switch (sizeMode) {
+							case "none":
+								break;
+
+							case "fill":
+								if (!column.isFrozen())
+									sizefillColumns = true;
+								break;
+
+							default:
+								resized = true;
+								this.autoResizeColumns(column.getIndex(), sizeMode);
+								break;
+						}
+					}
+				}
+
+				if (sizefillColumns)
+					this.autoSizeFillColumns();
+			}
+			finally {
+
+				this.__internalChange--;
+			}
+		},
+
+		/**
+		 * Automatically resizes all the "fill" columns.
+		 */
+		autoSizeFillColumns: function () {
+
+			if (!this.getBounds())
+				return;
+
+			var columns = this.getColumns();
+			if (columns == null || columns.length === 0)
 				return;
 
 			var columnModel = this.getTableColumnModel();
@@ -1982,51 +2288,35 @@ qx.Class.define("wisej.web.DataGrid", {
 				return;
 
 			// calculate the total fill weight of the "fill" columns and collect the columns to auto fill and the ones to auto size.
+			var otherColumns = [];
 			var autoFillColumns = [];
-			var autoSizeColumns = [];
-			for (var i = 0, length = columns.length; i < length; i++) {
+			for (var i = this._rowHeaderColIndex + 1, length = columns.length; i < length; i++) {
 
 				var column = columns[i];
 
-				if (!column.isVisible())
-					continue;
+				if (column.isVisible()) {
 
 				switch (column.getSizeMode()) {
 					case "fill":
-						if (column.isFrozen())
-							continue;
-
+							if (!column.isFrozen())
 						autoFillColumns.push(column);
 						break;
 
-					case "none":
-						continue;
-
 					default:
-						autoSizeColumns.push(column);
+							otherColumns.push(column);
 						break;
 				}
+			}
 			}
 
 			this.__internalChange++;
 			try {
 
-				// auto size columns based on content.
-				// TODO: this.__autoSizeColumns(autoSizeColumns, columnModel);
-
-				// adjust the available width deducting all other visible columns.
 				var availableWidth = mainPaneSize.width;
-				for (var i = 0, length = columns.length; i < length; i++) {
 
-					var column = columns[i];
-					var colIndex = column.getIndex();
-
-					if (colIndex < 0 || !column.isVisible())
-						continue;
-
-					if (column.isFrozen() || column.getSizeMode() == "fill")
-						continue;
-
+				// adjust the available width deducting all visible columns.
+				for (var i = 0, l = otherColumns.length; i < l; i++) {
+					var colIndex = otherColumns[i].getIndex();
 					availableWidth -= columnModel.getColumnWidth(colIndex);
 				}
 
@@ -2039,136 +2329,283 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 		},
 
-		// auto size columns based on content.
-		__autoSizeColumns: function (columns, columnModel) {
+		/**
+		 * Automatically resizes all displayed rows according to the autoSizeRowsMode property.
+		 */
+		autoSizeRows: function () {
+
+			var sizeMode = this.getAutoSizeRowsMode();
+			if (sizeMode !== "none" && sizeMode !== "doubleClick") {
+
+				this.autoResizeRows(-1, sizeMode);
+			}
+		},
+
+		// auto size columns with based on content.
+		__autoSizeColumns: function (resizeData) {
 
 			var dataModel = this.getTableModel();
+			var columnModel = this.getTableColumnModel();
 
 			// resize the columns according to the size mode property.
-			for (var i = 0, length = columns.length; i < length; i++) {
+			for (var i = 0, length = resizeData.length; i < length; i++) {
 
-				var column = columns[i];
-				var colIndex = column.getIndex();
+				var resizeItem = resizeData[i];
 
-				if (colIndex < 0)
+				if (resizeItem.colIndex < 0)
 					continue;
 
-				var oldWidth = columnModel.getColumnWidth(colIndex);
+				var newWidth = 0;
+				var oldWidth = columnModel.getColumnWidth(resizeItem.colIndex);
 
-				var newWidth = oldWidth;
-				switch (column.getSizeMode()) {
+				switch (resizeItem.sizeMode) {
 
 					case "columnHeader":
-						newWidth = this.__getColumnHeaderWidth(column);
+						newWidth = this.__getColumnHeaderSizeHint(resizeItem.column).width;
 						break;
 
 					case "allCells":
-						newWidth = Math.max(this.__getMaxCellsWidth(colIndex, columnModel, dataModel), this.__getColumnHeaderWidth(column));
+						newWidth = Math.max(
+							this.__getMaxCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width,
+							this.__getColumnHeaderSizeHint(resizeItem.column).width);
 						break;
 
 					case "displayedCells":
-						newWidth = Math.max(this.__getMaxDisplayedCellsWidth(colIndex, columnModel, dataModel), this.__getColumnHeaderWidth(column));
+						newWidth = Math.max(
+							this.__getMaxDisplayedCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width,
+							this.__getColumnHeaderSizeHint(resizeItem.column).width);
 						break;
 
 					case "allCellsExceptHeader":
-						newWidth = this.__getMaxCellsWidth(colIndex, columnModel, dataModel);
+						newWidth = this.__getMaxCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
 						break;
 
 					case "displayedCellsExceptHeader":
-						newWidth = this.__getMaxDisplayedCellsWidth(colIndex, columnModel, dataModel);
+						newWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
+						break;
+
+					case "autoSizeToAllHeaders":
+						newWidth = this.__getMaxCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel).width;
+						break;
+
+					case "autoSizeToFirstHeader":
+						newWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel, 1).width;
+						break;
+
+					case "autoSizeToDisplayedHeaders":
+						newWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel).width;
 						break;
 				}
 
-				if (newWidth != oldWidth && newWidth > 0) {
-					column.setWidth(newWidth);
+				if (newWidth !== oldWidth && newWidth > 0) {
+
+					columnModel.setColumnWidth(resizeItem.colIndex, newWidth, false);
+
+					this.fireDataEvent("columnWidthChanged", {
+						col: resizeItem.colIndex,
+						width: newWidth,
+						isPointerAction: false
+					});
 				}
 			}
 
 		},
 
-		// returns the calculate maximum width of all the cells in the column
-		// that are currently displayed.
-		__getMaxDisplayedCellsWidth: function (col, columnModel, dataModel) {
+		// auto size rows height based on content.
+		__autoSizeRows: function (resizeData) {
 
-			var width = 0;
-			var row = this.getFirstVisibleRow();
-			var count = this.getVisibleRowCount();
+			// resizeData: {sizeMode, rowIndex, colIndex, maxColumns}
+
+			var changed = false;
+			var dataModel = this.getTableModel();
+			var columnModel = this.getTableColumnModel();
+
+			var colIndex = resizeData.colIndex;
+			var rowIndex = resizeData.rowIndex;
+
+			if (rowIndex > -1) {
+
+				var newHeight = 0;
+				var oldHeight = dataModel.getRowHeight(rowIndex);
+
+				var count = resizeData.maxColumns > 0
+					? resizeData.maxColumns
+					: columnModel.getOverallColumnCount();
+
+				for (var i = colIndex; count > 0; i++) {
+					newHeight = Math.max(newHeight, this.__getMaxCellSize(i, rowIndex, columnModel, dataModel).height);
+					count--;
+				}
+				if (newHeight > 0 && newHeight !== oldHeight) {
+					changed = true;
+					dataModel.setRowHeight(rowIndex, newHeight, false);
+				}
+			}
+			else {
+				this.__updateMode = true;
+				try {
+					dataModel.iterateCachedRows(function (rowIndex, rowData) {
+
+						var newHeight = 0;
+						var oldHeight = dataModel.getRowHeight(rowIndex);
+
+						var count = resizeData.maxColumns > 0
+							? resizeData.maxColumns
+							: columnModel.getOverallColumnCount();
+
+						for (var i = colIndex; count > 0; i++) {
+							newHeight = Math.max(newHeight, this.__getMaxCellSize(i, rowIndex, columnModel, dataModel).height);
+							count--;
+				}
+						if (newHeight > 0 && newHeight !== oldHeight) {
+							changed = true;
+							dataModel.setRowHeight(rowIndex, newHeight, false);
+			}
+
+					}, this);
+				}
+				finally {
+					this.__updateMode = false;
+
+					if (changed)
+						this._onTableModelRowHeightChanged();
+				}
+			}
+		},
+
+		// returns the calculate maximum size (width, height) of all the rendered cells in the column.
+		__getMaxDisplayedCellSize: function (col, row, columnModel, dataModel, maxRows) {
+
+			var maxSize = { width: 0, height: 0 };
 			var renderer = columnModel.getDataCellRenderer(col);
+
+			var colIndex = col;
+			var rowIndex = (row > -1) ? row : this.getFirstVisibleRow();
+			var count = (maxRows > 0) ? maxRows : this.getVisibleRowCount();
 
 			while (count > 0) {
 
-				var value = dataModel.getValue(col, row);
-				if (value) {
+				var value = dataModel.getValue(colIndex, rowIndex);
+				if (value !== null && value !== undefined) {
 
 					var cellInfo = {
-						col: col,
-						row: row,
+						col: colIndex,
+						row: rowIndex,
 						table: this,
 						value: value,
 						columnModel: columnModel,
-						rowData: dataModel.getRowData(row)
+						rowData: dataModel.getRowData(rowIndex)
 					};
 
-					width = Math.max(width, renderer.getCellSize(cellInfo).width);
+					var cellSize = renderer.getCellSize(cellInfo);
+					maxSize.width = Math.max(maxSize.width, cellSize.width);
+					maxSize.height = Math.max(maxSize.height, cellSize.height);
 				}
 
-				row++;
 				count--;
+				rowIndex++;
 			}
 
-			return width;
+			return maxSize;
 		},
 
-		// returns the calculate maximum width of all the cells in the data
-		// model cache.
-		__getMaxCellsWidth: function (col, columnModel, dataModel) {
+		// returns the calculate maximum size (width, height) of all the cells in the data model cache for the column.
+		__getMaxCellSize: function (col, row, columnModel, dataModel) {
 
-			var width = 0;
+			var maxSize = { width: 0, height: 0 };
 			var renderer = columnModel.getDataCellRenderer(col);
 
-			dataModel.iterateCachedRows(function (row, rowData) {
+			var colIndex = col;
+			var rowIndex = row;
 
-				var value = rowData.data[col];
-				if (value) {
+			if (rowIndex > -1) {
+
+				var value = dataModel.getValue(colIndex, rowIndex);
+				if (value !== null && value !== undefined) {
 
 					var cellInfo = {
-						col: col,
-						row: row,
+						col: colIndex,
+						row: rowIndex,
+						table: this,
+						value: value,
+						columnModel: columnModel,
+						rowData: dataModel.getRowData(rowIndex)
+					};
+
+					maxSize = renderer.getCellSize(cellInfo);
+				}
+			}
+			else {
+
+				dataModel.iterateCachedRows(function (rowIndex, rowData) {
+
+					var value = rowData.data ? rowData.data[colIndex] : null;
+					if (value !== null && value !== undefined) {
+
+						var cellInfo = {
+							col: colIndex,
+							row: rowIndex,
 						table: this,
 						value: value,
 						columnModel: columnModel,
 						rowData: rowData
 					};
 
-					width = Math.max(width, renderer.getCellSize(cellInfo).width);
+						var cellSize = renderer.getCellSize(cellInfo);
+						maxSize.width = Math.max(maxSize.width, cellSize.width);
+						maxSize.height = Math.max(maxSize.height, cellSize.height);
 				}
 
 			}, this);
+			}
 
-			return width;
+			return maxSize;
 		},
 
-		// returns the recalculated width of the column header.
-		__getColumnHeaderWidth: function (column) {
+		// returns the recalculated size of the column header.
+		__getColumnHeaderSizeHint: function (column) {
 			var header = column.getHeaderWidget();
-			header.resetWidth();
-			header.invalidateLayoutCache();
-			return header.getSizeHint().width;
+
+			if (!this.__measuringHeader)
+				this.__measuringHeader = new wisej.web.datagrid.HeaderCell();
+
+			var widget = this.__measuringHeader;
+			widget.setLabel(header.getLabel());
+			widget.setFont(header.getFont());
+			widget.setWrap(header.getWrap());
+			widget.setAutoEllipsis(header.getAutoEllipsis());
+			widget.setPaddingTop(header.getPaddingTop());
+			widget.setPaddingLeft(header.getPaddingLeft());
+			widget.setPaddingRight(header.getPaddingRight());
+			widget.setPaddingBottom(header.getPaddingBottom());
+
+			widget.invalidateLayoutCache();
+			widget.invalidateLayoutChildren();
+			var children = widget.getChildren();
+			for (var i = 0; i < children.length; i++) {
+				children[i].invalidateLayoutCache();
+			}
+
+			var hint = widget.getSizeHint();
+			return hint;
 		},
+
+		// wisej.web.datagrid.HeaderCell instance used to measure headers.
+		__measuringHeader: null,
 
 		// auto size columns based on fill weight.
 		__autoSizeFillColumns: function (columns, columnModel, availableWidth) {
 
 			// calculate the total fill weight.
 			var totalFillWeight = 0;
-			for (var i = 0, length = columns.length; i < length; i++) {
+			for (var i = 0, l = columns.length; i < l; i++) {
 				totalFillWeight += columns[i].getFillWeight();
 			}
 			if (totalFillWeight <= 0)
 				return;
 
 			// resize the columns according to their weight and minimum size.
-			for (var i = 0, length = columns.length; i < length; i++) {
+			for (var i = 0, l = columns.length; i < l; i++) {
 
 				var column = columns[i];
 				var colIndex = column.getIndex();
@@ -2180,73 +2617,42 @@ qx.Class.define("wisej.web.DataGrid", {
 				var oldWidth = columnModel.getColumnWidth(colIndex);
 				var newWidth = (Math.max(availableWidth * weight, column.getMinWidth())) | 0;
 				if (newWidth !== oldWidth && newWidth > 0) {
-					column.setWidth(newWidth);
-					this.fireDataEvent("columnWidthChanged", { col: colIndex, width: newWidth });
+
+					columnModel.setColumnWidth(colIndex, newWidth, false);
+
+					this.fireDataEvent("columnWidthChanged", {
+						col: colIndex,
+						width: newWidth,
+						isPointerAction: false
+					});
 				}
 			}
 		},
 
-		// overridden to resize the columns when
-		// the scrollbar visibility changes.
-		_updateScrollBarVisibility: function () {
+		// Returns a style string that represents the current font.
+		_getFontStyle: function () {
 
-			this.base(arguments);
+			var font = this.getFont();
+			if (font !== this.__cachedFont) {
+				this.__cachedFont = font;
 
-			if (!this.__internalChange) {
+				var styles;
+				if (font)
+					styles = qx.theme.manager.Font.getInstance().resolve(font).getStyles();
+				else
+					styles = qx.bom.Font.getDefaultStyles();
 
-				if (!this.getBounds())
-					return;
-
-				qx.ui.core.queue.Widget.add(this, "autoSizeColumns");
+				this.__cachedFontStyle = qx.bom.element.Style.compile(styles);
 			}
+
+			return this.__cachedFontStyle;
 		},
+		__cachedFont: null,
+		__cachedFontStyle: null,
 
-		/**
-		 * Resize the rows height according to the specified parameters.
-		 *
-		 * @param rowIndex {Integer} Index of the row to resize. -1 for all rows.
-		 * @param autoSizeRowMode {String} Autosize mode: one of "rowHeader", "allCellsExceptHeader", "allCells".
-		 */
-		autoResizeRows: function (rowIndex, autoSizeRowMode) {
-
-			// not supported.
-			this.core.logError("The method autoResizeRows is not supported in 1.5. It will be supported starting from 2.0.");
-		},
-
-		/**
-		 * Resize the columns width according to the specified parameters.
-		 *
-		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
-		 * @param autoSizeColumnMode {String} Autosize mode: one of "allCellsExceptHeader","allCells", "displayedCellsExceptHeader", "displayedCells".
-		 */
-		autoResizeColumns: function (columnIndex, autoSizeColumnMode) {
-
-			// not supported.
-			this.core.logError("The method autoResizeColumns is not supported in 1.5. It will be supported starting from 2.0.");
-		},
-
-		/**
-		 * Resize the row headers height according to the specified parameters.
-		 *
-		 * @param rowIndex {Integer} Index of the row to resize. -1 for all rows.
-		 * @param autoSizeRowMode {String} Autosize mode: one of "autoSizeToAllHeaders", "autoSizeToDisplayedHeaders", "autoSizeToFirstHeader".
-		 */
-		autoResizeRowHeaders: function (rowIndex, autoSizeRowMode) {
-
-			// not supported.
-			this.core.logError("The method autoResizeRowHeaders is not supported in 1.5. It will be supported starting from 2.0.");
-		},
-
-		/**
-		 * Resize the column headers's height according to the specified parameters.
-		 *
-		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
-		 */
-		autoResizeColumnHeaders: function (columnIndex) {
-
-			// not supported.
-			this.core.logError("The method autoResizeColumnHeaders is not supported in 1.5. It will be supported starting from 2.0.");
-		},
+		/* =======================================================================
+		 * End AutoSize implementation
+		 * =======================================================================*/
 
 		/**
 		 * Reorders all columns to new overall positions. Will fire one "orderChanged" event
@@ -2665,6 +3071,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				headers[i].dispose();
 		}
 
+		this._disposeObjects("__measuringHeader");
 	}
 
 });

@@ -155,7 +155,7 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 				className = className || (colStyle != null ? colStyle.renderer : null);
 
 				if (className) {
-					if (className.indexOf(".") == -1)
+					if (className.indexOf(".") === -1)
 						className = "wisej.web.datagrid.cellRenderer." + className;
 				}
 			}
@@ -394,7 +394,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 			// expanded or collapsed?
 			var data = cellInfo.rowData;
-			if (cellInfo.xPos == 0
+			if (cellInfo.xPos === 0
 				&& !cellInfo.scroller.isFrozenPane()
 				&& !cellInfo.scroller.isRowHeaderPane()
 				&& data && data.expanded !== undefined) {
@@ -431,7 +431,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			var table = cellInfo.table;
 			var data = cellInfo.rowData;
 			var cellValue = this._getCellValue(cellInfo);
-			var cellStyle = this._resolveCellStyle(cellInfo);
+			var cellStyle = this._resolveContentStyle(cellInfo);
+			var cellCss = cellStyle ? cellStyle.css : "";
 			var vAlign = cellStyle ? cellStyle.verticalAlign : null;
 
 			// if this is a tree-cell, add the open/close icon.
@@ -448,6 +449,10 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 						"<div role='spacer' class='", this._contentSpacerClassName,
 						"' style='padding-left:", paddingLeft, "px");
 
+					// copy the background and close the element.
+					if (cellStyle.backgroundColor)
+						htmlArr.push(";background-color:", cellStyle.backgroundColor);
+
 					htmlArr.push("'></div>");
 				}
 
@@ -458,14 +463,15 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				else
 					htmlArr.push("<div role='spacer' class='", this._contentButtonSpacerClassName);
 
+				// copy the background and close the element.
+				if (cellStyle.backgroundColor)
+					htmlArr.push("' style='background-color:", cellStyle.backgroundColor);
 				htmlArr.push("'></div>");
 			}
 
 			htmlArr.push(
-				"<div role='content' class='",
-				this._contentClassName,
-				"'>"
-			);
+				"<div role='content' class='", this._contentClassName, "' ",
+				"style='", cellCss, "'>");
 
 			// middle is the default.
 			vAlign = vAlign || "middle";
@@ -611,16 +617,15 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		 */
 		_getCellStyle: function (cellInfo) {
 
-			var cellStyle = this._resolveCellStyle(cellInfo);
-			var cellCss = (cellStyle ? cellStyle.css : "") || "";
+			var style = cellInfo.style || "";
 
 			// if the cell spans over the next cells, add the reverse z-index.
-			if (cellCss && !qx.lang.String.endsWith(cellCss, ";"))
-				cellCss += ";";
+			if (style && !qx.lang.String.endsWith(style, ";"))
+				style += ";";
 
-			cellCss += "z-index:" + ((10000 - cellInfo.xPos) || 0) + "";
+			style += "z-index:" + ((10000 - cellInfo.xPos) || 0) + "";
 
-			return cellCss;
+			return style;
 		},
 
 		/**
@@ -644,7 +649,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		 *		- grid default cell style + column style + row Style + cell style
 		 *		- the values are merged, therefore the last style to be applied takes precedence.
 		 */
-		_resolveCellStyle: function (cellInfo) {
+		_resolveContentStyle: function (cellInfo) {
 
 			var table = cellInfo.table;
 			var rowData = cellInfo.rowData;
@@ -1144,7 +1149,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			this._contentButtonSpacerClassName = styleMgr.getCssClass(appearance + "/open", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
 			this._contentExpandedClassName = styleMgr.getCssClass(appearance + "/open", { expanded: true }, wisej.web.datagrid.CellRenderer.DEFAULT_OPEN_CSS);
 			this._contentCollapsedClassName = styleMgr.getCssClass(appearance + "/open", { collapsed: true }, wisej.web.datagrid.CellRenderer.DEFAULT_OPEN_CSS);
-		},
+		}
 
 	}
 });
@@ -1217,9 +1222,9 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.CheckBoxCell", {
 			this._contentCheckBoxClassName = styleMgr.getCssClass(appearance, {}, wisej.web.datagrid.cellRenderer.CheckBoxCell.DEFAULT_CHECKBOX_CSS);
 			this._contentCheckBoxCheckedClassName = styleMgr.getCssClass(appearance, { checked: true }, wisej.web.datagrid.cellRenderer.CheckBoxCell.DEFAULT_CHECKBOX_CSS);
 			this._contentCheckBoxUndeterminedClassName = styleMgr.getCssClass(appearance, { undetermined: true }, wisej.web.datagrid.cellRenderer.CheckBoxCell.DEFAULT_CHECKBOX_CSS);
-		},
+		}
 
-	},
+	}
 });
 
 
@@ -1253,14 +1258,15 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ImageCell", {
 		 */
 		_getContentHtml: function (cellInfo) {
 
-			var cellStyle = this._resolveCellStyle(cellInfo);
+			var cellStyle = this._resolveContentStyle(cellInfo);
+			var cellCss = cellStyle ? cellStyle.css : "";
 			var value = this._getCellValue(cellInfo);
 
 			var htmlArr =
 				[
 					"<div role='content' class='",
-					this._contentClassName,
-					"'>"
+					this._contentClassName, "' ",
+					"style='", cellCss, "'>"
 				];
 
 			if (value && value.source) {
@@ -1300,9 +1306,9 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ImageCell", {
 			htmlArr.push("</div>");
 
 			return htmlArr.join("");
-		},
+		}
 
-	},
+	}
 });
 
 
@@ -1321,7 +1327,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.DateFieldCell", {
 		 * Appearance key for the cell renderer.
 		 */
 		appearance: { init: "table-datefield-cell", refine: true },
-	},
+	}
 });
 
 
@@ -1340,7 +1346,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ComboBoxCell", {
 		 * Appearance key for the cell renderer.
 		 */
 		appearance: { init: "table-combobox-cell", refine: true },
-	},
+	}
 });
 
 
@@ -1403,7 +1409,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ButtonCell", {
 			// we cannot handle it in the code because cells are not widgets.
 			styleMgr.createCssPseudoClass(this._buttonClassName + ":hover", appearance, { hovered: true }, "");
 			styleMgr.createCssPseudoClass(this._buttonClassName + ":active", appearance, { pressed: true }, "");
-		},
+		}
 	}
 });
 
@@ -1504,7 +1510,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.LinkCell", {
 			}
 
 			return "";
-		},
+		}
 	}
 
 });
@@ -1566,6 +1572,55 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.RowHeader", {
 				state.rightToLeft = true;
 
 			return state;
+		},
+
+		// overridden.
+		// set the background color for the row header cells on the
+		// outer cell element.
+		_getCellStyle: function (cellInfo) {
+
+			var style = cellInfo.style || "";
+
+			// add the background color.
+			var backColor = null;
+			var rowData = cellInfo.rowData;
+			var columnIndex = cellInfo.col;
+			var colStyle = cellInfo.columnModel.getColumnStyle(columnIndex);
+			var cellStyle = rowData.styles ? rowData.styles[columnIndex] : null;
+
+			if (colStyle.backgroundColor)
+				backColor = colStyle.backgroundColor;
+			if (cellStyle && cellStyle.backgroundColor)
+				backColor = cellStyle.backgroundColor;
+
+			if (backColor) {
+				style += "background-color:"
+					+ this._colorMgr.resolve(backColor)
+					+ ";";
+			}
+
+			// if the cell spans over the next cells, add the reverse z-index.
+			if (style && !qx.lang.String.endsWith(style, ";"))
+				style += ";";
+
+			style += "z-index:" + ((10000 - cellInfo.xPos) || 0);
+
+			return style;
+		},
+
+		// overridden.
+		// remove the background color, we can't set it on the content cell
+		// because it would override the cell's row indicator. we set the background
+		// color to the outer cell instead.
+		_resolveContentStyle: function (cellInfo) {
+
+			var style = this.base(arguments, cellInfo);
+			if (style.backgroundColor) {
+				delete style.backgroundColor;
+				style.css = undefined;
+				style.css = qx.bom.element.Style.compile(style);
+			}
+			return style;
 		},
 
 		/**

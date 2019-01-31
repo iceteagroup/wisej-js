@@ -173,7 +173,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		open: function () {
 
 			var popup = this.getChildControl("popup");
-			if (this.getDropDownStyle() == "simple") {
+			if (this.getDropDownStyle() === "simple") {
 				popup.placeToWidget(this);
 				popup.show();
 			}
@@ -421,7 +421,7 @@ qx.Class.define("wisej.web.ComboBox", {
 
 				var list = this.getChildControl("list");
 
-				if (value == null || value == -1) {
+				if (value == null || value === -1) {
 					list.resetSelection();
 				}
 				else {
@@ -536,7 +536,7 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			// update the label when the combobox is not editable (DropDownList)
 			// and the selection is empty.
-			if (this.getSelectedIndex() == -1) {
+			if (this.getSelectedIndex() === -1) {
 
 				var labelfield = this.getChildControl("labelfield");
 				labelfield.setValue(value);
@@ -569,7 +569,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (value.length == 0 && (old == null || old.length == 0))
 				return;
 
-			if (this.getDropDownStyle() == "simple") {
+			if (this.getDropDownStyle() === "simple") {
 				wisej.web.ToolContainer.install(this, this, value, "left", { row: 0, column: 1 });
 				wisej.web.ToolContainer.install(this, this, value, "right", { row: 0, column: 3 });
 			}
@@ -665,11 +665,11 @@ qx.Class.define("wisej.web.ComboBox", {
 		_onPopupChangeVisibility: function (e) {
 
 			// update the state and bypass the base method.
-			e.getData() == "visible"
+			e.getData() === "visible"
 				? this.addState("popupOpen")
 				: this.removeState("popupOpen");
 
-			if (this.getDropDownStyle() == "simple")
+			if (this.getDropDownStyle() === "simple")
 				return;
 
 			var popup = this.getChildControl("popup");
@@ -689,7 +689,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (popup.isVisible()) {
 				this.__synchListWithText(this.getValue());
 			}
-			else if (e.getOldData() == "visible") {
+			else if (e.getOldData() === "visible") {
 				if (this.isFocusable())
 					this.tabFocus();
 			}
@@ -701,7 +701,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		// overridden
 		_onListPointerDown: function (e) {
 
-			if (this.getDropDownStyle() == "simple") {
+			if (this.getDropDownStyle() === "simple") {
 				if (this.isFocusable())
 					this.tabFocus();
 			}
@@ -768,7 +768,7 @@ qx.Class.define("wisej.web.ComboBox", {
 					// is not editable ("dropDownList") otherwise
 					// simply set the selected index to -1 and 
 					// keep the invalid text.
-					if (this.getDropDownStyle() != "dropDownList")
+					if (this.getDropDownStyle() !== "dropDownList")
 						this.setSelectedIndex(-1);
 					else
 						this.setValue("");
@@ -880,7 +880,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (isOpen) {
 				this.base(arguments, e);
 			}
-			else if (this.getDropDownStyle() == "dropDownList") {
+			else if (this.getDropDownStyle() === "dropDownList") {
 				this.getChildControl("list").handleKeyPress(e);
 			}
 		},
@@ -895,7 +895,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (this.isReadOnly())
 				return;
 
-			if (this.getDropDownStyle() == "dropDownList")
+			if (this.getDropDownStyle() === "dropDownList")
 				return;
 
 			// handle key inputs when we do have a textfield.
@@ -936,7 +936,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			list._onKeyInput(e);
 			e.stop();
 
-			if (this.getDropDownStyle() != "dropDownList") {
+			if (this.getDropDownStyle() !== "dropDownList") {
 				var textfield = this.getChildControl("textfield");
 				textfield.selectAllText();
 			}
@@ -947,7 +947,7 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			var textfield = this.getChildControl("textfield");
 			var text = textfield.getValue();
-			var text = text.substr(0, textfield.getTextSelectionStart()) + e.getChar();
+			text = text.substr(0, textfield.getTextSelectionStart()) + e.getChar();
 
 			// find it in the drop down list.
 			var list = this.getChildControl("list");
@@ -1173,8 +1173,8 @@ qx.Class.define("wisej.web.combobox.DropDown", {
 
 		canAutoHide: function (target) {
 			var button = this.owner.getChildControl("button");
-			return button != target
-				&& target != this.owner
+			return button !== target
+				&& target !== this.owner
 				&& !qx.ui.core.Widget.contains(button, target);
 		}
 	}
@@ -1222,13 +1222,16 @@ qx.Class.define("wisej.web.UserComboBox", {
 		// interface implementation
 		setValue: function (value) {
 
-			var textField = this.getChildControl("textfield");
-			var labelField = this.getChildControl("labelfield");
+			var textfield = this.getChildControl("textfield");
+			var labelfield = this.getChildControl("labelfield");
 
-			if (textField.isVisible())
-				textField.setValue(value);
-			else if (labelField.isVisible())
-				labelField.setValue(value);
+			if (textfield.isVisible()) {
+				textfield.setValue(value);
+			}
+			else if (labelfield.isVisible()) {
+				labelfield.setValue(value);
+				labelfield.resetTextColor();
+			}
 		},
 
 		/**
@@ -1276,7 +1279,7 @@ qx.Class.define("wisej.web.UserComboBox", {
 		// overridden.
 		_applyVisibility: function (value, old) {
 
-			if (value != "visible")
+			if (value !== "visible")
 				this.close();
 
 			this.base(arguments, value, old);
@@ -1298,7 +1301,7 @@ qx.Class.define("wisej.web.UserComboBox", {
 			var isOpen = this.getChildControl("popup").isVisible();
 			if (isOpen) {
 
-				if (e.getKeyIdentifier() != "Escape") {
+				if (e.getKeyIdentifier() !== "Escape") {
 					this.getChildControl("list").handleKeyPress(e);
 					return;
 				}
@@ -1334,9 +1337,9 @@ qx.Class.define("wisej.web.UserComboBox", {
 		__checkFocusedWidget: function () {
 
 			var focused = qx.ui.core.FocusHandler.getInstance().getFocusedWidget();
-			if (focused && focused != this && !qx.ui.core.Widget.contains(this, focused)) {
+			if (focused && focused !== this && !qx.ui.core.Widget.contains(this, focused)) {
 				var dropDown = this.getDropDown();
-				if (focused != dropDown && !qx.ui.core.Widget.contains(dropDown, focused)) {
+				if (focused !== dropDown && !qx.ui.core.Widget.contains(dropDown, focused)) {
 					this.close();
 				}
 			}

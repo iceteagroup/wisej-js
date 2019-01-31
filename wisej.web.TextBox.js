@@ -231,7 +231,7 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		_applyAutoComplete: function (value, old) {
 
 			var textField = this.getChildControl("textfield");
-			textField.getContentElement().setAttribute("autocomplete", value == "default" ? null : value);
+			textField.getContentElement().setAttribute("autocomplete", value === "default" ? null : value);
 		},
 
 		/**
@@ -659,7 +659,7 @@ qx.Class.define("wisej.web.TextArea", {
 		acceptsTab: { init: false, check: "Boolean" },
 
 		/**
-		 * Determines which scrollbars should be visible: 1 = Horizontal, 2 = Vertical, 3 = Both.
+		 * Determines which scrollbars should be visible: 0 = None, 1 = Horizontal, 2 = Vertical, 3 = Both, 4 = Hidden.
 		 */
 		scrollBars: { init: 3, check: "PositiveInteger", apply: "_applyScrollBars" },
 	},
@@ -698,7 +698,7 @@ qx.Class.define("wisej.web.TextArea", {
 			switch (identifier) {
 
 				case "Enter":
-					if (modifiers == 0) {
+					if (modifiers === 0) {
 						if (this.getAcceptsReturn())
 							e.stopPropagation();
 						else if (!this.__hasAcceptButton())
@@ -716,7 +716,7 @@ qx.Class.define("wisej.web.TextArea", {
 			switch (identifier) {
 
 				case "Enter":
-					if (modifiers == 0) {
+					if (modifiers === 0) {
 						if (this.getAcceptsReturn())
 							e.stopPropagation();
 						else if (!this.__hasAcceptButton())
@@ -728,7 +728,7 @@ qx.Class.define("wisej.web.TextArea", {
 
 					if (this.getAcceptsTab()) {
 
-						if (modifiers == 0) {
+						if (modifiers === 0) {
 
 							e.stop();
 
@@ -741,7 +741,7 @@ qx.Class.define("wisej.web.TextArea", {
 							this.setValue(value);
 							this.setTextSelection(start + 1, start + 1);
 
-						} else if (modifiers == qx.event.type.Dom.SHIFT_MASK) {
+						} else if (modifiers === qx.event.type.Dom.SHIFT_MASK) {
 
 							e.stop();
 							qx.ui.core.FocusHandler.getInstance().focusNext(this);
@@ -751,11 +751,22 @@ qx.Class.define("wisej.web.TextArea", {
 			}
 		},
 
+		// check if the container form defines an accept button.
+		// if the form is an mdi child, check also the parent mdi.
 		__hasAcceptButton: function () {
 
 			var container = this.getTopLevelContainer();
-			if (container && container.getAcceptButton)
-				return container.getAcceptButton() != null;
+			if (container instanceof wisej.web.Form) {
+				if (container.getAcceptButton())
+					return true;
+
+				if (container.isMdiChild()) {
+					container = container.getMdiParent();
+					if (container instanceof wisej.web.Form) {
+						return container.getAcceptButton();
+					}
+				}
+			}
 
 			return false;
 		}

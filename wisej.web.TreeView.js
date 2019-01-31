@@ -1051,7 +1051,7 @@ qx.Class.define("wisej.web.TreeNode", {
 
 			this.base(arguments, state);
 
-			if (state == "selected" || state == "opened")
+			if (state === "selected" || state === "opened")
 				this._updateIcon();
 
 		},
@@ -1060,7 +1060,7 @@ qx.Class.define("wisej.web.TreeNode", {
 
 			this.base(arguments, state);
 
-			if (state == "selected" || state == "opened")
+			if (state === "selected" || state === "opened")
 				this._updateIcon();
 		},
 

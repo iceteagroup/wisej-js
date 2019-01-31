@@ -140,7 +140,7 @@ qx.Class.define("wisej.web.Upload", {
 		 *
 		 * When true, the Upload widget shows the ajax loader when uploading files.
 		 */
-		showLoader: { init: true, check: "Boolean" },
+		showLoader: { init: true, check: "Boolean" }
 	},
 
 	statics: {
@@ -625,6 +625,6 @@ qx.Class.define("wisej.web.Upload", {
 
 			// fire the "valueChanged" event.
 			this.fireDataEvent("valueChanged", fileList);
-		},
+		}
 	}
 });

@@ -435,6 +435,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			this._updateContent();
 			this._updateFocusIndicator();
 			this.updateVerScrollBarMaximum();
+			this.__tablePane.updateContent(true);
 
 		},
 
@@ -1449,10 +1450,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				return;
 			}
 
+			var role = wisej.utils.Widget.getTargetRole(e.getOriginalTarget());
+
 			switch (e.getType()) {
 
 				case "pointerout":
-					this.__handleEvent(e, null, null);
+					this.__handleEvent(e, null, null, null);
 					return;
 
 				case "pointermove":
@@ -1460,7 +1463,9 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					// avoid processing pointer movements unless the server component
 					// subscribed to the relevant events.
 					var table = this.getTable();
-					if (!(table.isWired("gridCellMouseEnter") || table.isWired("gridCellMouseLeave") || table.isWired("gridCellMouseMove")))
+					if (!table.isWired("gridCellMouseEnter")
+						&& !table.isWired("gridCellMouseLeave")
+						&& !table.isWired("gridCellMouseMove"))
 						return;
 
 					break;
@@ -1469,7 +1474,8 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					var pageX = e.getDocumentLeft();
 					var pageY = e.getDocumentTop();
 					if (this._getResizeRowForPageX(pageX, pageY) > -1 || this._getResizeColumnForPageX(pageX) > -1)
-						return;
+						role = "resize";
+
 					break;
 			}
 
@@ -1478,7 +1484,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				var pageY = e.getDocumentTop();
 				var column = this._getColumnForPageX(pageX);
 				var row = this._getRowForPagePos(pageX, pageY);
-				this.__handleEvent(e, column, row);
+				this.__handleEvent(e, column, row, role);
 
 			}
 		},
@@ -1495,17 +1501,21 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				}
 			}
 
+			var role = wisej.utils.Widget.getTargetRole(e.getOriginalTarget());
+
 			switch (e.getType()) {
 
 				case "pointerout":
-					this.__handleEvent(e, null, null);
+					this.__handleEvent(e, null, null, null);
 					return;
 
 				case "pointermove":
 					// avoid processing pointer movements unless the server component
 					// subscribed to the relevant events.
 					var table = this.getTable();
-					if (!table.isWired("gridCellMouseEnter") && !table.isWired("gridCellMouseLeave") && !table.isWired("gridCellMouseMove"))
+					if (!table.isWired("gridCellMouseEnter")
+						&& !table.isWired("gridCellMouseLeave")
+						&& !table.isWired("gridCellMouseMove"))
 						return;
 
 					break;
@@ -1513,18 +1523,19 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				case "click":
 					var pageX = e.getDocumentLeft();
 					if (this._getResizeColumnForPageX(pageX) > -1)
-						return;
+						role = "resize";
+
 					break;
 			}
 
 			if (this.__resizeRow == null && this.__resizeColumn == null) {
 				var pageX = e.getDocumentLeft();
 				var column = this._getColumnForPageX(pageX);
-				this.__handleEvent(e, column, -1);
+				this.__handleEvent(e, column, -1, role);
 			}
 		},
 
-		__handleEvent: function (e, column, row) {
+		__handleEvent: function (e, column, row, role) {
 
 			// translated the event.
 			var type = e.getType();
@@ -1532,27 +1543,27 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			switch (type) {
 
 				case "tap":
-					this.__fireCellEvent("gridCellTap", e, column, row);
+					this.__fireCellEvent("gridCellTap", e, column, row, role);
 					break;
 
 				case "dbltap":
-					this.__fireCellEvent("gridCellDblTap", e, column, row);
+					this.__fireCellEvent("gridCellDblTap", e, column, row, role);
 					break;
 
 				case "click":
-					this.__fireCellEvent("gridCellClick", e, column, row);
+					this.__fireCellEvent("gridCellClick", e, column, row, role);
 					break;
 
 				case "dblclick":
-					this.__fireCellEvent("gridCellDblClick", e, column, row);
+					this.__fireCellEvent("gridCellDblClick", e, column, row, role);
 					break;
 
 				case "pointerdown":
-					this.__fireCellEvent("gridCellMouseDown", e, column, row);
+					this.__fireCellEvent("gridCellMouseDown", e, column, row, role);
 					break;
 
 				case "pointerup":
-					this.__fireCellEvent("gridCellMouseUp", e, column, row);
+					this.__fireCellEvent("gridCellMouseUp", e, column, row, role);
 					break;
 
 				case "pointerout":
@@ -1562,7 +1573,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 							var table = this.getTable();
 							if (table.isWired("gridCellMouseLeave"))
-								this.__fireCellEvent("gridCellMouseLeave", e, this.__lastPointerCell.col, this.__lastPointerCell.row);
+								this.__fireCellEvent("gridCellMouseLeave", e, this.__lastPointerCell.col, this.__lastPointerCell.row, role);
 						}
 					}
 					break;
@@ -1575,16 +1586,16 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 							// leaving the previous cell?
 							if (this.__lastPointerCell.row != null && this.__lastPointerCell.col != null)
 								if (table.isWired("gridCellMouseLeave"))
-									this.__fireCellEvent("gridCellMouseLeave", e, this.__lastPointerCell.col, this.__lastPointerCell.row);
+									this.__fireCellEvent("gridCellMouseLeave", e, this.__lastPointerCell.col, this.__lastPointerCell.row, role);
 
 							// entering a new cell?
 							if (row != null && column != null)
 								if (table.isWired("gridCellMouseEnter"))
-									this.__fireCellEvent("gridCellMouseEnter", e, column, row);
+									this.__fireCellEvent("gridCellMouseEnter", e, column, row, role);
 						}
 
 						if (table.isWired("gridCellMouseMove") && row != null && column != null)
-							this.__fireCellEvent("gridCellMouseMove", e, column, row);
+							this.__fireCellEvent("gridCellMouseMove", e, column, row, role);
 					}
 					break;
 			}
@@ -1593,12 +1604,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			this.__lastPointerCell.col = column;
 		},
 
-		__fireCellEvent: function (type, e, column, row) {
-
-			if (column == null || row == null)
-				return;
-
-			var role = wisej.utils.Widget.getTargetRole(e.getOriginalTarget());
+		__fireCellEvent: function (type, e, column, row, role) {
 
 			this.getTable().fireEvent(
 				type,
@@ -1670,12 +1676,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			this.getApplicationRoot().setGlobalCursor(null);
 			this.setCursor(null);
-
-			// handle edit cell if available
-			if (this.isEditing()) {
-				var height = this._cellEditor.getBounds().height;
-				this._cellEditor.setUserBounds(0, 0, this.__lastResizeWidth, height);
-			}
 		},
 
 		_onPaneLoseCapture: function (e) {

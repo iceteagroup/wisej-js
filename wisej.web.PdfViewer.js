@@ -186,30 +186,7 @@ qx.Class.define("wisej.web.PdfViewer", {
 		 */
 		__toAbsoluteURL: function (url) {
 
-			if (!url)
-				return "";
-
-			// handle absolute URLs (with protocol-relative prefix)
-			// example: //domain.com/file.png
-			if (url.search(/^\/\//) === 0) {
-				return window.location.protocol + url;
-			}
-
-			// handle absolute URLs (with explicit origin)
-			// example: http://domain.com/file.png
-			if (url.search(/:\/\//) > 0) {
-				return url;
-			}
-
-			// handle absolute URLs (without explicit origin)
-			// example: /file.png
-			if (url.search(/^\//) === 0) {
-				return window.location.origin + url;
-			}
-
-			// handle relative URLs
-			// example: file.png
-			return window.location.origin + window.location.pathname + url;
+			return qx.util.Uri.getAbsolute(url);
 		},
 
 		/**

@@ -383,30 +383,42 @@ qx.Class.define("wisej.utils.Widget", {
 		 *
  		 * @param child {qx.ui.core.Widget} The child widget to check.
 		 */
-		canExecute: function (child) {
+		canExecute: function (target) {
 
-			if (!child)
+			if (!target)
 				return false;
 
 			// a form must be active.
-			if (child instanceof wisej.web.Form) {
-				if (!child.isActive())
+			if (target instanceof wisej.web.Form) {
+				if (!target.isActive())
 					return false;
 			}
 
 			// the top level container must be active:
 			//   - current main page, or
 			//   - current desktop, or
-			//   - active floating form.
-			var topLevel = child.getTopLevelContainer();
+			//   - active floating form, or
+			//   - active mdi child form.
+			var topLevel = target.getTopLevelContainer();
 			if (topLevel && topLevel.isActive()) {
 
 				var focusHandler = qx.ui.core.FocusHandler.getInstance();
-				var activeWidget = focusHandler.getActiveWidget();
+				var activeWidget = this.findWisejComponent(focusHandler.getActiveWidget());
+
+				// ensure that the active widget that triggered the
+				// accelerator has the same parent as the target of the accelerator.
+				if (activeWidget) {
+					var activeContainer = activeWidget.getTopLevelContainer();
+
+					if (activeContainer != topLevel
+						&& !qx.ui.core.Widget.contains(topLevel, activeContainer)) {
+						return false;
+					}
+				}
 
 				return activeWidget == null
-						|| activeWidget == topLevel
-						|| activeWidget == Wisej.Platform.getRoot()
+						|| activeWidget === topLevel
+						|| activeWidget === Wisej.Platform.getRoot()
 						|| qx.ui.core.Widget.contains(topLevel, activeWidget);
 			}
 
@@ -441,6 +453,7 @@ qx.Class.define("wisej.utils.Widget", {
 
 			var ownerName = null;
 			var openerName = null;
+			var container = null;
 			var containerName = null;
 
 			if (opener) {
@@ -448,7 +461,7 @@ qx.Class.define("wisej.utils.Widget", {
 				if (opener.isWisejMenu) {
 
 					// determine "opener" and "container" for floating menus.
-					var container = opener.findContainer();
+					container = opener.findContainer();
 					if (container && container.isWisejComponent) {
 						container = container.getTopLevelContainer();
 					}
@@ -476,15 +489,15 @@ qx.Class.define("wisej.utils.Widget", {
 
 					// determine "opener" and "container" for floating popups
 					// created by parentless widgets (i.e. table editors with a drop down).
-					var owner = opener.getUserData("owner");
+					owner = opener.getUserData("owner");
 					if (owner && owner.isWisejComponent) {
 						ownerName = owner.getName(); // dataGrid1
-						var container = owner.getTopLevelContainer();
+						container = owner.getTopLevelContainer();
 						if (container && container.isWisejComponent) {
 							containerName = container.getName(); // page1
 						}
 					}
-					var opener = opener.getUserData("opener");
+					opener = opener.getUserData("opener");
 					if (opener && opener.isWisejComponent) {
 						openerName = opener.getName(); // dataGrid1
 					}
@@ -500,10 +513,10 @@ qx.Class.define("wisej.utils.Widget", {
 						containerName = container.getName(); // page1
 					}
 
-					var owner = target.getUserData("owner");
+					owner = target.getUserData("owner");
 					if (owner && owner.isWisejComponent) {
 						ownerName = owner.getName(); // dataGrid1
-						var container = owner.getTopLevelContainer();
+						container = owner.getTopLevelContainer();
 						if (container && container.isWisejComponent) {
 							containerName = container.getName(); // page1
 						}
@@ -521,7 +534,7 @@ qx.Class.define("wisej.utils.Widget", {
 				el.setAttributes({
 					"owner": ownerName,
 					"opener": openerName,
-					"container": containerName,
+					"container": containerName
 				});
 			}
 
@@ -629,7 +642,32 @@ qx.Class.define("wisej.utils.Widget", {
 			if (acc && acc != target) {
 				this.setAutomationID(acc);
 			}
+		},
+
+		/**
+		 * Parses the css string into a style map.
+		 * @param {any} css
+		 */
+		parseCss: function (css) {
+
+			var el = this.__cssParseElement;
+
+			// create the element used to parse.
+			if (el == null) {
+				el = this.__cssParseElement = qx.dom.Element.create("div");
 		}
+
+			el.setAttribute("style", css);
+
+			var map = {};
+			var style = el.style;
+			for (var i = 0, l = style.length; i < l; i++) {
+				map[style[i]] = style[style[i]];
+			}
+
+			return map;
+		},
+		__cssParseElement: null
 	}
 
 });

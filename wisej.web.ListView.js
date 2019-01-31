@@ -610,6 +610,25 @@ qx.Class.define("wisej.web.ListView", {
 				this.gridView.scrollCellVisible(col, -1);
 		},
 
+		/**
+		 * Automatically resizes the specified column.
+		 * 
+		 * @param index {Integer} index of the column to resize; -1 for all.
+		 * @param sizeMode {String} one of "headerSize", "columnContent".
+		 */
+		autoResizeColumns: function (index, sizeMode) {
+
+			switch (sizeMode) {
+				case "headerSize":
+					this.gridView.autoResizeColumns(index, "columnHeader");
+					break;
+
+				case "columnContent":
+					this.gridView.autoResizeColumns(index, "allCells");
+					break;
+			}
+		},
+
 		// overridden
 		_createChildControlImpl: function (id, hash) {
 			var control;

@@ -26,6 +26,9 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 
 	statics: {
 
+		/** custom stylesheet embedded in the theme. */
+		__stylesheet: null,
+
 		/**
 		 * loadTheme
 		 *
@@ -277,6 +280,18 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 			if (!theme)
 				return;
 
+			// process the settings.
+			// values have to be replaced into the JSON string.
+			// other settings have to be applied according to the type of setting.
+			theme = this.__processSettings(theme);
+
+			// remove an previous stylesheet rules.
+			var stylesheet = wisej.web.themeRoller.Manager.__stylesheet;
+			if (stylesheet) {
+				qx.bom.Stylesheet.removeSheet(stylesheet);
+				wisej.web.themeRoller.Manager.__stylesheet = null;
+			}
+
 			// load the appearances from the theme.
 			for (var name in theme) {
 
@@ -297,7 +312,64 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 					case "appearances":
 						this.__setAppearances(themeRoller, theme[name]);
 						break;
+
+					case "stylesheet":
+						this.__applyStylesheetRules(theme[name].rules);
+						break;
 				}
+			}
+		},
+
+		__processSettings: function (theme) {
+
+			if (theme.settings) {
+
+				// process substitutions.
+				var keys = [];
+				var values = [];
+				var settings = theme.settings;
+				for (var name in settings) {
+					keys.push("\"$" + name + "\"");
+					values.push(settings[name]);
+				}
+				if (keys.length > 0) {
+					var json = JSON.stringify(theme);
+
+					for (var i = 0; i < keys.length; i++) {
+						json = json.replace(keys[i], values[i]);
+					}
+
+					theme = JSON.parse(json);
+				}
+
+				// process special keys.
+				var properties =
+				{
+					"native-scrollbars": "qx.nativeScrollBars",
+					"overlapped-scrollbars": "os.scrollBarOverlayed"
+				};
+				for (var key in properties) {
+					if (settings[key] !== undefined) {
+
+						var option = properties[key];
+						qx.core.Environment.getChecks()[option] = undefined;
+						qx.core.Environment.invalidateCacheKey(option);
+						qx.core.Environment.add(option, settings[key]);
+					}
+				}
+			}
+			return theme;
+		},
+
+		__applyStylesheetRules: function (rules) {
+
+			if (rules && rules.length > 0) {
+
+				var css = rules.join("");
+
+				// create the theme stylesheet.
+				stylesheet = qx.bom.Stylesheet.createElement(css);
+				wisej.web.themeRoller.Manager.__stylesheet = stylesheet;
 			}
 		},
 

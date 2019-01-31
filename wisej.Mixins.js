@@ -128,6 +128,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 		 *  - MainPage
 		 *  - Desktop
 		 *  - Form
+		 *  - MdiChild
 		 */
 		getTopLevelContainer: function () {
 
@@ -135,10 +136,22 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 				return this;
 
 			if (this instanceof qx.ui.core.Widget) {
-				var parent = this;
-				for (parent = parent.getLayoutParent();
-					parent != null && !(parent.isWisejControl && parent.isTopLevel());
-					parent = parent.getLayoutParent());
+				var parent = this.getLayoutParent();
+				while (parent) {
+
+					if (parent.isWisejControl) {
+
+						// stop at the first mdi child form.
+						if (parent instanceof wisej.web.Form && parent.isMdiChild())
+							break;
+
+						// stop at the first top level widget: Form, Page, Desktop
+						if (parent.isTopLevel())
+							break;
+					}
+
+					parent = parent.getLayoutParent();
+				}
 
 				return parent;
 			}
@@ -1235,7 +1248,8 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		wisej.mixin.MWisejComponent,
 		wisej.mixin.MBackgroundImage,
 		qx.ui.core.MResizable,
-		qx.ui.core.MMovable],
+		qx.ui.core.MMovable
+	],
 
 	/**
 	 * construct
@@ -1294,19 +1308,21 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		// remove all wisej wired handlers.
 		this.setWiredEvents(null);
 
-		var parent = this.getParent();
-
 		// unregister from the "App" namespace.
 		if (this.isTopLevel())
 			this.core.unregisterComponent(this, window.App);
 
 		// unregister from parent and clear the parent reference.
+		var parent = this.getParent();
 		if (parent) {
 
 			this.core.unregisterComponent(this, parent);
 
 			qx.util.PropertyUtil.setUserValue(this, "parent", null);
 		}
+
+		// release related objects.
+		this._disposeObjects("__blocker");
 	},
 
 	properties: {
@@ -1439,13 +1455,13 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		accessibility: { init: null, check: "Map", apply: "_applyAccessibility" },
 
 		/**
-		 * showLoader property.
+		 * AutoShowLoader property.
 		 * 
 		 * When true, the ajax loader blocks the browser when the "execute" event is
 		 * fired. NOTE: It's up to the server control to hide the loader once
 		 * execution is completed.
 		 */
-		showLoader: { init: false, check: "Boolean", apply: "_applyShowLoader" },
+		autoShowLoader: { init: false, check: "Boolean", apply: "_applyAutoShowLoader" },
 
 		/**
 		 * EnableTouchEvents property.
@@ -1464,6 +1480,11 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		 * List of events that causes this component to be marked dirty.
 		 */
 		stateEvents: { init: ["move", "resize", "changeVisibility", "changeEnabled"], check: "Array", apply: "_applyStateEvents", nullable: true },
+
+		/**
+		 *  Map of custom defined theme states, initialization script, event listeners and css class names.
+		 */
+		clientConfig: { check: "Map", apply: "_applyClientConfig" }
 	},
 
 	members: {
@@ -1476,6 +1497,9 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		// indicates that the component is in the middle
 		// of updating its state.
 		__inSetState: false,
+
+		/** blocker widget. */
+		__blocker: null,
 
 		/**
 		 * updateState
@@ -1671,6 +1695,38 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		},
 
 		/**
+		 * Shows the ajax loader over the widget.
+		 */
+		showLoader: function () {
+			this.getBlocker().block();
+		},
+
+		/**
+		 * Hides the ajax loader over the widget.
+		 */
+		hideLoader: function () {
+			this.getBlocker().forceUnblock();
+		},
+
+		/**
+		 * Returns a {qx.ui.core.Blocker} widget that
+		 * overlays this widget.
+		 */
+		getBlocker: function () {
+
+			if (!this.__blocker) {
+
+				var blocker = new qx.ui.core.Blocker(this);
+				blocker.setColor("loaderBackground");
+				blocker.setLoaderImage("ajax-loader");
+
+				this.__blocker = blocker;
+			}
+
+			return this.__blocker;
+		},
+
+		/**
 		 * Applies the TabIndex property.
 		 */
 		_applyTabIndex: function (value) {
@@ -1769,9 +1825,9 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		},
 
 		/**
-		 * Applies the showLoader property.
+		 * Applies the autoShowLoader property.
 		 */
-		_applyShowLoader: function (value, old) {
+		_applyAutoShowLoader: function (value, old) {
 
 			if (this.__showLoaderListenerId) {
 				this.removeListenerById(this.__showLoaderListenerId);
@@ -2177,6 +2233,114 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		},
 
 		/**
+		 * Applies the clientConfig property.
+		 */
+		_applyClientConfig: function (value, old) {
+
+			// "class"
+			// set the css class name.
+			if ((value && value.class) || (old && old.class)) {
+
+				var el = this.getContentElement();
+				var cssNames = (el.getAttribute("class") || "").split(" ");
+
+				// remove the old class list from the current class name.
+				if (old && old.class && cssNames.length > 0) {
+					var oldNames = old.class.split(" ");
+					qx.lang.Array.exclude(cssNames, oldNames);
+				}
+
+				// remove the new class list from the current class name
+				// to make sure the css class names are listed once.
+				if (value && value.class) {
+					var newNames = value.class.split(" ");
+					if (cssNames.length > 0)
+						qx.lang.Array.exclude(cssNames, newNames);
+
+					// now add new names back.
+					cssNames = cssNames.concat(newNames);
+				}
+
+				el.setAttribute("class", cssNames.join(" "));
+			}
+
+			// "style"
+			// set the custom style.
+			if ((value && value.style) || (old && old.style)) {
+
+				var el = this.getContentElement();
+
+				// remove the previously added styles.
+				if (old && old.style) {
+
+					var style = old.style;
+					for (var key in style) {
+						style[key] = null;
+					}
+					el.setStyles(style);
+				}
+
+				// add the new styles.
+				// the "style" property when set is just a string. we need
+				// to convert it to a collection of styles. the easiest
+				// way is to use a dummy div.
+				if (value && value.style) {
+					value.style = wisej.utils.Widget.parseCss(value.style);
+					el.setStyles(value.style);
+				}
+			}
+
+			// "states"
+			// update the custom states: value.states[].
+			if (old && old.states && old.states.length > 0) {
+				for (var i = 0, l = old.states.length; i < l; i++)
+					this.removeState(old.states[i]);
+			}
+			if (value && value.states && value.states.length > 0) {
+				for (var i = 0, l = value.states.length; i < l; i++)
+					this.addState(value.states[i]);
+			}
+
+			// don't execute the init or attach the listeners when in design  mode.
+			// we don't want custom code to run in the designer.
+			if (wisej.web.DesignMode)
+				return;
+
+			// "init"
+			// execute the init script once when the 
+			// widget is made visible the first time: value.init.
+			if (value && value.init && (!old || !old.init)) {
+				this.addListenerOnce("appear", function () {
+					var script = this.getClientConfig().init;
+					if (script) {
+						var func = new Function(script);
+						func.call(this);
+					}
+				}, this);
+			}
+
+			// "listeners"
+			// attach/detach custom listeners.
+			if (old && old.listeners && old.listeners.length > 0) {
+				for (var i = 0, l = old.listeners.length; i < l; i++) {
+					var id = old.listeners[i].id;
+					if (id) {
+						this.removeListenerById(id);
+					}
+				}
+			}
+			if (value && value.listeners && value.listeners.length > 0) {
+				for (var i = 0, l = value.listeners.length; i < l; i++) {
+					var name = value.listeners[i].event;
+					var script = value.listeners[i].javaScript;
+					if (name && script) {
+						value.listeners[i].id = this.addListener(name, new Function(script));
+					}
+				}
+			}
+		},
+
+		/**
 		 * If the widget is in design mode, this handler
 		 * fires the "render" event, which is used by the designer
 		 * to know that the widget is ready to be scraped.
@@ -2196,7 +2360,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				else
 					this.fireEvent("render");
 			}
-		},
+		}
 	}
 
 });
@@ -2270,13 +2434,13 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		shortcut: { check: "String", apply: "_applyShortcut", event: "changeShortcut" },
 
 		/**
-		 * showLoader property.
+		 * AutoShowLoader property.
 		 * 
 		 * When true, the ajax loader blocks the browser when the "execute" event is
 		 * fired. NOTE: It's up to the server control to hide the loader once
 		 * execution is completed.
 		 */
-		showLoader: { init: false, check: "Boolean", apply: "_applyShowLoader" },
+		autoShowLoader: { init: false, check: "Boolean", apply: "_applyAutoShowLoader" },
 
 		/**
 		 * Accessibility property.
@@ -2441,7 +2605,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		/**
 		 * Applies the showLoader property.
 		 */
-		_applyShowLoader: function (value, old) {
+		_applyAutoShowLoader: function (value, old) {
 
 			if (this.__showLoaderListenerId) {
 				this.removeListenerById(this.__showLoaderListenerId);

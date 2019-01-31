@@ -189,7 +189,6 @@ qx.Class.define("wisej.web.MessageBox", {
 					control = new qx.ui.basic.Label().set({
 						rich: true
 					});
-					control.getContentElement().setStyle("overflow", "auto");
 					this.add(control, { edge: "center" });
 					break;
 
@@ -269,6 +268,11 @@ qx.Class.define("wisej.web.MessageBox", {
 			// let the message box grow vertically if necessary.
 			this.invalidateLayoutCache();
 			message.invalidateLayoutCache();
+
+			if (messageBounds.height >= message.getMaxHeight()) {
+				message.getContentElement().setStyle("overflow", "auto");
+			}
+
 		},
 
 		__createButtons: function (buttons) {

@@ -437,8 +437,6 @@ qx.Class.define("wisej.web.TrackBar", {
 		// return the css rule for this component.
 		__getTickCssRule: function (pseudo) {
 
-			var stylesheet = null;
-
 			// create the shared stylesheet.
 			var stylesheet = wisej.web.TrackBar.__stylesheet;
 			if (!stylesheet) {

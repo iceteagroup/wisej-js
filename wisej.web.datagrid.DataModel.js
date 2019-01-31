@@ -384,7 +384,6 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 					isPointerAction: isPointerAction || false
 				};
 
-				this.fireEvent("metaDataChanged");
 				this.fireDataEvent("rowHeightChanged", data);
 			}
 		},

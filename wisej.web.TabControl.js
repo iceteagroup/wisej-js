@@ -759,7 +759,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 */
 
 		/**
-		 * Determines which scrollbars should be visible: 1 = Horizontal, 2 = Vertical, 3 = Both.
+		 * Determines which scrollbars should be visible: 0 = None, 1 = Horizontal, 2 = Vertical, 3 = Both, 4 = Hidden.
 		 */
 		scrollBars: { init: 3, check: "PositiveInteger", apply: "_applyScrollBars" },
 
@@ -1188,8 +1188,14 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			if (value) {
 				var scrollBars = this.getScrollBars();
+				if (scrollBars === 4 /*hide*/) {
+					scroller.setScrollbarY("hide");
+					scroller.setScrollbarX("hide");
+				}
+				else {
 				scroller.setScrollbarY((scrollBars & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
 				scroller.setScrollbarX((scrollBars & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
+			}
 			}
 			else {
 				scroller.setScrollbarX("off");
@@ -1260,8 +1266,14 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			if (this.isAutoScroll()) {
 				var scroller = this.__scroller;
+				if (value === 4 /*hide*/) {
+					scroller.setScrollbarY("hide");
+					scroller.setScrollbarX("hide");
+				}
+				else {
 				scroller.setScrollbarY((value & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
 				scroller.setScrollbarX((value & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
+			}
 			}
 		},
 

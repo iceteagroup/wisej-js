@@ -28,10 +28,6 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 
 		this.base(arguments, scroller);
 
-		// set the grow layout to make sure that the editing control
-		// always fills the focus indicator box.
-		this._setLayout(new qx.ui.layout.Grow());
-
 		// pass all pointer events through the focus indicator.
 		this.getContentElement().setStyles({
 			"pointer-events": "none",
@@ -52,7 +48,7 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 		// we disable all the pointer events.
 		addState: function (state) {
 
-			if (state == "editing") {
+			if (state === "editing") {
 				// capture pointer events.
 				this.getContentElement().setStyles({
 					"pointer-events": null,
@@ -69,7 +65,7 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 		// we re-enabled all the pointer events.
 		removeState: function (state) {
 
-			if (state == "editing") {
+			if (state === "editing") {
 				// pass all pointer events through the focus indicator.
 				this.getContentElement().setStyles({
 					"pointer-events": "none",
@@ -114,7 +110,7 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 
 			var xPos = paneModel.getX(col);
 
-			if (xPos == -1) {
+			if (xPos === -1) {
 
 				this.hide();
 				this.setRow(null);
