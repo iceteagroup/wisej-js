@@ -443,6 +443,11 @@ qx.Class.define("wisej.web.Button", {
 		 */
 		_applyTextAlign: function (value, old) {
 
+			if (value == null) {
+				this.resetTextAlign();
+				return;
+			}
+
 			var label = this.getChildControl("label");
 
 			var alignX = "left";

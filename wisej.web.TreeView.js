@@ -89,7 +89,7 @@ qx.Class.define("wisej.web.TreeView", {
 		 *  
 		 *  Default item height.
 		 */
-		itemHeight: { check: "Integer", init: 25, apply: "_applyItemHeight", themeable: true },
+		itemHeight: { init: null, check: "Integer", apply: "_applyItemHeight", nullable:true, themeable: true },
 
 		/**
 		 * Scrollable property.
@@ -368,7 +368,7 @@ qx.Class.define("wisej.web.TreeView", {
 			if (value == old)
 				return;
 
-			if (value == null || value == -1) {
+			if (value == null || value === -1) {
 				this.resetItemHeight();
 			}
 			else {

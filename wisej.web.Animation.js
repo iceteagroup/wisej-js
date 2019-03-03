@@ -22,6 +22,7 @@
  */
 qx.Class.define("wisej.web.Animation", {
 
+	type: "static",
 	extend: qx.core.Object,
 
 	statics: {

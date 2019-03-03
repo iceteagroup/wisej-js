@@ -343,7 +343,7 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 
 				if (opener && opener.getBounds()) {
 
-					if (position == "rightTop")
+					if (position === "rightTop")
 						offset[3] -= opener.getBounds().width;
 				}
 

@@ -225,7 +225,7 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 								? 0
 								: 1
 							: isNaN(value2) ? -1
-							: (value1 < value2) ? 1 : ((value1 == value2) ? 0 : -1);
+								: (value1 < value2) ? 1 : ((value1 == value2) ? 0 : -1);
 					}
 					else {
 
@@ -241,7 +241,7 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 						result = -result;
 
 					return result;
-				}
+				};
 			}
 
 			// create the comparator function.
@@ -272,9 +272,14 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 				var table = this.__table;
 				if (table) {
 
-					var rows = table.getDesignRows();
-					if (rows)
+					var row = table.getDesignRow();
+					if (row) {
+						var rows = [];
+						for (var i = 0; i < 100; i++) {
+							rows.push(row);
+						}
 						this.setData(rows, true);
+					}
 				}
 			}
 		},

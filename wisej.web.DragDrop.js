@@ -232,12 +232,17 @@ qx.Class.define("wisej.web.DragDrop", {
 		_applyImage: function (value, old) {
 
 			var cursor = qx.ui.core.DragDropCursor.getInstance();
+			var position = this.__getCursorPosition(cursor);
+
 			if (value) {
 				cursor.setSource(value);
 			}
 			else {
 				cursor.resetSource();
 			}
+
+			qx.ui.core.queue.Manager.flush();
+			this.__setCursorPosition(cursor, position);
 		},
 
 		/**
@@ -246,6 +251,8 @@ qx.Class.define("wisej.web.DragDrop", {
 		_applyImageSize: function (value, old) {
 
 			var cursor = qx.ui.core.DragDropCursor.getInstance();
+			var position = this.__getCursorPosition(cursor);
+
 			if (value && value.width > 0 && value.height > 0) {
 				cursor.setScale(true);
 				cursor.setWidth(value.width);
@@ -260,6 +267,31 @@ qx.Class.define("wisej.web.DragDrop", {
 			// changing the scale property resets the z-index when
 			// the image widget recreates the dom element.
 			cursor._applyZIndex(1e8);
+
+			qx.ui.core.queue.Manager.flush();
+			this.__setCursorPosition(cursor, position);
+		},
+
+		__getCursorPosition: function (cursor) {
+
+			var dom = cursor.getContentElement().getDomElement();
+			if (!dom)
+				return null;
+
+			return {
+				top: dom.style.top,
+				left: dom.style.left
+			};
+		},
+
+		__setCursorPosition: function (cursor, position) {
+
+			var dom = cursor.getContentElement().getDomElement();
+			if (!dom || !position)
+				return;
+
+			dom.style.top = position.top;
+			dom.style.left = position.left;
 		},
 
 		/** 

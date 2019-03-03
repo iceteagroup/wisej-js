@@ -22,6 +22,7 @@
  */
 qx.Class.define("wisej.web.themeRoller.Manager", {
 
+	type: "static",
 	extend: qx.core.Object,
 
 	statics: {

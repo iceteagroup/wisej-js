@@ -522,7 +522,6 @@ qx.Class.define("wisej.web.Upload", {
 			return control || this.base(arguments, id);
 		},
 
-
 		/**
 		 * Applies the allowedFileTypes property.
 		 */

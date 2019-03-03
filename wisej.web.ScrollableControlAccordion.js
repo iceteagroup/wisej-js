@@ -380,7 +380,8 @@ qx.Class.define("wisej.web.accordion.Panel", {
 				case "title":
 					control = new qx.ui.basic.Label(this.getCaption()).set({
 						anonymous: true,
-						alignY: "middle"
+						alignY: "middle",
+						allowGrowX: true
 					});
 					this.getChildControl("captionbar").add(control, { row: 0, column: 2 });
 					if (!this.getCaption()) {

@@ -52,8 +52,9 @@ qx.Class.define("wisej.web.ListBox", {
 		 * items property.
 		 *
 		 * Sets the items in the dropdown list.
+		 * Property defined with the setter/getter methods to save memory and not save a copy of the items.
 		 */
-		items: { init: null, check: "Map", nullable: true, apply: "_applyItems" },
+		// items: { init: null, check: "Map", nullable: true, apply: "_applyItems" },
 
 		/**
 		 * selectionMode override.
@@ -83,9 +84,22 @@ qx.Class.define("wisej.web.ListBox", {
 		tools: { check: "Array", apply: "_applyTools" },
 
 		/**
+		 * ItemHeight property.
+		 *
+		 * Sets the height of the items in the drop-down list in pixels.
+		 * When set to <code>null</code> or 0 it uses the value in the theme if present otherwise it adapts to the
+		 * size of the items. The default is null;
+		 *
+		 * For the VirtualComboBox, all items must have the same height so when this value is null, it uses the
+		 * height of the largest item used also to calculate he maximum width.
+		 *
+		 */
+		itemHeight: { init: null, check: "Integer", apply: "_applyItemHeight", nullable: true, themeable: true },
+
+		/**
 		 * Determines the appearance of child items.
 		 */
-		itemAppearance: { init: "listitem", themeable: true },
+		itemAppearance: { init: "listitem", themeable: true }
 	},
 
 	members: {
@@ -146,7 +160,7 @@ qx.Class.define("wisej.web.ListBox", {
 		/**
 		 * Applies the items property.
 		 */
-		_applyItems: function (value, old) {
+		setItems: function (value, old) {
 
 			var items = value;
 
@@ -166,33 +180,33 @@ qx.Class.define("wisej.web.ListBox", {
 
 				// add new items.
 				if (items.added && items.added.length > 0) {
-					var list = items.added;
-					for (var i = 0; i < list.length; i++) {
-						var index = list[i].index;
-						var item = this._createListItem(list[i]);
+					var added = items.added;
+					for (var i = 0; i < added.length; i++) {
+						var index = added[i].index;
+						var item = this._createListItem(added[i]);
 						this.addAt(item, index);
 					}
 				}
 
 				// apply modified items.
 				if (items.modified && items.modified.length > 0) {
-					var list = items.modified;
-					for (var i = 0; i < list.length; i++) {
-						var index = list[i].index;
+					var modified = items.modified;
+					for (var i = 0; i < modified.length; i++) {
+						var index = modified[i].index;
 
 						if (index < 0 || index >= children.length)
 							throw new Error("index out of bounds: " + index + " (0.." + children.length + ")");
 
-						children[index].set(list[i]);
+						children[index].set(modified[i]);
 					}
 				}
 
 				// remove deleted items.
 				if (items.deleted && items.deleted.length > 0) {
-					var list = items.deleted;
-					for (var i = list.length - 1; i >= 0; i--) {
+					var deleted = items.deleted;
+					for (var i = deleted.length - 1; i >= 0; i--) {
 
-						var index = list[i];
+						var index = deleted[i];
 
 						if (index < 0 || index >= children.length)
 							throw new Error("index out of bounds: " + index + " (0.." + children.length + ")");
@@ -203,6 +217,22 @@ qx.Class.define("wisej.web.ListBox", {
 			} finally {
 
 				this.__suspendEvents = false;
+			}
+		},
+
+		/**
+		 * Applies the ItemHeight property.
+		 */
+		_applyItemHeight: function (value, old) {
+
+			if (value === null || value < 0) {
+				this.resetItemHeight();
+				return;
+			}
+
+			var items = this.getChildren();
+			for (var i = 0; i < items.length; i++) {
+				items[i].setHeight(value);
 			}
 		},
 
@@ -371,7 +401,8 @@ qx.Class.define("wisej.web.ListBox", {
 		 * Creates the list item to add to the listbox.
 		 */
 		_createListItem: function (properties) {
-			var item = new wisej.web.list.ListItem();
+			var item = new wisej.web.listbox.ListItem();
+			item.setHeight(this.getItemHeight());
 			item.setAppearance(this.getItemAppearance());
 			item.set(properties);
 			return item;
@@ -383,7 +414,7 @@ qx.Class.define("wisej.web.ListBox", {
 
 			e.setUserData("eventData", null);
 			var target = e.getOriginalTarget();
-			if (target instanceof wisej.web.list.ListItem) {
+			if (target instanceof wisej.web.listbox.ListItem) {
 				e.setUserData("eventData", target.getIndex());
 			}
 		},
@@ -419,8 +450,9 @@ qx.Class.define("wisej.web.CheckedListBox", {
 		 * CheckedItems property.
 		 *
 		 * Gets or sets the collection of checked items.
+		 * Property defined with the setter/getter methods to save memory and not save a copy of the items.
 		 */
-		checkedItems: { init: [], check: "Array", apply: "_applyCheckedItems" },
+		// checkedItems: { init: [], check: "Array", apply: "_applyCheckedItems" },
 
 		/**
 		 * CheckOnClick property.
@@ -440,7 +472,7 @@ qx.Class.define("wisej.web.CheckedListBox", {
 		/**
 		 * Applies the checkedItems property.
 		 */
-		_applyCheckedItems: function (value, old) {
+		setCheckedItems: function (value, old) {
 
 			var items = this.getChildren();
 
@@ -448,13 +480,16 @@ qx.Class.define("wisej.web.CheckedListBox", {
 			for (var i = 0; i < items.length; i++) {
 
 				// skip if the item is also in the new list.
-				if (value && value.indexOf(value, i) > -1)
-					continue;
+				if (value) {
+					if (value.findIndex(function (element) { return element.index === i; }) > -1)
+						continue;
+				}
 
 				this.__setCheckState(items[i], false);
 			}
 
-			if (value) {
+			// change the check state of the specified items.
+			if (value && value.length > 0) {
 				for (var i = 0; i < value.length; i++) {
 					var data = value[i];
 					this.__setCheckState(items[data.index], data.state);
@@ -501,23 +536,23 @@ qx.Class.define("wisej.web.CheckedListBox", {
 
 			// ignore the click on the checkbox, when the checkbox is clicked
 			// directly the item is checked immediately regardless of the checkOnClick property.
-			if (item instanceof wisej.web.list.CheckedListItem) {
+			if (item instanceof wisej.web.listbox.CheckedListItem) {
 
 				if (this.isCheckOnClick()) {
 					item.toggleCheckState();
 				}
 				else {
 
-					if (this.__lastClickedItem == item)
+					if (this.__lastClickedItem === item)
 						item.toggleCheckState();
 					else
 						this.__lastClickedItem = item;
 				}
 			}
-			else if (item instanceof wisej.web.list.CheckedListItemCheckBox) {
+			else if (item instanceof wisej.web.listbox.CheckedListItemCheckBox) {
 
 				// select the item when clicking on the checkbox.
-				if (this.getSelectionMode() != "none")
+				if (this.getSelectionMode() !== "none")
 					this.setSelection([item.getLayoutParent()]);
 			}
 		},
@@ -539,11 +574,13 @@ qx.Class.define("wisej.web.CheckedListBox", {
 			var item = e.getTarget();
 			if (item) {
 
-				var index = this.indexOf(item);
-				this.fireDataEvent("itemCheckChanged", {
-					index: index,
-					state: item.getCheckState()
-				})
+				var index = item.getIndex();
+				if (index > -1) {
+					this.fireDataEvent("itemCheckChanged", {
+						index: index,
+						state: item.getCheckState()
+					});
+				}
 			}
 		},
 
@@ -552,7 +589,8 @@ qx.Class.define("wisej.web.CheckedListBox", {
 		 */
 		_createListItem: function (properties) {
 
-			var item = new wisej.web.list.CheckedListItem();
+			var item = new wisej.web.listbox.CheckedListItem();
+			item.setHeight(this.getItemHeight());
 			item.setAppearance(this.getItemAppearance());
 			item.set(properties);
 			item.addListener("click", this._onItemClick, this);
@@ -560,19 +598,18 @@ qx.Class.define("wisej.web.CheckedListBox", {
 			item.addListener("beforeChangeCheckState", this._onItemBeforeChangeCheckState, this);
 			return item;
 
-		},
-
+		}
 	}
 
 });
 
 
 /**
- * wisej.web.list.ListItem
+ * wisej.web.listbox.ListItem
  *
  * Represents the items in the wisej.web.ListBox.
  */
-qx.Class.define("wisej.web.list.ListItem", {
+qx.Class.define("wisej.web.listbox.ListItem", {
 
 	extend: qx.ui.form.ListItem,
 
@@ -601,13 +638,13 @@ qx.Class.define("wisej.web.list.ListItem", {
 
 
 /**
- * wisej.web.list.CheckedListItem
+ * wisej.web.listbox.CheckedListItem
  *
  * Represents the items in the wisej.web.CheckedListBox.
  */
-qx.Class.define("wisej.web.list.CheckedListItem", {
+qx.Class.define("wisej.web.listbox.CheckedListItem", {
 
-	extend: wisej.web.list.ListItem,
+	extend: wisej.web.listbox.ListItem,
 
 	construct: function (text, icon) {
 
@@ -669,7 +706,7 @@ qx.Class.define("wisej.web.list.CheckedListItem", {
 
 			switch (id) {
 				case "checkbox":
-					control = new wisej.web.list.CheckedListItemCheckBox().set({
+					control = new wisej.web.listbox.CheckedListItemCheckBox().set({
 						triState: false,
 						anonymous: false,
 						focusable: false,
@@ -689,16 +726,16 @@ qx.Class.define("wisej.web.list.CheckedListItem", {
 			}
 
 			return control || this.base(arguments, id);
-		},
+		}
 	}
 });
 
 /**
- * wisej.web.list.CheckedListItemCheckBox
+ * wisej.web.listbox.CheckedListItemCheckBox
  *
- * Represents the CheckBox in a wisej.web.list.CheckedListItem.
+ * Represents the CheckBox in a wisej.web.listbox.CheckedListItem.
  */
-qx.Class.define("wisej.web.list.CheckedListItemCheckBox", {
+qx.Class.define("wisej.web.listbox.CheckedListItemCheckBox", {
 
 	extend: qx.ui.form.CheckBox,
 
@@ -717,6 +754,6 @@ qx.Class.define("wisej.web.list.CheckedListItemCheckBox", {
 				return;
 
 			this.base(arguments, e);
-		},
+		}
 	}
 });

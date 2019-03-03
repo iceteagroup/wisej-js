@@ -290,7 +290,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		_applyPosition: function (value, old) {
 
 			var table = this.getTable();
-			if (table) {
+			if (table && this.getIndex() > -1) {
 				table.__internalChange = true;
 				try {
 					var model = table.getTableColumnModel();

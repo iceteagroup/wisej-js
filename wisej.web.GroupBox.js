@@ -406,7 +406,7 @@ qx.Class.define("wisej.web.GroupBox", {
 				return;
 
 			// crawl up the parent lineage to the first parent that specifies a background color.
-			for (var parent = this.getLayoutParent() ; parent != null; parent = parent.getLayoutParent()) {
+			for (var parent = this.getLayoutParent(); parent != null; parent = parent.getLayoutParent()) {
 
 				color = parent.getBackgroundColor();
 				if (color != null)
@@ -424,7 +424,7 @@ qx.Class.define("wisej.web.GroupBox", {
 
 					var pane = container.getChildControl("pane", true);
 					if (pane)
-					color = pane.getBackgroundColor();
+						color = pane.getBackgroundColor();
 				}
 			}
 

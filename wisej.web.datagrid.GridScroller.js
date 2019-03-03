@@ -113,10 +113,30 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		flushEditor: function () {
 
 			if (this.isEditing()) {
+
 				var editor = this._cellEditor;
 				if (editor) {
+					var table = this.getTable();
+
+					// update the client data right away - the server may
+					// change the cell after processing. but by updating now
+					// we can avoid the cell temporarily returning to the original value.
+					var dataModel = table.getTableModel();
+					var value = this.__cellEditorFactory.getCellEditorValue(editor);
+					var oldValue = dataModel.getValue(this.__focusedCol, this.__focusedRow);
+					if (value !== undefined)
+						dataModel.setValue(this.__focusedCol, this.__focusedRow, value);
+
 					editor.setDirty(true);
-					this.getTable().focus();
+					table.focus();
+
+					// fire an event containing the value change.
+					table.fireDataEvent("dataEdited", {
+						row: this.__focusedRow,
+						col: this.__focusedCol,
+						oldValue: oldValue,
+						value: value
+					});
 				}
 			}
 		},
@@ -198,7 +218,9 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 							this.__focusIndicator.show();
 							editor.resetUserBounds();
 							editor.show();
-							editor.focus();
+
+							if (editor.isFocusable())
+								editor.focus();
 
 							// assign the pending keystrokes to the editor.
 							if (pendingEditorText)
@@ -222,14 +244,37 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 					var row = this.getFocusedRow();
 					var col = this.getFocusedColumn();
-					var tableModel = table.getTableModel();
-					if (col > -1 && row > -1 && tableModel.isColumnEditable(col)) {
+					if (this.isCellEditable(col, row)) {
+
 						table.fireDataEvent("beginEdit", { col: col, row: row });
 					}
 				}
 			}
 
 			return false;
+		},
+
+		/**
+		 * Checks whether a cell is editable.
+		 * @param col {Integer} column index.
+		 * @param row {Integer} row index.
+		 */
+		isCellEditable: function (col, row) {
+
+			var editable = false;
+			if (col > -1 && row > -1) {
+				var tableModel = this.getTable().getTableModel();
+
+				editable = tableModel.isColumnEditable(col);
+
+				// check if the cell has the editable override.
+				var cellStyle = tableModel.getCellStyle(col, row);
+				if (cellStyle && cellStyle.editable != null) {
+					editable = editable || cellStyle.editable;
+				}
+			}
+
+			return editable;
 		},
 
 		// Appends the text waiting for the editor to be created.
@@ -362,9 +407,9 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 						&& row == this.__lastPointerDownCell.row
 						&& col == this.__lastPointerDownCell.col)) {
 					this.fireEvent("cellTap",
-								   qx.ui.table.pane.CellEvent,
-								   [this, e, row, col],
-								   true);
+						qx.ui.table.pane.CellEvent,
+						[this, e, row, col],
+						true);
 					this.__firedTapEvent = true;
 				}
 
@@ -373,7 +418,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					// start when edit mode is "editOnEnter" and we are not in edit mode - it means
 					// that the user ended editing and is still on the same cell, clicking should start editing.
 					var cellChanged = prevRow != table.getFocusedRow() || prevCol != table.getFocusedColumn();
-					if (!cellChanged && table.getEditMode() == "editOnEnter")
+					if (!cellChanged && table.getEditMode() === "editOnEnter")
 						this.startEditing();
 				}
 			}
@@ -407,7 +452,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 				if (!this.isEditing()) {
 					// start when edit mode when double clicking on a cell.
-					if (table.getEditMode() != "editOnEnter" && table.getEditMode() != "editProgrammatically")
+					if (table.getEditMode() !== "editOnEnter" && table.getEditMode() !== "editProgrammatically")
 						this.startEditing();
 				}
 			}
@@ -586,7 +631,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			else {
 
 				var row = this._getRowForPagePos(pageX, pageY);
-				var col = this._getColumnForPageX(pageX)
+				var col = this._getColumnForPageX(pageX);
 				if (row != null && col != null && col >= 0 && row >= 0) {
 
 					if (col == 0) {
@@ -844,7 +889,11 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			if (rowIndex > -1) {
 
 				var table = this.getTable();
+
 				var dataModel = table.getTableModel();
+				if (!dataModel.getResizable(rowIndex))
+					return - 1;
+
 				var rowHeight = dataModel.getRowHeight(rowIndex);
 				var panePos = this.__tablePane.getContentLocation();
 
@@ -879,9 +928,9 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			var rtl = this.isRtl();
 
 			for (var x =
-			  rtl ? (colCount - 1) : (0) ;
-			  rtl ? (x > -1) : (x < colCount) ;
-			  rtl ? (x--) : (x++)) {
+				rtl ? (colCount - 1) : (0);
+				rtl ? (x > -1) : (x < colCount);
+				rtl ? (x--) : (x++)) {
 
 				var col = paneModel.getColumnAtX(x);
 				var colWidth = columnModel.getColumnWidth(col);
@@ -932,8 +981,8 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			var tapTolerance = qx.ui.table.pane.Scroller.TAP_TOLERANCE;
 			if (this.__header.isShowingColumnMoveFeedback()
-			  || pageX > this.__lastMovePointerPageX + tapTolerance
-			  || pageX < this.__lastMovePointerPageX - tapTolerance) {
+				|| pageX > this.__lastMovePointerPageX + tapTolerance
+				|| pageX < this.__lastMovePointerPageX - tapTolerance) {
 
 				this.__lastMoveColPos += pageX - this.__lastMovePointerPageX;
 				this.__header.showColumnMoveFeedback(this._moveColumn, this.__lastMoveColPos);
@@ -1330,7 +1379,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 						if (horScrollBar.isVisible()) {
 							var horScrollBarHeight =
 								horScrollBar.getSizeHint().height
-									+ horScrollBar.getMarginTop() + horScrollBar.getMarginBottom();
+								+ horScrollBar.getMarginTop() + horScrollBar.getMarginBottom();
 
 							clipperSize.height += horScrollBarHeight;
 						}
@@ -1341,7 +1390,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 						if (verScrollBar.isVisible()) {
 							var verScrollBarWidth =
 								verScrollBar.getSizeHint().width
-									+ verScrollBar.getMarginLeft() + verScrollBar.getMarginRight();
+								+ verScrollBar.getMarginLeft() + verScrollBar.getMarginRight();
 
 							clipperSize.width += verScrollBarWidth;
 						}
@@ -1470,7 +1519,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 					break;
 
+				case "tap":
+				case "dbltap":
 				case "click":
+				case "dblclick":
+				case "pointerup":
+				case "pointerdown":
 					var pageX = e.getDocumentLeft();
 					var pageY = e.getDocumentTop();
 					if (this._getResizeRowForPageX(pageX, pageY) > -1 || this._getResizeColumnForPageX(pageX) > -1)
@@ -1520,7 +1574,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 					break;
 
+				case "tap":
+				case "dbltap":
 				case "click":
+				case "dblclick":
+				case "pointerup":
+				case "pointerdown":
 					var pageX = e.getDocumentLeft();
 					if (this._getResizeColumnForPageX(pageX) > -1)
 						role = "resize";
@@ -1667,8 +1726,8 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			if (!this.getLiveResize()) {
 				this._hideResizeLine();
 				columnModel.setColumnWidth(this.__resizeColumn,
-										   this.__lastResizeWidth,
-										   true);
+					this.__lastResizeWidth,
+					true);
 			}
 
 			this.__resizeColumn = null;

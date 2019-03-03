@@ -93,17 +93,18 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				this._disposeObjects("__acceptButtonAccel");
 
 			if (value && !this.__acceptButtonAccel) {
-				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter");
+				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter", true, false, document.body);
 				this.__acceptButtonAccel.addListener("execute", function (e) {
 
 					var acceptButton = this.getAcceptButton();
-					if (acceptButton != null) {
+					if (acceptButton != null && acceptButton.isSeeable()) {
 
 						// ignore accelerators on widgets that are not
 						// in an active top-level container: page, form, or desktop.
 						if (!wisej.utils.Widget.canExecute(acceptButton))
 							return;
 
+						e.stop();
 						acceptButton.execute();
 					}
 
@@ -124,24 +125,25 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				this._disposeObjects("__cancelButtonAccel");
 
 			if (value && !this.__cancelButtonAccel) {
-				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape");
+				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape", true, false, document.body);
 				this.__cancelButtonAccel.addListener("execute", function (e) {
 
 					var cancelButton = this.getCancelButton();
-					if (cancelButton != null) {
+					if (cancelButton != null && cancelButton.isSeeable()) {
 
 						// ignore accelerators on widgets that are not
 						// in an active top-level container: page, form, or desktop.
 						if (!wisej.utils.Widget.canExecute(cancelButton))
 							return;
 
+						e.stop();
 						cancelButton.execute();
 					}
 
 				}, this);
 			}
 		},
-		__cancelButtonAccel: null,
+		__cancelButtonAccel: null
 	},
 
 	destruct: function () {

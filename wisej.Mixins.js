@@ -538,9 +538,10 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 							case "focusin":
 							case "focusout":
 
-								// if the event bubbled because the target is disabled, fire the
-								// event to the new target and stop bubbling...
+								// if the event bubbled because the target is disabled
+								// or an inner widget (i.e. a cell editor, a component of a larger widget), let it be processed by the current target.
 								if (!originalTarget.isEnabled() || originalTarget.hasState("inner")) {
+
 									ev.stopPropagation();
 									break;
 								}
@@ -559,9 +560,10 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 							case "mousemove":
 							case "mousewheel":
 
-								// if the event bubbled because the target is disabled or anonymous, fire the
-								// event to the new target and stop bubbling...
+								// if the event bubbled because the original target is disabled, anonymous 
+								// or an inner widget (i.e. a cell editor, a component of a larger widget), let it be processed by the current target.
 								if (!originalTarget.isEnabled() || originalTarget.isAnonymous() || originalTarget.hasState("inner")) {
+
 									ev.stopPropagation();
 									break;
 								}
@@ -1315,9 +1317,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		// unregister from parent and clear the parent reference.
 		var parent = this.getParent();
 		if (parent) {
-
 			this.core.unregisterComponent(this, parent);
-
 			qx.util.PropertyUtil.setUserValue(this, "parent", null);
 		}
 
@@ -1506,14 +1506,16 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		 *
 		 * Updates the state of the component and returns the difference
 		 * with the previous state.
+		 * 
+		 * @param propertyName {String?} Optional name of the property to update in the cached state.
 		 */
-		updateState: function () {
+		updateState: function (propertyName) {
 
 			if (wisej.web.DesignMode)
 				return;
 
 			var properties = this.getStateProperties();
-			if (properties == null)
+			if (!properties || properties.length === 0)
 				return;
 
 			// build the state using the state properties
@@ -1523,10 +1525,13 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				try {
 					var name = properties[i];
 
+					if (propertyName !== undefined && name !== propertyName)
+						continue;
+
 					var value = this.get(name);
 
 					// clone objects to break the reference.
-					if (value instanceof Object && (!value instanceof qx.ui.core.Widget))
+					if (value instanceof Object && !(value instanceof qx.ui.core.Widget))
 						value = qx.lang.Object.clone(value, true);
 
 					state[name] = value;
@@ -2405,13 +2410,6 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		parent: { init: null, nullable: true, apply: "_applyParent", transform: "_transformComponent" },
 
 		/**
-		 * Container property.
-		 *
-		 * Identifies the container widget that is using this menu element.
-		 */
-		container: { init: null, nullable: true, check: "String" },
-
-		/**
 		 * Index property.
 		 *
 		 * This is the index (position) the this menu item in the parent collection of items.
@@ -2633,7 +2631,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 			if (value) {
 				if (!this.__shortcutAccel) {
-					this.__shortcutAccel = new qx.bom.Shortcut(null);
+					this.__shortcutAccel = new qx.bom.Shortcut(null, true, false, document.body);
 					this.__shortcutAccel.addListener("execute", this.__onShortcut, this);
 				}
 
@@ -2656,7 +2654,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 			if (value) {
 				if (!this.__mnemonicAccel) {
 					this.addState("mnemonic");
-					this.__mnemonicAccel = new qx.bom.Shortcut(null);
+					this.__mnemonicAccel = new qx.bom.Shortcut(null, true, false, document.body);
 					this.__mnemonicAccel.addListener("execute", this.__onMnemonic, this);
 				}
 
@@ -2667,10 +2665,12 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 		__onShortcut: function (e) {
 
-			// ignore shortcuts on menu items on menu bars that are not
+			// ignore shortcuts on menu items on menu bars that are hidden or not
 			// in an active top-level container: page, form, or desktop.
 			var container = this.findContainer();
-			if (container && !wisej.utils.Widget.canExecute(container))
+			if (container && !container.isVisible())
+				return;
+			if (!wisej.utils.Widget.canExecute(container))
 				return;
 
 			// since we can have multiple shortcuts we need to process all of them to determine
@@ -2681,7 +2681,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 				var me = this;
 				setTimeout(function () {
-					me.__executeShortcut();
+					me.__executeShortcut(e);
 				}, 1);
 			}
 			list.push(this);
@@ -2689,10 +2689,12 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 		__onMnemonic: function (e) {
 
-			// ignore mnemonics on menu items on menu bars that are not
+			// ignore mnemonics on menu items on menu bars that are hidden or not
 			// in an active top-level container: page, form, or desktop.
 			var container = this.findContainer();
-			if (container && !wisej.utils.Widget.canExecute(container))
+			if (container && !container.isVisible())
+				return;
+			if (!wisej.utils.Widget.canExecute(container))
 				return;
 
 			// since we can have multiple mnemonics we need to process all of them to determine
@@ -2703,13 +2705,13 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 				var me = this;
 				setTimeout(function () {
-					me.__executeMnemonic();
+					me.__executeMnemonic(e);
 				}, 1);
 			}
 			list.push(this);
 		},
 
-		__executeShortcut: function () {
+		__executeShortcut: function (e) {
 
 			var list = wisej.mixin.MWisejMenu.__shortcutTargets;
 			if (list != null && list.length > 0) {
@@ -2719,15 +2721,17 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 				for (var i = 0; i < list.length; i++) {
 					var target = list[i];
 					if (target.executeShortcut) {
-						if (target.executeShortcut(list, i))
+						if (target.executeShortcut(list, i)) {
+							e.stop();
 							break;
+						}
 					}
 				}
 			}
 			wisej.mixin.MWisejMenu.__shortcutTargets = null;
 		},
 
-		__executeMnemonic: function () {
+		__executeMnemonic: function (e) {
 
 			var list = wisej.mixin.MWisejMenu.__mnemonicTargets;
 			if (list != null && list.length > 0) {
@@ -2737,8 +2741,10 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 				for (var i = 0; i < list.length; i++) {
 					var target = list[i];
 					if (target.executeMnemonic) {
-						if (target.executeMnemonic(list, i))
+						if (target.executeMnemonic(list, i)) {
+							e.stop();
 							break;
+						}
 					}
 				}
 			}
@@ -2771,18 +2777,23 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		},
 
 		/**
-		 * Finds the widget that owns this menu item.
+		 * Finds the top container. It is either:
+		 * 
+		 *	- MenuBar,
+		 *	- MainMenu,
+		 *	- ContextMenu
+		 *	
 		 */
 		findContainer: function () {
 
-			var container = this.core.getComponent(this.getContainer());
+			var container = null;
+			for (var parent = this.getParent();
+				parent != null;
+				parent = parent.getParent()) {
 
-			if (container == null) {
-				for (var parent = this.getParent(); parent != null; parent = parent.getParent()) {
-					if (parent.getParent() == null) {
-						container = parent;
-						break;
-					}
+				if (parent.getParent() == null) {
+					container = parent;
+					break;
 				}
 			}
 
@@ -2882,7 +2893,7 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 			if (value) {
 
 				if (!this.__shortcutAccel) {
-					this.__shortcutAccel = new qx.bom.Shortcut(null);
+					this.__shortcutAccel = new qx.bom.Shortcut(null, true, false, document.body);
 					this.__shortcutAccel.addListener("execute", this.__onShortcut, this);
 				}
 
@@ -2906,7 +2917,7 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 
 				if (!this.__mnemonicAccel) {
 					this.addState("mnemonic");
-					this.__mnemonicAccel = new qx.bom.Shortcut(null);
+					this.__mnemonicAccel = new qx.bom.Shortcut(null, true, false, document.body);
 					this.__mnemonicAccel.addListener("execute", this.__onMnemonic, this);
 				}
 
@@ -2929,7 +2940,7 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 
 				var me = this;
 				setTimeout(function () {
-					me.__executeShortcut();
+					me.__executeShortcut(e);
 				}, 1);
 			}
 			list.unshift(this);
@@ -2950,13 +2961,13 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 
 				var me = this;
 				setTimeout(function () {
-					me.__executeMnemonic();
+					me.__executeMnemonic(e);
 				}, 1);
 			}
 			list.unshift(this);
 		},
 
-		__executeShortcut: function () {
+		__executeShortcut: function (e) {
 
 			var list = wisej.mixin.MShortcutTarget.__shortcutTargets;
 			if (list != null && list.length > 0) {
@@ -2966,15 +2977,17 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 				for (var i = 0; i < list.length; i++) {
 					var target = list[i];
 					if (target.executeShortcut) {
-						if (target.executeShortcut(list, i))
+						if (target.executeShortcut(list, i)) {
+							e.stop();
 							break;
+						}
 					}
 				}
 			}
 			wisej.mixin.MShortcutTarget.__shortcutTargets = null;
 		},
 
-		__executeMnemonic: function () {
+		__executeMnemonic: function (e) {
 
 			var list = wisej.mixin.MShortcutTarget.__mnemonicTargets;
 			if (list != null && list.length > 0) {
@@ -2984,8 +2997,10 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 				for (var i = 0; i < list.length; i++) {
 					var target = list[i];
 					if (target.executeMnemonic) {
-						if (target.executeMnemonic(list, i))
+						if (target.executeMnemonic(list, i)) {
+							e.stop();
 							break;
+						}
 					}
 				}
 			}

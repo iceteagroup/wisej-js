@@ -56,6 +56,9 @@ qx.Class.define("wisej.web.ListView", {
 		// adds the inner target to the drop & drop event object.
 		this.addListener("drop", this._onDragEvent, this);
 		this.addListener("dragover", this._onDragEvent, this);
+
+		// auto select the item when dragging starts.
+		this.addListener("dragstart", this._onDragStart, this);
 	},
 
 	properties: {
@@ -242,26 +245,17 @@ qx.Class.define("wisej.web.ListView", {
 					this.removeState("tile");
 					this.addState(value);
 
-					this.gridView.exclude();
 					this.itemView.show();
+					this.gridView.exclude();
 					this.itemView.scrollToY(0);
-					this.itemView.reloadData();
-
-					// transfer the selection ranges.
-					if (old == "details")
-						this.itemView.setSelectionRanges(this.gridView.getSelectionRanges());
-
 					break;
 
 				case "details":
 
-					this.itemView.exclude();
 					this.gridView.show();
+					this.itemView.exclude();
 					this.gridView.scrollCellVisible(0, 0);
-					this.gridView.reloadData();
-
-					// transfer the selection ranges.
-					this.gridView.setSelectionRanges(this.itemView.getSelectionRanges());
+					this.gridView.setColumns(this.getColumns());
 
 					break;
 			}
@@ -295,8 +289,10 @@ qx.Class.define("wisej.web.ListView", {
 			}
 			else {
 				this.itemView.setItemSize(value);
-				this.itemView.update();
 			}
+
+			if (this.itemView.isVisible())
+				this.itemView.update();
 		},
 
 		/**
@@ -313,7 +309,8 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyCheckBoxes: function (value, old) {
 
-			this.reloadData();
+			if (this.getBounds())
+				this.reloadData();
 		},
 
 		/**
@@ -358,7 +355,8 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyColumns: function (value, old) {
 
-			this.gridView.setColumns(value);
+			if (this.gridView.isVisible())
+				this.gridView.setColumns(value);
 		},
 
 		/**
@@ -366,7 +364,10 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyLabelWrap: function (value, old) {
 
-			this.reloadData();
+			if (this.itemView.isVisible())
+				this.itemView.update();
+			else if (this.gridView.isVisible())
+				this.gridView.update();
 
 		},
 
@@ -408,8 +409,9 @@ qx.Class.define("wisej.web.ListView", {
 		_applyItemPadding: function (value, old) {
 
 			this.gridView.setDefaultCellStyle({ padding: value });
-			this.reloadData();
 
+			if (this.getBounds())
+				this.reloadData();
 		},
 
 		/** 
@@ -462,7 +464,7 @@ qx.Class.define("wisej.web.ListView", {
 
 				var rowCol = { row: 0, column: 1 };
 				var position = this.getToolsPosition();
-				var vertical = position == "left" || position == "right";
+				var vertical = position === "left" || position === "right";
 
 				switch (position) {
 
@@ -611,22 +613,15 @@ qx.Class.define("wisej.web.ListView", {
 		},
 
 		/**
-		 * Automatically resizes the specified column.
-		 * 
-		 * @param index {Integer} index of the column to resize; -1 for all.
-		 * @param sizeMode {String} one of "headerSize", "columnContent".
+		 * Resize the columns width according to the specified parameters.
+		 *
+		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
+		 * @param autoSizeMode {String} Autosize mode: one of "columnHeader", "allCellsExceptHeader","allCells", "displayedCellsExceptHeader", "displayedCells".
 		 */
-		autoResizeColumns: function (index, sizeMode) {
+		autoResizeColumns: function (columnIndex, autoSizeMode) {
 
-			switch (sizeMode) {
-				case "headerSize":
-					this.gridView.autoResizeColumns(index, "columnHeader");
-					break;
-
-				case "columnContent":
-					this.gridView.autoResizeColumns(index, "allCells");
-					break;
-			}
+			if (this.gridView.isVisible())
+				this.gridView.autoResizeColumns(columnIndex, autoSizeMode);
 		},
 
 		// overridden
@@ -692,17 +687,21 @@ qx.Class.define("wisej.web.ListView", {
 		// to let the server know which ListViewItem is the target.
 		_onDragEvent: function (e) {
 
-			var target = e.getOriginalTarget();
-
 			if (this.itemView.isVisible()) {
-				if (target instanceof wisej.web.listview.ItemCellWidget) {
-					this.itemView._onDragEvent(e);
-				}
+				this.itemView._onDragEvent(e);
 			}
 			else if (this.gridView.isVisible()) {
 				this.gridView._onDragEvent(e);
 			}
 		},
+
+		// select the item that initiated the drag operation.
+		_onDragStart: function (e) {
+
+			if (this.itemView.isVisible()) {
+				this.itemView._onDragStart(e);
+			}
+		}
 
 	}
 });
@@ -747,7 +746,7 @@ qx.Class.define("wisej.web.listview.ItemEvent", {
 		 */
 		getData: function () {
 			return this.__data;
-		},
+		}
 	}
 
 });

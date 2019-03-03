@@ -425,9 +425,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 				// and the widget cannot add itself back while processing the job.
 				var me = this;
 				setTimeout(function () {
-
 					me.__updateItems();
-
 				}, 1);
 			}
 
@@ -436,16 +434,8 @@ qx.Class.define("wisej.web.listview.ItemView", {
 				this.__pendingScrollIntoViewArgs = null;
 			}
 			if (jobs && jobs["setSelectionRanges"]) {
-
-				this.__internalChange = true;
-				try {
-
-					this.setSelectionRanges(this.__pendingSelectionArgs);
-					this.__pendingSelectionArgs = null;
-				}
-				finally {
-					this.__internalChange = false;
-				}
+				this.setSelectionRanges(this.__pendingSelectionArgs, true);
+				this.__pendingSelectionArgs = null;
 			}
 			if (jobs && jobs["updateFocusedItem"]) {
 				this.__updateFocusedItem();
@@ -469,7 +459,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			var itemCount = this.__itemCount;
 			var itemWidth = pane.getColumnConfig().getDefaultItemSize();
 			this.__colCount = Math.max(1, Math.floor(paneWidth / itemWidth));
-			this.__rowCount = Math.ceil(itemCount / this.__colCount) || 0
+			this.__rowCount = Math.ceil(itemCount / this.__colCount) || 0;
 
 			var innerPane = pane;
 			innerPane.getColumnConfig().setItemCount(this.__colCount);
@@ -477,10 +467,13 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			innerPane.fullUpdate();
 
 			// schedule pending calls.
-			if (this.__pendingScrollIntoViewArgs)
-				qx.ui.core.queue.Widget.add(this, "scrollIntoView");
-			if (this.__pendingSelectionArgs)
-				qx.ui.core.queue.Widget.add(this, "setSelectionRanges");
+			if (itemCount > 0) {
+				if (this.__pendingScrollIntoViewArgs)
+					qx.ui.core.queue.Widget.add(this, "scrollIntoView");
+
+				if (this.__pendingSelectionArgs)
+					qx.ui.core.queue.Widget.add(this, "setSelectionRanges");
+			}
 		},
 
 		/**
@@ -673,7 +666,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 				// schedule a focused item update in order to complete the
 				// creation of the virtual widget.
-				if (this.hasState("focused") && wasAdded && type == "lead")
+				if (this.hasState("focused") && wasAdded && type === "lead")
 					this.__updateFocusedItem(index);
 			}
 		},
@@ -720,8 +713,11 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 		/**
 		 * Updates the selected items.
+		 * 
+		 * @param ranges {Array[{minIndex, maxIndex}]} Array of {minIndex, maxIndex} ranges.
+		 * @param internal {Boolean?} Optional flag to indicate if the selection should raise the related events. When true, events are not raised.
 		 */
-		setSelectionRanges: function (ranges) {
+		setSelectionRanges: function (ranges, internal) {
 
 			if (!ranges || ranges.length === 0) {
 				this.__selectionManager.clearSelection();
@@ -744,7 +740,17 @@ qx.Class.define("wisej.web.listview.ItemView", {
 						items.push(index);
 					}
 				}
-				this.__selectionManager.replaceSelection(items);
+
+				if (internal === true)
+					this.__internalChange = true;
+
+				try {
+					this.__selectionManager.replaceSelection(items);
+				}
+				finally {
+					if (internal === true)
+						this.__internalChange = false;
+				}
 			}
 		},
 
@@ -832,7 +838,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 					case "F2":
 						var selection = this.__selectionManager.getSelection();
-						if (selection && selection.length == 1)
+						if (selection && selection.length === 1)
 							this.__owner.fireDataEvent("beginEdit", selection[0]);
 
 						e.stop();
@@ -868,14 +874,14 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 			// determine if the user clicked the state icon.
 			var clickedWidget = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
-			if (clickedWidget != null && clickedWidget != item && clickedWidget == item.getChildControl("state"))
+			if (clickedWidget != null && clickedWidget != item && clickedWidget === item.getChildControl("state"))
 				this.__owner.fireItemEvent(e, "itemCheck", index);
 		},
 
 		_onItemMouseUp: function (e) {
 
 			// fire ItemClick when the button is not the left.
-			if (e.getButton() != "left") {
+			if (e.getButton() !== "left") {
 				var item = e.getCurrentTarget();
 				var index = this.__getItemIndex(item);
 				this.__owner.fireItemEvent(e, "itemClick", index);
@@ -901,7 +907,35 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		// determines the target cell (ListViewItem) for a drag operation
 		// and adds it to the event object.
 		_onDragEvent: function (e) {
-			e.setUserData("eventData", this.__getItemIndex(e.getOriginalTarget()));
+
+			var item = this.__findItem(e);
+			if (item instanceof wisej.web.listview.ItemCellWidget) {
+				var index = this.__getItemIndex(item);
+				if (index > -1)
+					e.setUserData("eventData", index);
+			}
+		},
+
+		// select the item that initiated the drag operation.
+		_onDragStart: function (e) {
+
+			var item = this.__findItem(e);
+			if (item instanceof wisej.web.listview.ItemCellWidget) {
+				var index = this.__getItemIndex(item);
+				if (index > -1)
+					this.__selectionManager.replaceSelection([index]);
+			}
+		},
+
+		__findItem: function (e) {
+			var item = e.getOriginalTarget();
+			if (item instanceof Element)
+				item = qx.ui.core.Widget.getWidgetByElement(item);
+
+			while (item != null && !(item instanceof wisej.web.listview.ItemCellWidget)) {
+				item = item.getLayoutParent();
+			}
+			return item;
 		},
 
 		// determines the index of the item from its row, column position.
@@ -1067,9 +1101,9 @@ qx.Class.define("wisej.web.listview.ItemCellProvider", {
 				label: label || "",
 				stateIcon: stateIcon || "",
 				toolTipText: tooltip || "",
-				wrap: this.__itemView.getLabelWrap(),
+				wrap: this.__itemView.getLabelWrap()
 			});
-		},
+		}
 	}
 });
 
@@ -1142,7 +1176,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 		 *
 		 * Sets the state icon displayed before the icon.
 		 */
-		stateIcon: { init: null, check: "String", apply: "_applyStateIcon" },
+		stateIcon: { init: null, check: "String", apply: "_applyStateIcon" }
 	},
 
 	construct: function () {
@@ -1353,7 +1387,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 
 					// the item's image.
 					if (icon && icon.isVisible()) {
-						icon.setLayoutProperties({ row: 0, column: 1 })
+						icon.setLayoutProperties({ row: 0, column: 1 });
 						this.__layout.setColumnFlex(1, 1);
 					}
 					else {
@@ -1364,7 +1398,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 
 					// the item's image.
 					if (icon && icon.isVisible()) {
-						icon.setLayoutProperties({ row: 0, column: 0, colSpan: 2 })
+						icon.setLayoutProperties({ row: 0, column: 0, colSpan: 2 });
 						this.__layout.setColumnFlex(0, 1);
 					}
 				}
@@ -1396,7 +1430,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 				this._excludeChildControl("label");
 			}
 
-			if (!dock || dock == "none") {
+			if (!dock || dock === "none") {
 				var layout = host._getLayout();
 				if (!(layout instanceof qx.ui.layout.Basic)) {
 					if (layout)
@@ -1421,7 +1455,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 					case "right": edge = "east"; break;
 				}
 
-				if (edge == "center") {
+				if (edge === "center") {
 					widget.resetWidth();
 					widget.resetHeight();
 				}
@@ -1455,7 +1489,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 					control = new qx.ui.basic.Image().set({
 						anonymous: true,
 						visibility: "excluded"
-					})
+					});
 					// use the LargeIcon default - no state icon.
 					this._add(control, { row: 0, column: 0 });
 					control.addListener("changeVisibility", this.__updateLayout, this);
@@ -1465,7 +1499,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 					control = new qx.ui.basic.Image().set({
 						anonymous: true,
 						visibility: "excluded"
-					})
+					});
 					// use the LargeIcon default - no state icon.
 					this._add(control, { row: 0, column: 1 });
 					control.addListener("changeVisibility", this.__updateLayout, this);
@@ -1514,7 +1548,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
  * call beforeFullUpdate right before rendering a full update
  * of the visible widgets and afterFullUpdate after the widgets have rendered.
  *
- * It's required to give a change to the remote data model
+ * It's required to give a chance to the remote data model
  * to fetch the rows that are needed for the visible view.
  */
 qx.Class.define("wisej.web.listview.ItemCellLayer", {
@@ -1533,8 +1567,8 @@ qx.Class.define("wisej.web.listview.ItemCellLayer", {
 			this.base(arguments, firstRow, firstColumn, rowSizes, columnSizes);
 
 			this._cellProvider.afterFullUpdate(firstRow, firstColumn, rowSizes, columnSizes);
-		},
-	},
+		}
+	}
 });
 
 
@@ -1562,7 +1596,7 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 	properties: {
 
 		// Appearance override
-		appearance: { refine: true, init: "label-editor" },
+		appearance: { refine: true, init: "label-editor" }
 	},
 
 	members: {
@@ -1626,12 +1660,12 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 				case "Enter":
 					this.endEdit();
 					break;
-			};
+			}
 
 			e.stopPropagation();
-		},
+		}
 
-	},
+	}
 });
 
 

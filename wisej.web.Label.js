@@ -192,6 +192,11 @@ qx.Class.define("wisej.web.Label", {
 		 */
 		_applyTextAlign: function (value, old) {
 
+			if (value == null) {
+				this.resetTextAlign();
+				return;
+			}
+
 			if (value != null) {
 
 				var align = null;

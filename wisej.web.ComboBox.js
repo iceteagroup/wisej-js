@@ -47,9 +47,6 @@ qx.Class.define("wisej.web.ComboBox", {
 		// handle "focusin" to focus the inner editable textfield.
 		//this.addListener("focusin", this.__onFocusIn, this);
 
-		// handle "keyinput" for the autocomplete feature.
-		this.addListener("keyinput", this._onKeyAutoComplete, this);
-
 		// hovered event handlers.
 		this.addListener("pointerover", this._onPointerOver, this);
 		this.addListener("pointerout", this._onPointerOut, this);
@@ -60,8 +57,16 @@ qx.Class.define("wisej.web.ComboBox", {
 		textField.addListener("keydown", function (e) { this.setDirty(true); }, this);
 		textField.addListener("mousedown", function (e) { this.setDirty(true); }, this);
 
+		// handle event for the autocomplete feature.
+		textField.addListener("input", this._onInput, this);
+		this.addListener("keyinput", this._onKeyInput, this);
+
 		// handle the native event "oncopy" to update the clipboard on the server.
 		textField.getContentElement().addListener("copy", this.__onCopy, this);
+
+		// register for the Enter or Esc keys at the document level to execute
+		// also when they map to a shortcut.
+		qx.event.Registration.addListener(document.documentElement, "keydown", this.__onDocumentKeyDown, this, true);
 
 		// enable the native context menu by default.
 		this.setNativeContextMenu(true);
@@ -87,8 +92,9 @@ qx.Class.define("wisej.web.ComboBox", {
 		 * items property.
 		 *
 		 * Sets the items in the dropdown list.
+		 * Property defined with the setter/getter methods to save memory and not save a copy of the items.
 		 */
-		items: { init: null, check: "Map", nullable: true, apply: "_applyItems" },
+		// items: { init: null, check: "Map", nullable: true, apply: "_applyItems" },
 
 		/**
 		 * dropDownStyle property.
@@ -103,6 +109,19 @@ qx.Class.define("wisej.web.ComboBox", {
 		 * Maximum number of characters that can be entered in the textfield.
 		 */
 		maxLength: { init: 0, check: "PositiveInteger", apply: "_applyMaxLength" },
+
+		/**
+		 * The maximum height of the list popup. Setting this value to
+		 * <code>null</code> or 0 will set cause the list to be auto-sized.
+		 * 
+		 */
+		maxListWidth: { init: null, check: "PositiveInteger", apply: "_applyMaxListWidth", nullable: true },
+
+		/**
+		 * The maximum height of the list popup. Setting this value to
+		 * <code>null</code> or 0 will set cause the list to be auto-sized.
+		 */
+		maxListHeight: { init: 400, refine: true },
 
 		/** 
 		 * CharacterCasing property.
@@ -136,7 +155,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		 *
 		 * Specifies the mode for the automatic completion feature.
 		 */
-		autoCompleteMode: { init: "none", check: ["none", "suggest", "append", "suggestAppend", "filter"], apply: "_applyAutoCompleteMode" },
+		autoCompleteMode: { init: "none", check: ["none", "suggest", "append", "suggestAppend", "filter", "appendFilter"], apply: "_applyAutoCompleteMode" },
 
 		/**
 		 * ReadOnly property.
@@ -151,18 +170,33 @@ qx.Class.define("wisej.web.ComboBox", {
 		tools: { check: "Array", apply: "_applyTools" },
 
 		/**
+		 * ItemHeight property.
+		 * 
+		 * Sets the height of the items in the drop-down list in pixels. 
+		 * When set to <code>null</code> or 0 it uses the value in the theme if present otherwise it adapts to the
+		 * size of the items. The default is null;
+		 * 
+		 * For the VirtualComboBox, all items must have the same height so when this value is null, it uses the
+		 * height of the largest item used also to calculate he maximum width.
+		 */
+		itemHeight: { init: null, check: "Integer", apply: "_applyItemHeight", nullable: true, themeable: true },
+
+		/**
 		 * Determines the appearance of child items.
 		 */
-		itemAppearance: { init: "listitem", themeable: true },
+		itemAppearance: { init: "listitem", themeable: true }
 	},
 
 	members: {
 
-		// suspend event dispatching.
-		__suspendEvents: false,
-
 		// cached auto complete mode.
-		__autoCompleteMode: 0,
+		_autoCompleteMode: 0,
+
+		// suspend event dispatching.
+		_suspendEvents: false,
+
+		// item to select at the next "Down" key press.
+		_suggestedItem: null,
 
 		/**
 		 * Shows the list popup.
@@ -172,13 +206,27 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		open: function () {
 
-			var popup = this.getChildControl("popup");
-			if (this.getDropDownStyle() === "simple") {
-				popup.placeToWidget(this);
-				popup.show();
-			}
-			else {
-				popup.open(this, true);
+			var popup = this.getPopup();
+			var list = this.getDropDownList();
+
+			switch (this.getDropDownStyle()) {
+				case "simple":
+					popup.placeToWidget(this);
+					popup.show();
+					break;
+
+				case "dropDown":
+					var textField = this.getChildControl("textfield");
+					if (textField.isVisible()) {
+						textField.getFocusElement().focus();
+					}
+					var me = this;
+					setTimeout(function () { popup.open(me, true); }, 1);
+					break;
+
+				case "dropDownList":
+					popup.open(this, true);
+					break;
 			}
 		},
 
@@ -186,11 +234,15 @@ qx.Class.define("wisej.web.ComboBox", {
 		 * Hides the list popup.
 		 */
 		close: function () {
-			this.getChildControl("popup").hide();
+			this.getPopup().hide();
 		},
 
 		/**
-		 * Get/set the selection property.
+		 * Get/set the Selection property.
+		 * 
+		 * This is the text selected in the editable portion of the combobox.
+		 * It's not the selected items in the drop-down list.
+		 * 
 		 */
 		getSelection: function () {
 
@@ -206,7 +258,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (value) {
 
 				// don't set the selection if the combobox is dropped down.
-				var popup = this.getChildControl("popup");
+				var popup = this.getPopup();
 				if (popup.isVisible())
 					return;
 
@@ -250,16 +302,22 @@ qx.Class.define("wisej.web.ComboBox", {
 		},
 
 		/**
-		 * Applies the items property.
+		 * Adds, removes, updates the items in the data model.
+		 *
+		 * @param {Map} items Items to add, remove or updates. The map contains:
+		 *	<code>clear:true</code> Clears the data model.
+		 *	<code>added:[{}]</code> Adds the specified data items to the model.
+		 *	<code>modified:[{}]</code> Updates the specified data items in the model.
+		 *	<code>deleted:[1, 2, 3]</code> Indexes of the items to delete from the model.
 		 */
-		_applyItems: function (value, old) {
+		setItems: function (items) {
 
-			var items = value;
+			this._suggestedItem = null;
 
 			if (items == null)
 				return;
 
-			this.__suspendEvents = true;
+			this._suspendEvents = true;
 			try {
 
 				var selectedIndex = this.getSelectedIndex();
@@ -275,33 +333,33 @@ qx.Class.define("wisej.web.ComboBox", {
 
 				// add new items.
 				if (items.added && items.added.length > 0) {
-					var list = items.added;
-					for (var i = 0; i < list.length; i++) {
-						var index = list[i].index;
-						var item = this._createListItem(list[i]);
+					var added = items.added;
+					for (var i = 0; i < added.length; i++) {
+						var index = added[i].index;
+						var item = this._createListItem(added[i]);
 						this.addAt(item, index);
 					}
 				}
 
 				// apply modified items.
 				if (items.modified && items.modified.length > 0) {
-					var list = items.modified;
-					for (var i = 0; i < list.length; i++) {
-						var index = list[i].index;
+					var modified = items.modified;
+					for (var i = 0; i < modified.length; i++) {
+						var index = modified[i].index;
 
 						if (index < 0 || index >= children.length)
 							throw new Error("index out of bounds: " + index + " (0.." + children.length + ")");
 
-						children[index].set(list[i]);
+						children[index].set(modified[i]);
 					}
 				}
 
 				// remove deleted items.
 				if (items.deleted && items.deleted.length > 0) {
-					var list = items.deleted;
-					for (var i = list.length - 1; i >= 0; i--) {
+					var deleted = items.deleted;
+					for (var i = deleted.length - 1; i >= 0; i--) {
 
-						var index = list[i];
+						var index = deleted[i];
 
 						if (index < 0 || index >= children.length)
 							throw new Error("index out of bounds: " + index + " (0.." + children.length + ")");
@@ -316,13 +374,13 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			} finally {
 
-				this.__suspendEvents = false;
+				this._suspendEvents = false;
 			}
 
 		},
 
 		/**
-		 * Applies the maxLength property.
+		 * Applies the MaxLength property.
 		 */
 		_applyMaxLength: function (value, old) {
 
@@ -330,7 +388,45 @@ qx.Class.define("wisej.web.ComboBox", {
 		},
 
 		/**
-		 * Applies the characterCasing property.
+		 * Applies the MaxListWidth property.
+		 */
+		_applyMaxListWidth: function (value, old) {
+
+			if (value === 0)
+				value = null;
+
+			this.getDropDownList().setMaxWidth(value);
+		},
+
+		/**
+		 * Applies the MaxListHeight property.
+		 */
+		_applyMaxListHeight: function (value, old) {
+
+			if (value === 0)
+				value = null;
+
+			this.getDropDownList().setMaxHeight(value);
+		},
+
+		/**
+		 * Applies the ItemHeight property.
+		 */
+		_applyItemHeight: function (value, old) {
+
+			if (value === null || value < 0) {
+				this.resetItemHeight();
+				return;
+			}
+
+			var items = this.getChildren();
+			for (var i = 0; i < items.length; i++) {
+				items[i].setHeight(value);
+			}
+		},
+
+		/**
+		 * Applies the CharacterCasing property.
 		 */
 		_applyCharacterCasing: function (value, old) {
 
@@ -366,15 +462,13 @@ qx.Class.define("wisej.web.ComboBox", {
 			var textField = this.getChildControl("textfield");
 			textField.setReadOnly(value);
 
-			var list = this.getChildControl("list");
+			var list = this.getDropDownList();
 			list.setEnableInlineFind(!value);
 
 			// preserve the selection when toggling read-only mode.
-			this.__suspendEvents = true;
-			var selection = list.getSelection();
-			list.setSelectionMode(value ? "none" : "single");
-			list.setSelection(selection);
-			this.__suspendEvents = false;
+			this._suspendEvents = true;
+			this.setListSelectionMode(value ? "none" : "single");
+			this._suspendEvents = false;
 		},
 
 		/**
@@ -391,10 +485,10 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		_applyMaxListHeight: function (value, old) {
 
-			if (this.getDropDownStyle() == "simple")
+			if (this.getDropDownStyle() === "simple")
 				return;
 
-			this.getChildControl("list").setMaxHeight(value);
+			this.getDropDownList().setMaxHeight(value);
 		},
 
 		/**
@@ -416,40 +510,114 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		_applySelectedIndex: function (value, old) {
 
-			this.__suspendEvents = true;
+			if (value === old)
+				return;
+
+			this._suspendEvents = true;
 			try {
 
-				var list = this.getChildControl("list");
+				var list = this.getDropDownList();
 
 				if (value == null || value === -1) {
-					list.resetSelection();
+					this.setListSelectedItem(null);
 				}
 				else {
 					var children = this.getChildren();
 					var item = children[value];
 					if (item)
-						list.setSelection([item]);
+						this.setListSelectedItem(item);
 				}
 			} finally {
 
-				this.__suspendEvents = false;
+				this._suspendEvents = false;
 			}
 		},
 
 		/**
 		 * Applies the droppedDown property.
 		 */
+		isDroppedDown: function () {
+
+			return this.getPopup().isVisible();
+		},
 		getDroppedDown: function () {
 
-			return this.getChildControl("popup").isVisible();
+			return this.getPopup().isVisible();
 		},
 		setDroppedDown: function (value) {
 
 			if (this.isVisible()) {
-				value
-					? this.open()
-					: this.close();
+
+				if (this.getDroppedDown() !== value) {
+					value
+						? this.open()
+						: this.close();
+				}
 			}
+		},
+
+		/**
+		 * Returns the popup widget used to host the drop down list.
+		 */
+		getPopup: function () {
+
+			if (!this.__popup)
+				this.__popup = this.getChildControl("popup");
+
+			return this.__popup;
+
+		},
+		__popup: null,
+
+		/**
+		 * Returns the drop down list.
+		 */
+		getDropDownList: function () {
+
+			if (!this.__dropDownList)
+				this.__dropDownList = this.getChildControl("list");
+
+			return this.__dropDownList;
+		},
+		__dropDownList: null,
+
+		/**
+		 * Returns the currently selected item in the drop-down list.
+		 *
+		 * @returns {qx.ui.form.ListItem} Currently selected item.
+		 */
+		getListSelectedItem: function () {
+
+			var list = this.getDropDownList();
+			var selection = list.getSelection();
+			if (selection && selection.length > 0)
+				return selection[0];
+
+			return null;
+		},
+
+		/**
+		 * Selects the item in the drop-down list.
+		 * 
+		 * @param {qx.ui.form.ListItem} item The item to select, null to reset the selection.
+		 */
+		setListSelectedItem: function (item) {
+
+			var list = this.getDropDownList();
+			if (!item)
+				list.resetSelection();
+			else
+				list.setSelection([item]);
+		},
+
+		/**
+		 * Sets the selection mode in the drop-down list selection manager.
+		 *
+		 * @param {String} mode Selection mode.
+		 */
+		setListSelectionMode: function (mode) {
+
+			this.getDropDownList().setSelectionMode(mode);
 		},
 
 		/**
@@ -466,7 +634,6 @@ qx.Class.define("wisej.web.ComboBox", {
 			this.addState(value);
 
 			var icon = this.getChildControl("icon");
-			var list = this.getChildControl("list");
 			var button = this.getChildControl("button");
 			var textField = this.getChildControl("textfield");
 			var labelField = this.getChildControl("labelfield");
@@ -483,6 +650,8 @@ qx.Class.define("wisej.web.ComboBox", {
 					textField.exclude();
 					break;
 			}
+
+			var list = this.getDropDownList();
 
 			switch (value) {
 				case "simple":
@@ -508,6 +677,7 @@ qx.Class.define("wisej.web.ComboBox", {
 						this.__rightoolsContainer.setLayoutProperties({ row: 0, column: 3 });
 
 					list.show();
+					list.resetMaxWidth();
 					list.resetMaxHeight();
 					break;
 
@@ -520,8 +690,7 @@ qx.Class.define("wisej.web.ComboBox", {
 					list.setMaxHeight(this.getMaxListHeight());
 					this._getLayout().dispose();
 					this._setLayout((new qx.ui.layout.HBox()).set({ alignY: "middle" }));
-					var popup = this.getChildControl("popup");
-					popup.add(list);
+					this.getPopup().add(list);
 					break;
 			}
 
@@ -552,8 +721,8 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		_applyAutoCompleteMode: function (value, old) {
 
-			this.__autoCompleteMode = ["none", "suggest", "append", "suggestAppend" /*, "filter"*/].indexOf(value);
-			this.__autoCompleteMode = Math.max(0, this.__autoCompleteMode);
+			this._autoCompleteMode = ["none", "suggest", "append", "suggestAppend", "filter", "appendFilter"].indexOf(value);
+			this._autoCompleteMode = Math.max(0, this._autoCompleteMode);
 		},
 
 		/** 
@@ -594,11 +763,14 @@ qx.Class.define("wisej.web.ComboBox", {
 					// create the label field companion for 
 					// non-editable combo boxes.
 					this._createChildControl("labelfield");
+
+					// disable browser's autocomplete.
+					control.getContentElement().setAttribute("autocomplete", "off");
 					break;
 
 				case "popup":
 					control = new wisej.web.combobox.DropDown(this);
-					control.add(this.getChildControl("list"));
+					control.add(this.getDropDownList());
 					control.addListener("changeVisibility", this._onPopupChangeVisibility, this);
 					break;
 
@@ -629,10 +801,20 @@ qx.Class.define("wisej.web.ComboBox", {
 					break;
 
 				case "list":
-					control = this.base(arguments, id);
-					// disable the quick selection to preserve the
-					// selected item in the drop down list.
-					control.setQuickSelection(false);
+					control = new wisej.web.combobox.DropDownList().set({
+						focusable: false,
+						keepFocus: true,
+						height: null,
+						width: null,
+						maxWidth: this.getMaxListWidth(),
+						maxHeight: this.getMaxListHeight(),
+						selectionMode: "one",
+						quickSelection: false
+					});
+
+					control.addListener("changeSelection", this._onListChangeSelection, this);
+					control.addListener("pointerdown", this._onListPointerDown, this);
+					control.getChildControl("pane").addListener("tap", this.close, this);
 					break;
 			}
 
@@ -672,30 +854,57 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (this.getDropDownStyle() === "simple")
 				return;
 
-			var popup = this.getChildControl("popup");
+			var popup = this.getPopup();
+			var popupIsVisible = popup.isVisible();
+
+			// adjust the size of the drop-down list.
+			if (popupIsVisible)
+				this._adjustListSize();
 
 			// prevent firing on change of visibility from "hidden" to "excluded" or vice versa.
-			if (!popup.isVisible() && e.getOldData() != "visible")
+			if (!popupIsVisible && e.getOldData() !== "visible")
 				return;
 
-			this.fireEvent(
-				popup.isVisible() ? "open" : "close");
+			// notify the server the drop down list was opened or closed.
+			this.fireEvent(popupIsVisible ? "open" : "close");
+
+			// restore the focus to this widget when the popup is closed.
+			if (!popupIsVisible && e.getOldData() === "visible") {
+				if (this.isFocusable())
+					this.tabFocus();
+			}
 
 			// Synchronize the list with the current value on every
 			// opening of the popup. This is useful because through
 			// the quick selection mode, the list may keep an invalid
 			// selection on close or the user may enter text while
 			// the combobox is closed and reopen it afterwards.
-			if (popup.isVisible()) {
+			if (popupIsVisible) {
 				this.__synchListWithText(this.getValue());
-			}
-			else if (e.getOldData() === "visible") {
-				if (this.isFocusable())
-					this.tabFocus();
 			}
 
 			// In all cases: Remove focused state from button
 			this.getChildControl("button").removeState("selected");
+		},
+
+		/**
+		 * Adjusts the size of the drop-down list.
+		 */
+		_adjustListSize: function () {
+
+			var list = this.getDropDownList();
+			var maxWidth = this.getMaxListWidth();
+			var maxHeight = this.getMaxListHeight();
+
+			if (maxWidth > 0)
+				list.setMaxWidth(maxWidth);
+			else
+				list.setMaxWidth(window.innerWidth);
+
+			if (maxHeight > 0)
+				list.setMaxHeight(maxHeight);
+			else
+				list.setMaxHeight(window.innerHeight);
 		},
 
 		// overridden
@@ -722,6 +931,8 @@ qx.Class.define("wisej.web.ComboBox", {
 		// overridden
 		_onListChangeSelection: function (e) {
 
+			this._suggestedItem = null;
+
 			// don't change when read-only, unless it's processing
 			// a server request.
 			if (this.isReadOnly() && !this.core.processingActions) {
@@ -729,9 +940,9 @@ qx.Class.define("wisej.web.ComboBox", {
 			}
 
 			// save the suspendEvents state.
-			var suspendEvents = this.__suspendEvents;
+			var suspendEvents = this._suspendEvents;
 
-			this.__suspendEvents = true;
+			this._suspendEvents = true;
 			try {
 				var current = e.getData();
 				var icon = this.getChildControl("icon");
@@ -743,7 +954,8 @@ qx.Class.define("wisej.web.ComboBox", {
 					var index = this.indexOf(item);
 
 					// update the textfield.
-					this.setValue(this.__getItemText(item));
+					this.setValue(this._getItemText(item));
+					this.selectAllText();
 
 					// update the labelfield.
 					labelfield.resetTextColor();
@@ -760,6 +972,12 @@ qx.Class.define("wisej.web.ComboBox", {
 
 						// fire the event.
 						this.fireDataEvent("selectionChanged", index);
+
+						// prevent the state change from updating the control or
+						// we may get the SelectedIndexChanged event twice.
+						if (this.getDropDownStyle() !== "dropDownList") {
+							this.updateState("value");
+						}
 					}
 				}
 				else {
@@ -783,7 +1001,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			}
 			finally {
 				// restore the suspendEvents state.
-				this.__suspendEvents = suspendEvents;
+				this._suspendEvents = suspendEvents;
 			}
 		},
 
@@ -833,32 +1051,89 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			var key = e.getKeyIdentifier();
 			var isAltPressed = e.isAltPressed();
-			var isOpen = this.getChildControl("popup").isVisible();
+			var isOpen = this.isDroppedDown();
+			try {
+				switch (key) {
+					case "Up":
+						if (isOpen && isAltPressed) {
+							this.close();
+							e.stop();
+							return;
+						}
+						break;
 
-			switch (key) {
-				case "Up":
-					if (isOpen && isAltPressed) {
-						this.close();
-						e.stop();
-						return;
-					}
-					break;
+					case "Down":
+						if (isAltPressed) {
+							this.toggle();
+							e.stop();
+							return;
+						}
+						break;
 
-				case "Down":
-					if (isAltPressed) {
-						this.toggle();
-						e.stop();
+					case "Enter":
+						if (isOpen) {
+							this._setPreselectedItem();
+							this.resetAllTextSelection();
+							this.close();
+							e.stop();
+							return;
+						}
+						break;
+
+					case "Escape":
+						if (isOpen) {
+							this.close();
+							e.stop();
+							return;
+						}
+						break;
+
+					case "Home":
+					case "End":
+						if (this.getDropDownStyle() !== "dropDownList")
+							return;
+						break;
+
+					case "Left":
+					case "Right":
 						return;
+				}
+
+				var list = this.getDropDownList();
+				if (isOpen) {
+
+					// special case when pressing "Down" and the list is scrolled.
+					// we want to select the first visible item in the list.
+					if (key === "Down" && this._suggestedItem) {
+						this.setListSelectedItem(this._suggestedItem);
 					}
-					else if (!isOpen) {
-						this.open();
-						e.stop();
-						return;
+					else {
+
+						this.base(arguments, e);
 					}
-					break;
+				}
+				else if (e.getModifiers() === 0) {
+					list.handleKeyPress(e);
+				}
+			}
+			finally {
+				this._suggestedItem = null;
+			}
+		},
+
+		/**
+		 * Event handler for the "keydown" accelerator even at the
+		 * document level. Needed to close the drop down also when
+		 * the app registered a shortcut for Enter or Escape.
+		 * 
+		 * @param {any} e The event data.
+		 */
+		__onDocumentKeyDown: function (e) {
+
+			switch (e.getKeyIdentifier()) {
 
 				case "Enter":
-					if (isOpen) {
+					if (this.isDroppedDown()) {
 						this._setPreselectedItem();
 						this.resetAllTextSelection();
 						this.close();
@@ -867,30 +1142,55 @@ qx.Class.define("wisej.web.ComboBox", {
 					}
 					break;
 
-
 				case "Escape":
-					if (isOpen) {
+					if (this.isDroppedDown()) {
 						this.close();
 						e.stop();
 						return;
 					}
 					break;
 			}
+		},
 
-			if (isOpen) {
-				this.base(arguments, e);
-			}
-			else if (this.getDropDownStyle() === "dropDownList") {
-				this.getChildControl("list").handleKeyPress(e);
+		/**
+		 * Event handle for the "keyinput" event.
+		 * 
+		 * Redirects the event to the drop down list when
+		 * the dropDownStyle = "dropDownList", hence we don't have
+		 * an editable field.
+		 */
+		_onKeyInput: function (e) {
+
+			if (this.isReadOnly())
+				return;
+
+			if (this.getDropDownStyle() === "dropDownList") {
+
+				// Use the incremental selection using the typed characters
+				// implemented in the list control.
+
+				// It saves the string for about 1000ms and uses it to select
+				// the nex item in the list.This is the same as the ListBox
+				// keyboard selection behavior.
+
+				this.getDropDownList()._onKeyInput(e);
 			}
 		},
 
 		/**
-		 * AutoComplete implementation.
-		 *
-		 * @param e {qx.event.type.KeyInput} Keyboard event
+		 * Event handle for the "input" event.
+		 * 
+		 * This is the autoComplete implementation. We have 5 behaviors when the user types:
+		 * 
+		 *	- 0 "none":				Scrolls the list (if open) to the first item that matches the text.
+		 *	- 1 "suggest":			Same as "none" but it opens the list automatically when the user starts typing.
+		 *	- 2 "append":			Same as "none" but it appends the remaining portion of item that matches to the typed text.
+		 *	- 3 "suggestAppend":	Same as "suggest" + "append".
+		 *	- 4 "filter":			Opens the list automatically and filters only the items that start with the typed text.
+		 *		
+		 * @param {qx.event.type.Data} e Event data.
 		 */
-		_onKeyAutoComplete: function (e) {
+		_onInput: function (e) {
 
 			if (this.isReadOnly())
 				return;
@@ -898,86 +1198,121 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (this.getDropDownStyle() === "dropDownList")
 				return;
 
-			// handle key inputs when we do have a textfield.
-			if (this.__autoCompleteMode == 0)
-				return;
-
 			// automatically show the drop down?
-			switch (this.__autoCompleteMode) {
+			switch (this._autoCompleteMode) {
+
 				case 1: // suggest
 				case 3: // suggestAppend
 				case 4: // filter
-					if (!this.getChildControl("popup").isVisible())
+					if (!this.isDroppedDown())
 						this.open();
 					break;
 			}
 
-			// process the key.
-			switch (this.__autoCompleteMode) {
+			// process the input event.
+			var text = e.getData();
+			switch (this._autoCompleteMode) {
+
+				case 0: // none
 				case 1: // suggest
-					this.__onKeyAutoCompleteSuggest(e);
+					this.__onInputAutoCompleteSuggest(text);
 					return;
 
 				case 2: // append
 				case 3: // suggestAppend
-					this.__onKeyAutoCompleteAppend(e);
+					this.__onInputAutoCompleteAppend(text);
 					break;
 
 				case 4: // filter
-					this.__onKeyAutoCompleteFilter(e);
+					this.__onInputAutoCompleteFilter(text);
+					break;
+
+				case 5: // appendFilter
+					this.__onInputAutoCompleteFilter(text);
+					this.__onInputAutoCompleteAppend(text);
 					break;
 			}
 		},
 
-		// process key inputs when the auto complete mode is "suggest".
-		__onKeyAutoCompleteSuggest: function (e) {
+		__onInputAutoCompleteSuggest: function (text) {
 
-			var list = this.getChildControl("list");
-			list._onKeyInput(e);
-			e.stop();
+			var list = this.getDropDownList();
+			this.setListSelectedItem(null);
 
-			if (this.getDropDownStyle() !== "dropDownList") {
-				var textfield = this.getChildControl("textfield");
-				textfield.selectAllText();
+			if (!text)
+				return;
+
+			var item = list.findItemByLabelFuzzy(text);
+			if (item) {
+				this._suggestedItem = item;
+				list.scrollItemIntoView(item);
 			}
 		},
 
 		// process key inputs when the auto complete mode is "append" or "suggestAppend".
-		__onKeyAutoCompleteAppend: function (e) {
+		__onInputAutoCompleteAppend: function (text) {
+
+			var list = this.getDropDownList();
+			this.setListSelectedItem(null);
+
+			if (!text)
+				return;
 
 			var textfield = this.getChildControl("textfield");
-			var text = textfield.getValue();
-			text = text.substr(0, textfield.getTextSelectionStart()) + e.getChar();
 
-			// find it in the drop down list.
-			var list = this.getChildControl("list");
+			// find the first item that matches the text.
 			var item = list.findItemByLabelFuzzy(text);
 
 			// if found, append and select the remaining portion.
-			if (item != null) {
+			if (item) {
 
-				var itemText = this.__getItemText(item);
+				// same as "suggest".
+				this._suggestedItem = item;
+				list.scrollItemIntoView(item);
+
+				// append and select.
+				var itemText = this._getItemText(item);
 				if (itemText.length > text.length) {
 
-					this.__suspendEvents = true;
+					this._suspendEvents = true;
 					try {
 
 						textfield.setValue(itemText);
 						textfield.setTextSelection(text.length, itemText.length);
-						e.stop();
-
 					} finally {
 
-						this.__suspendEvents = false;
+						this._suspendEvents = false;
 					}
 				}
 			}
 		},
 
 		// process key inputs when the auto complete mode is "filter".
-		__onKeyAutoCompleteFilter: function (e) {
-			// TODO: Implement.
+		__onInputAutoCompleteFilter: function (text) {
+
+			if (this._suspendEvents)
+				return;
+
+			var me = this;
+			clearTimeout(this.__autoCompleteFilterTimer);
+			this.__autoCompleteFilterTimer = setTimeout(function () {
+
+				me.__autoCompleteFilterTimer = 0;
+
+				var list = me.getDropDownList();
+				me.setListSelectedItem(null);
+				me._filterListItems(list, text);
+
+				// prepare the first matching item if the user presses the arrow down.
+				var item = list.findItemByLabelFuzzy(text);
+				if (item) {
+					me._suggestedItem = item;
+				}
+
+			}, 250);
+
 		},
+		__autoCompleteFilterTimer: 0,
 
 		/**
 		 * Reacts on value changes of the text field and syncs the
@@ -987,7 +1322,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		_onTextFieldChangeValue: function (e) {
 
-			if (!this.__suspendEvents) {
+			if (!this._suspendEvents) {
 
 				// select the first item that matches the text.
 				var text = e.getData();
@@ -1000,62 +1335,82 @@ qx.Class.define("wisej.web.ComboBox", {
 		/***/
 		__synchListWithText: function (text) {
 
-			if (text == null)
-				return;
-
-			this.__suspendEvents = true;
+			this._suspendEvents = true;
 			try {
 
-				var list = this.getChildControl("list");
+				var list = this.getDropDownList();
 
-				// show/hide matching items, when auto complete mode = filter.
-				if (this.__autoCompleteMode == 4)
-					this.__filterListItems(text);
+				if (!text) {
+					this.setListSelectedItem(null);
+					return;
+				}
 
 				// find the first item that matches the text.
 				var item = list.findItem(text, false /*ignoreCase*/);
 
-				// select the item only if the label is different, in order
-				// to preserve the selected index for identical items.
+				// select the item only if the label of the currently selected item is different
+				// from the text in the editable field, in order to preserve the selected index for identical items.
 				if (item) {
 
-					var selection = list.getSelection();
-					if (selection != null && selection.length > 0) {
-
-						if (selection[0].getLabel() != text)
-							list.setSelection([item]);
+					var selected = this.getListSelectedItem();
+					if (selected) {
+						if (this._getItemText(selected) !== text)
+							this.setListSelectedItem(item);
 					}
 					else {
-						list.setSelection([item]);
+						this.setListSelectedItem(item);
 					}
 				}
 				else {
-					list.resetSelection();
+					this.setListSelectedItem(null);
 				}
 			}
 			finally {
-				this.__suspendEvents = false;
+				this._suspendEvents = false;
 			}
 		},
 
-		/***/
-		__filterListItems: function (text) {
-			var items = this.getChildren();
+		// shows or hides the list items that match the text.
+		// should be used with the "filter" auto complete mode.
+		_filterListItems: function (list, text) {
+
+			var items = list.getChildren();
 			for (var i = 0, l = items.length; i < l; i++) {
 
-				if (text) {
-					var currentLabel = this.__getItemText(items[i]);
-					if (currentLabel && currentLabel.toLowerCase().indexOf(text) > -1) {
-						items[i].show();
-					}
-					else {
-						items[i].exclude();
-					}
-				}
-				else {
+				var label = this._getItemText(items[i]);
+				if (this.onFilterListItem(label, text))
 					items[i].show();
-				}
+				else
+					items[i].exclude();
 			}
+
+			// fix chrome graphic accelerator bug: when hiding showing elements
+			// quickly chrome may not update the screen correctly.
+			list.getContentElement().setStyle("transform", "rotateZ(0deg)");
+		},
+
+		/**
+		 * Default implementation of list the items filter.
+		 * An application may replace this method with a custom function.
+		 * 
+		 * @param {any} label Label of the item being filtered.
+		 * @param {any} text Text typed by the user.
+		 * @returns {Boolean} true if the item show be visible, false to hide it.
+		 */
+		onFilterListItem: function (label, text) {
+
+			if (text && label) {
+				// match the beginning of the label. case insensitive.
+				if (label.toLowerCase().indexOf(text.toLowerCase()) === 0)
+					return true; // show.
+			}
+			else {
+				// show the text is empty.
+				return true;
+			}
+
+			// hide.
+			return false;
 		},
 
 		/**
@@ -1064,6 +1419,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		_createListItem: function (properties) {
 
 			var item = new wisej.web.combobox.ListItem();
+			item.setHeight(this.getItemHeight());
 			item.setAppearance(this.getItemAppearance());
 			item.set(properties);
 
@@ -1073,31 +1429,24 @@ qx.Class.define("wisej.web.ComboBox", {
 		/**
 		 * Returns the plain text for the item.
 		 */
-		__getItemText: function (item) {
+		_getItemText: function (item) {
 
 			var text = null;
 
 			if (item) {
-
-				if (item.isRich()) {
-					var control = item.getChildControl("label", true);
-					if (control) {
-						var labelNode = wisej.utils.Widget.ensureDomElement(control);
-						if (labelNode) {
-							text = qx.bom.element.Attribute.get(labelNode, "text") || "";
-						}
-						else {
-							text = item.getLabel() || "";
-							return qx.bom.String.unescape(text);
-						}
-					}
-				} else {
-					text = item.getLabel() || "";
-				}
+				text = item.getLabel() || "";
+				text = qx.bom.String.toText(text);
 			}
 
 			return text;
-		},
+		}
+	},
+
+	destruct: function () {
+
+		// un-register the Enter or Esc accelerators.
+		qx.event.Registration.removeListener(document.documentElement, "keydown", this.__onDocumentKeyDown, this, true);
+
 	}
 });
 
@@ -1119,6 +1468,7 @@ qx.Class.define("wisej.web.combobox.ListItem", {
 		this.setRich(true);
 		this.getChildControl("icon").setScale(true);
 		this.getChildControl("label").setWrap(false);
+		this.getChildControl("label").getContentElement().setStyle("textOverflow", "ellipsis");
 	},
 
 	properties: {
@@ -1182,6 +1532,154 @@ qx.Class.define("wisej.web.combobox.DropDown", {
 
 
 /**
+ * wisej.web.combobox.DropDownList
+ *
+ * Represents the list inside the wisej.web.combobox.DropDown popup.
+ */
+qx.Class.define("wisej.web.combobox.DropDownList", {
+
+	extend: qx.ui.form.List,
+
+	construct: function () {
+
+		this.base(arguments);
+
+	},
+
+	members: {
+
+		/**
+		 * Scrolls the specified item to the top of the list, or to the
+		 * closest position.
+		 * 
+		 * @param {wisej.web.combobox.ListItem} item Item to scroll.
+		 */
+		scrollItemIntoView: function (item) {
+
+			this.scrollChildIntoView(item, "left", "top", true);
+
+		},
+
+		/**
+		 * Find an item by its {@link qx.ui.basic.Atom#getLabel}.
+		 * 
+		 * Overridden to skip items that are not visible or disabled.
+		 *
+		 * @param {String} search A label or any item.
+		 * @param {Boolean} ignoreCase Whether to use case insensitive comparison.
+		 * @return {qx.ui.form.ListItem} The found ListItem or null.
+		 */
+		findItem: function (search, ignoreCase) {
+
+			// lowercase search
+			if (ignoreCase !== false) {
+				search = search.toLowerCase();
+			}
+
+			// get all items of the list
+			var items = this.getChildren();
+			var item;
+
+			// go through all items
+			for (var i = 0, l = items.length; i < l; i++) {
+
+				item = items[i];
+
+				// skip not visible or disabled items.
+				if (!item.isEnabled())
+					continue;
+
+				// search the label text, whether it's html or not.
+				var label = this._getItemText(item);
+
+				if (label != null) {
+					if (label.translate) {
+						label = label.translate();
+					}
+					if (ignoreCase !== false) {
+						label = label.toLowerCase();
+					}
+
+					if (label.toString() === search.toString()) {
+						return item;
+					}
+				}
+			}
+
+			return null;
+		},
+
+		/**
+		 * Takes the given string and tries to find a ListItem
+		 * which starts with this string. The search is not case sensitive and the
+		 * first found ListItem will be returned. If there could not be found any
+		 * qualifying list item, null will be returned.
+		 * 
+ 		 * Overridden to skip items that are not visible or disabled.
+		 *
+		 *
+		 * @param {String} search The text with which the label of the ListItem should start with.
+		 * @param {Integer} startIndex The index to start the search from.
+		 * @return {qx.ui.form.ListItem} The found ListItem or null
+		 */
+		findItemByLabelFuzzy: function (search, startIndex) {
+
+			// lower case search text
+			search = search.toLowerCase();
+
+			// get all items of the list
+			var items = this.getChildren();
+			var item;
+
+			// go through all items
+			startIndex = Math.max(0, Math.min(startIndex + 1 || 0, items.length));
+			for (var i = startIndex, l = items.length; i < l; i++) {
+
+				item = items[i];
+
+				// skip not visible or disabled items.
+				if (!item.isEnabled())
+					continue;
+
+				// get the label of the current item
+				var currentLabel = this._getItemText(item);
+
+				// if the label fits with the search text (ignore case, begins with)
+				if (currentLabel && currentLabel.toLowerCase().indexOf(search) === 0) {
+					// just return the first found element
+					return item;
+				}
+			}
+
+			// wrap?
+			if (startIndex > 0) {
+				for (var i = 0, l = startIndex; i < l; i++) {
+
+					item = items[i];
+
+					// skip not visible or disabled items.
+					if (!item.isEnabled())
+						continue;
+
+					// get the label of the current item
+					var currentLabel = this._getItemText(item);
+
+					// if the label fits with the search text (ignore case, begins with)
+					if (currentLabel && currentLabel.toLowerCase().indexOf(search) === 0) {
+						// just return the first found element
+						return item;
+					}
+				}
+			}
+
+			// if no element was found, return null
+			return null;
+		}
+	}
+});
+
+
+/**
  * wisej.web.UserComboBox
  *
  * Extends the wisej.web.ComboBox widget to support a custom control
@@ -1196,7 +1694,7 @@ qx.Class.define("wisej.web.UserComboBox", {
 
 		this.base(arguments);
 
-		// close the custom drop when being hidden.
+		// close the custom drop down when being hidden.
 		this.addListener("disappear", this.__onDisappear, this);
 	},
 
@@ -1214,7 +1712,7 @@ qx.Class.define("wisej.web.UserComboBox", {
 		 *
 		 * Sets the width of the custom dropdown. If 0, the width of the wrapped widget is used.
 		 */
-		dropDownWidth: { init: 0, check: "PositiveInteger", apply: "_applyDropDownWidth" },
+		dropDownWidth: { init: 0, check: "PositiveInteger", apply: "_applyDropDownWidth" }
 	},
 
 	members: {
@@ -1234,16 +1732,13 @@ qx.Class.define("wisej.web.UserComboBox", {
 			}
 		},
 
-		/**
-		 * Shows the dropdown popup.
-		 */
+		// overridden.
 		open: function () {
 
 			this.base(arguments);
 
 			var textField = this.getChildControl("textfield");
 			if (textField.isVisible()) {
-				textField.getFocusElement().focus();
 				textField.selectAllText();
 			}
 		},
@@ -1261,7 +1756,7 @@ qx.Class.define("wisej.web.UserComboBox", {
 		 */
 		_applyDropDown: function (value, old) {
 
-			this.getChildControl("list").setWrapped(value);
+			this.getDropDownList().setWrapped(value);
 		},
 
 		/**
@@ -1269,8 +1764,8 @@ qx.Class.define("wisej.web.UserComboBox", {
 		 */
 		_applyDropDownWidth: function (value, old) {
 
-			var list = this.getChildControl("list");
-			if (value == 0)
+			var list = this.getDropDownList();
+			if (value === 0)
 				list.resetWidth();
 			else
 				list.setWidth(value);
@@ -1298,11 +1793,11 @@ qx.Class.define("wisej.web.UserComboBox", {
 		// overridden
 		_onKeyPress: function (e) {
 
-			var isOpen = this.getChildControl("popup").isVisible();
+			var isOpen = this.isDroppedDown();
 			if (isOpen) {
 
 				if (e.getKeyIdentifier() !== "Escape") {
-					this.getChildControl("list").handleKeyPress(e);
+					this.getDropDownList().handleKeyPress(e);
 					return;
 				}
 			}
@@ -1315,7 +1810,7 @@ qx.Class.define("wisej.web.UserComboBox", {
 
 			this.base(arguments, e);
 
-			var popup = this.getChildControl("popup");
+			var popup = this.getPopup();
 			if (!popup.isVisible()) {
 
 				qx.event.Idle.getInstance().removeListener("interval", this.__checkFocusedWidget, this);
@@ -1424,9 +1919,6 @@ qx.Class.define("wisej.web.userComboBox.DropDownWrapper", {
 		/** @type {wisej.web.UserComboBox} The owner control. */
 		__owner: null,
 
-		/** void method */
-		findItem: function () { return; },
-
 		/**
 		 * Applies the wrapped property.
 		 */
@@ -1495,7 +1987,7 @@ qx.Class.define("wisej.web.userComboBox.DropDownWrapper", {
 		getSelection: function () { },
 		setSelection: function () { },
 		resetSelection: function () { },
-		getSelectionContext: function () { },
-	},
+		getSelectionContext: function () { }
+	}
 
 });

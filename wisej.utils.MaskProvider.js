@@ -26,42 +26,9 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 	extend: qx.core.Object,
 
-	properties: {
-
-		/**
-		 * Mask property.
-		 *
-		 * Masking elements:
-		 *
-		 * 0 = Digit, required. This element will accept any single digit between 0 and 9.
-		 * 9 = Digit or space.
-		 * # = Digit or space or +- sign.
-		 * L = Letter, required. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z] in regular expressions.
-		 * ? = Letter or space. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z]? in regular expressions.
-		 * & = Character, required. If the AsciiOnly property is set to true, this element behaves like the "L" element.
-		 * C = Character or space. Any non-control character. If the AsciiOnly property is set to true, this element behaves like the "?" element.
-		 * A = Alphanumeric, required. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "a" element.
-		 * a = Alphanumeric or space. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "A" element.
-		 * < = Shift down. Converts all characters that follow to lowercase.
-		 * > = Shift up. Converts all characters that follow to uppercase.
-		 * | = Disable a previous shift up or shift down.
-		 * \ = Escape. Escapes a mask character, turning it into a literal. "\\" is the escape sequence for a backslash.
-		 * All other characters Literals = All non-mask elements will appear as themselves within MaskedTextBox. Literals always occupy a static position in the mask at run time, and cannot be moved or deleted by the user.
-		 */
-		mask: { init: "", check: "String", apply: "_applyMask" },
-
-		/**
-		 * The placeholder character to show in place of the mask. 
-		 */
-		prompt: { init: "_", check: "String", apply: "_applyPrompt" },
-
-		/**
-		 * When true, the prompt is hidden when the textfield loses the focus.
-		 */
-		hidePrompt: { init: true, check: "Boolean", apply: "_applyHidePrompt" },
-	},
-
 	construct: function (textfield, mask) {
+
+		this.base(arguments, true /* weak */);
 
 		if (mask)
 			this.setMask(mask);
@@ -107,6 +74,41 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 		},
 
+	},
+
+	properties: {
+
+		/**
+		 * Mask property.
+		 *
+		 * Masking elements:
+		 *
+		 * 0 = Digit, required. This element will accept any single digit between 0 and 9.
+		 * 9 = Digit or space.
+		 * # = Digit or space or +- sign.
+		 * L = Letter, required. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z] in regular expressions.
+		 * ? = Letter or space. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z]? in regular expressions.
+		 * & = Character, required. If the AsciiOnly property is set to true, this element behaves like the "L" element.
+		 * C = Character or space. Any non-control character. If the AsciiOnly property is set to true, this element behaves like the "?" element.
+		 * A = Alphanumeric, required. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "a" element.
+		 * a = Alphanumeric or space. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "A" element.
+		 * < = Shift down. Converts all characters that follow to lowercase.
+		 * > = Shift up. Converts all characters that follow to uppercase.
+		 * | = Disable a previous shift up or shift down.
+		 * \ = Escape. Escapes a mask character, turning it into a literal. "\\" is the escape sequence for a backslash.
+		 * All other characters Literals = All non-mask elements will appear as themselves within MaskedTextBox. Literals always occupy a static position in the mask at run time, and cannot be moved or deleted by the user.
+		 */
+		mask: { init: "", check: "String", apply: "_applyMask" },
+
+		/**
+		 * The placeholder character to show in place of the mask. 
+		 */
+		prompt: { init: "_", check: "String", apply: "_applyPrompt" },
+
+		/**
+		 * When true, the prompt is hidden when the textfield loses the focus.
+		 */
+		hidePrompt: { init: true, check: "Boolean", apply: "_applyHidePrompt" },
 	},
 
 	members: {
@@ -218,7 +220,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		processKeyInput: function (e) {
 
-			if (this.__maskChars.length == 0 || this.__isReadOnly)
+			if (this.__maskChars.length === 0 || this.__isReadOnly)
 				return;
 
 			e.preventDefault();
@@ -245,8 +247,8 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			if (!mchar) {
 
 				// compare if the typed char matches the literal in the mask, advance one position.
-				if (text[selection.start] == char)
-					this.__textfield.setTextSelection(selection.start + 1, selection.start + 1)
+				if (text[selection.start] === char)
+					this.__textfield.setTextSelection(selection.start + 1, selection.start + 1);
 
 				// TODO: if needed, we can fire a character rejected event here.
 				return;
@@ -273,7 +275,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		processFocus: function (e) {
 
-			if (this.__maskChars.length == 0)
+			if (this.__maskChars.length === 0)
 				return;
 
 			// update the masked value.
@@ -288,9 +290,9 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				var selLength = me.__textfield.getTextSelectionLength();
 
 				// if the field is empty, make sure the caret is at the first editable position.
-				if (selLength == 0) {
+				if (selLength === 0) {
 
-					if (value.length == 0 || selStart == 0) {
+					if (value.length === 0 || selStart === 0) {
 						var pos = me.__getNextInsertPosition(0);
 						field.setTextSelection(pos, pos);
 					}
@@ -306,7 +308,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		processBlur: function (e) {
 
-			if (this.__maskChars.length == 0)
+			if (this.__maskChars.length === 0)
 				return;
 
 			this.setValue(this.getValue());
@@ -320,10 +322,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		unmask: function (text, options) {
 
-			if (text == null || text.length == 0)
+			if (!text)
 				return text;
 
-			if (this.__maskChars.length == 0)
+			if (this.__maskChars.length === 0)
 				return text;
 
 			options = options || {};
@@ -342,7 +344,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				if (!mask)
 					break;
 
-				if (options.keepPrompt || c != prompt) {
+				if (options.keepPrompt || c !== prompt) {
 
 					isMask = this.__isMaskChar(mask);
 					if (isMask && this.__transformChar(c, mask))
@@ -365,7 +367,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		mask: function (text, options) {
 
-			if (this.__maskChars.length == 0)
+			if (this.__maskChars.length === 0)
 				return text;
 
 			options = options || {};
@@ -399,7 +401,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 					// find the next matching character in the input to align the mask.
 					var skipTo = text.indexOf(mask, i);
 					if (skipTo > -1)
-						i = skipTo + 1
+						i = skipTo + 1;
 
 					mask = this.__getNextMask();
 				}
@@ -431,7 +433,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 						i++;
 
 						// if the input char matches the prompt, add it as-is.
-						if (c == prompt) {
+						if (c === prompt) {
 
 							if (options.keepPrompt)
 								result += prompt;
@@ -446,7 +448,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 							if (this.__maskChars.indexOf(c, this.__maskIndex) > -1) {
 
 								if (prompt) {
-									for (; mask != null && mask != c; mask = this.__getNextMask()) {
+									for (; mask !== c; mask = this.__getNextMask()) {
 
 										if (this.__isMaskChar(mask))
 											result += prompt;
@@ -618,21 +620,20 @@ qx.Class.define("wisej.utils.MaskProvider", {
 						this.__lowercase = true;
 						this.__uppercase = false;
 						return this.__getNextMask();
-						break;
+
 					case ">":
 						this.__lowercase = false;
 						this.__uppercase = true;
 						return this.__getNextMask();
-						break;
+
 					case "|":
 						this.__lowercase = false;
 						this.__uppercase = false;
 						return this.__getNextMask();
-						break;
+
 					case "\\":
 						this.__escape = true;
 						return this.__getNextMask();
-						break;
 				}
 			}
 
@@ -682,6 +683,6 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			this.__isReadOnly = e.getData();
 		},
 
-	},
+	}
 
 });

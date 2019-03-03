@@ -158,6 +158,7 @@ qx.Class.define("wisej.utils.Widget", {
 
 			// reset and recalculate the preferred size.
 			var size = null;
+			widget.invalidateLayoutCache();
 			if (widget.isVisible()) {
 				size = widget.getSizeHint();
 			}
@@ -371,7 +372,7 @@ qx.Class.define("wisej.utils.Widget", {
 					break;
 
 				role = node.getAttribute ? node.getAttribute("role") : null;
-				if (role)
+				if (role != null)
 					break;
 			}
 
@@ -393,6 +394,9 @@ qx.Class.define("wisej.utils.Widget", {
 				if (!target.isActive())
 					return false;
 			}
+
+			if (target instanceof qx.ui.menu.Menu)
+				target = target.getOpener();
 
 			// the top level container must be active:
 			//   - current main page, or
@@ -583,7 +587,7 @@ qx.Class.define("wisej.utils.Widget", {
 					names.push(target.$$subcontrol);
 				}
 
-				for (var widget = target.getLayoutParent() ; widget != null; widget = widget.getLayoutParent()) {
+				for (var widget = target.getLayoutParent(); widget != null; widget = widget.getLayoutParent()) {
 
 					if (widget.isWisejComponent) {
 						var name = widget.getName();
@@ -630,16 +634,16 @@ qx.Class.define("wisej.utils.Widget", {
 					while (document.getElementById(id + counter)) {
 						counter++;
 					}
-					id = id + "_" + counter;
+					id = id + counter;
 				}
 
-				el.setAttribute("id", id);
+				el.setAttribute("id", id, true);
 				target.setUserData("automationId", id);
 			}
 
 			// if the target has an accessibility element, ID that  one too.
 			var acc = target.getAccessibilityTarget ? target.getAccessibilityTarget() : null;
-			if (acc && acc != target) {
+			if (acc && acc !== target) {
 				this.setAutomationID(acc);
 			}
 		},
@@ -655,7 +659,7 @@ qx.Class.define("wisej.utils.Widget", {
 			// create the element used to parse.
 			if (el == null) {
 				el = this.__cssParseElement = qx.dom.Element.create("div");
-		}
+			}
 
 			el.setAttribute("style", css);
 

@@ -60,7 +60,7 @@ qx.Class.define("wisej.web.datagrid.CellEvent", {
 						cellEl = null;
 						break;
 					}
-					else if (cellEl.getAttribute("role") == "cell") {
+					else if (cellEl.getAttribute("role") === "cell") {
 						break;
 					}
 				}

@@ -79,7 +79,7 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 		// interface implementation
 		getCellEditorValue: function (cellEditor) {
 
-			wisej.web.datagrid.EditorFactory.getCellEditorValue(cellEditor);
+			return wisej.web.datagrid.EditorFactory.getCellEditorValue(cellEditor);
 
 		},
 
@@ -125,7 +125,7 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 				return editor;
 			}
 
-		},
+		}
 
 	}
 });

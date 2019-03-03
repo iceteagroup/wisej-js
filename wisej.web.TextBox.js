@@ -857,6 +857,18 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		},
 
 		/**
+		 * Returns the masked value to the cell when this
+		 * editor is used in a data grid.
+		 * 
+		 * We need the masked value to update the screen immediately
+		 * while waiting for the server to update the cell.
+		 */
+		getCellValue: function () {
+
+			return this.__maskProvider.getValue(true);
+		},
+
+		/**
 		 * Creates the mask provider instance. It's overridable to
 		 * assign a customized mask provider.
 		 */
@@ -910,7 +922,7 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 				el.setAttribute("max", value.max);
 				el.setAttribute("step", value.step);
 			}
-		},
+		}
 	},
 
 	destruct: function () {

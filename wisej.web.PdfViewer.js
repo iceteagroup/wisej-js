@@ -143,7 +143,7 @@ qx.Class.define("wisej.web.PdfViewer", {
 				overflowY: "hidden",
 				width: "100%",
 				height: "100%"
-			}, {
+			},	{
 					data: url
 				}
 			);
@@ -185,6 +185,9 @@ qx.Class.define("wisej.web.PdfViewer", {
 		 * URL. Supports file paths with or without origin/protocol.
 		 */
 		__toAbsoluteURL: function (url) {
+
+			if (!url)
+				return "";
 
 			return qx.util.Uri.getAbsolute(url);
 		},

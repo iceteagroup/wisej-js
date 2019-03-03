@@ -34,8 +34,12 @@ qx.Class.define("wisej.web.listview.GridView", {
 
 		this.__owner = owner;
 
-		// the listview data model.
-		this.base(arguments, new wisej.web.listview.GridDataModel());
+		// use the listview data model.
+		var dataModel = !wisej.web.DesignMode
+				? new wisej.web.listview.GridDataModel()
+				: new wisej.web.datagrid.DataModelDesignMode();
+
+		this.base(arguments, dataModel);
 
 		// use the listview row renderer.
 		this.getDataRowRenderer().dispose();
@@ -63,7 +67,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 	properties: {
 
 		// overridden.
-		newTableColumnModel: { refine: true, init: function (table) { return new wisej.web.listview.ColumnModel(table); } },
+		newTableColumnModel: { refine: true, init: function (table) { return new wisej.web.listview.ColumnModel(table); } }
 
 	},
 
@@ -169,7 +173,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 				case "gridCellClick":
 				case "gridCellDblClick":
 					if (e.getData().row == -1) {
-						if (this.getHeaderStyle() != "clickable")
+						if (this.getHeaderStyle() !== "clickable")
 							return;
 					}
 					this.__owner.fireItemEvent(e, e.getType(), e.getData());
@@ -178,7 +182,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 				case "gridCellMouseUp":
 
 					// right click (or middle)?
-					if (e.getButton() == "left")
+					if (e.getButton() === "left")
 						return;
 
 					this.__owner.fireItemEvent(e, "gridCellRightClick", e.getData());
@@ -191,8 +195,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 		},
 
 		// overridden.
-		_onKeyPress: function(e)
-		{
+		_onKeyPress: function (e) {
 			// if checkboxes are visible, toggle the check state
 			// when pressing enter.
 			if (this.getShowCheckBoxes()) {
@@ -365,17 +368,17 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 		 */
 		_getContentHtml: function (cellInfo) {
 
-			var cellStyle = this._resolveCellStyle(cellInfo);
-			var cellValue = this._getCellValue(cellInfo);
+			var cellStyle = this._resolveContentStyle(cellInfo);
+			var cellCss = cellStyle ? cellStyle.css : "";
+			var cellValue = this._getCellValue(cellInfo, cellStyle);
 
 			var htmlArr =
-			  [
-					"<div role='content' class='",
-					this._contentClassName,
-					"'>"
-			  ];
+				[
+					"<div role='content' class='", this._contentClassName, "' ",
+					"style='white-space:nowrap;", cellCss, "'>"
+				];
 
-			if (cellInfo.col === 0 && cellInfo.rowData) {
+			if (cellInfo.col == 0 && cellInfo.rowData) {
 
 				var data = cellInfo.rowData.data;
 
@@ -445,14 +448,14 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 
 		// overridden to add support for data.icon and data.stateIcon.
 		// resolves the style and returns a style map with the "css" set to the compiled css string.
-		_resolveCellStyle: function (cellInfo) {
+		_resolveContentStyle: function (cellInfo) {
 
 			var cachedStyle = this.base(arguments, cellInfo);
 
 			if (cellInfo.rowData) {
 
 				var data = cellInfo.rowData.data;
-				if (data && cellInfo.col === 0 && (data.icon || data.stateIcon)) {
+				if (data && cellInfo.col == 0 && (data.icon || data.stateIcon)) {
 
 					var itemIcon = data.icon;
 					var stateIcon = data.stateIcon;
@@ -490,13 +493,13 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 
 			var styleMgr = this._styleMgr;
 			var appearance = this.getAppearance();
-			
+
 			// icon, stateIcon and checkbox elements.
 			this._iconClassName = styleMgr.getCssClass(appearance + "/icon", {}, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
 			this._stateIconClassName = styleMgr.getCssClass(appearance + "/stateIcon", {}, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
 			this._checkBoxClassName = styleMgr.getCssClass(appearance + "/checkbox", {}, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
 			this._checkBoxCheckedClassName = styleMgr.getCssClass(appearance + "/checkbox", { checked: true }, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
-		}
+		},
 	}
 });
 
@@ -531,17 +534,17 @@ qx.Class.define("wisej.web.listview.ImageCellRenderer", {
 		 */
 		_getContentHtml: function (cellInfo) {
 
-			var cellStyle = this._resolveCellStyle(cellInfo);
+			var cellStyle = this._resolveContentStyle(cellInfo);
+			var cellCss = cellStyle ? cellStyle.css : "";
 			var cellValue = this._getCellValue(cellInfo);
 
 			var htmlArr =
-			  [
-					"<div role='content' class='",
-					this._contentClassName,
-					"'>"
-			  ];
+				[
+					"<div role='content' class='", this._contentClassName, "' ",
+					"style='white-space:nowrap;", cellCss, "'>"
+				];
 
-			if (cellInfo.col === 0 && cellInfo.rowData) {
+			if (cellInfo.col == 0 && cellInfo.rowData) {
 
 				var data = cellInfo.rowData.data;
 

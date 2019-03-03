@@ -282,12 +282,12 @@ qx.Class.define("wisej.web.Panel", {
 		 */
 		_applyCaptionAlignment: function (value, old) {
 
-			var alignX = "center";
-			var alignY = "middle";
 			var title = this.getChildControl("title");
 
 			if (this.__isVertical()) {
 
+				var alignX = "center";
+				var alignY = "middle";
 				switch (value) {
 
 					case "left":
@@ -302,13 +302,16 @@ qx.Class.define("wisej.web.Panel", {
 						alignY = "middle";
 						break;
 				}
+
+				title.setAlignX(alignX);
+				title.setAlignY(alignY);
+				title.setTextAlign("left");
 			}
 			else {
-				alignX = value;
+				title.setAlignX("left");
+				title.setAlignY("middle");
+				title.setTextAlign(value);
 			}
-
-			title.setAlignX(alignX);
-			title.setAlignY(alignY);
 		},
 
 		/**
@@ -1100,9 +1103,11 @@ qx.Class.define("wisej.web.Panel", {
 					break;
 
 				case "title":
-					control = new qx.ui.basic.Label(this.getCaption());
-					control.setAnonymous(true);
-					control.setAlignY("middle");
+					control = new qx.ui.basic.Label(this.getCaption()).set({
+						anonymous: true,
+						alignY: "middle",
+						allowGrowX: true
+					});
 					this.getChildControl("captionbar").add(control, { row: 0, column: 2 });
 					break;
 

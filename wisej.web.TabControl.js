@@ -27,8 +27,8 @@ qx.Class.define("wisej.web.TabControl", {
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
 	include: [
-		  wisej.mixin.MWisejControl,
-		  wisej.mixin.MBorderStyle
+		wisej.mixin.MWisejControl,
+		wisej.mixin.MBorderStyle
 	],
 
 	construct: function (orientation) {
@@ -280,7 +280,7 @@ qx.Class.define("wisej.web.TabControl", {
 
 						var itemSize = this.getItemSize();
 						if (itemSize) {
-							if (this._getEffectiveOrientation() == "vertical") {
+							if (this._getEffectiveOrientation() === "vertical") {
 								if (itemSize.height > 0)
 									button.setHeight(itemSize.height);
 							}
@@ -670,9 +670,9 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
 	include: [
-		  wisej.mixin.MWisejControl,
-		  wisej.mixin.MShortcutTarget,
-		  qx.ui.core.MRemoteChildrenHandling
+		wisej.mixin.MWisejControl,
+		wisej.mixin.MShortcutTarget,
+		qx.ui.core.MRemoteChildrenHandling
 	],
 
 	construct: function (text, icon) {
@@ -869,9 +869,14 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 * to be compatible with the wisej.web.Panel component.
 		 */
 		getCaption: function () {
-			return this.getLabel();
+
+			return this.getLabel() || "";
 		},
 		setCaption: function (value, old) {
+
+			if (value === "")
+				value = null;
+
 			this.setLabel(value);
 		},
 
@@ -906,7 +911,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 				if (this.isVisible())
 					this.hide();
 
-				this.getButton().exclude()
+				this.getButton().exclude();
 			}
 			else {
 
@@ -918,15 +923,15 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		_applyEnabled: function (value, old) {
 
 			value === false
-					  ? this.addState("disabled")
-					  : this.removeState("disabled");
+				? this.addState("disabled")
+				: this.removeState("disabled");
 
 			// add the disabled stat but let t he button be
 			// clickable to let the user select the disabled tab page.
 			var btn = this.getChildControl("button");
 			value === false
-					  ? btn.addState("disabled")
-					  : btn.removeState("disabled");
+				? btn.addState("disabled")
+				: btn.removeState("disabled");
 		},
 
 		/**
@@ -952,6 +957,29 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			this.base(arguments, value, old);
 
 			// update the layout of the tab-button.
+			qx.ui.core.queue.Widget.add(this, "layout");
+		},
+
+		// overridden to adjust the button
+		// layout when the position is left or right.
+		_applyFont: function (value, old) {
+
+			this.base(arguments, value, old);
+
+			// update the layout of the tab-button when
+			// the font changes.
+			if (value) {
+				// for WebFonts, wait for the font to be loaded.
+				var font = qx.theme.manager.Font.getInstance().resolve(value);
+				if (font instanceof qx.bom.webfonts.WebFont) {
+					font.addListenerOnce("changeStatus", function () {
+						qx.ui.core.queue.Widget.add(this, "layout");
+					}, this);
+
+					return;
+				}
+			}
+
 			qx.ui.core.queue.Widget.add(this, "layout");
 		},
 
@@ -985,7 +1013,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					var width = size.width;
 					var height = size.height;
 
-					if (this.__orientation == "vertical") {
+					if (this.__orientation === "vertical") {
 						width = size.height;
 						height = size.width;
 					}
@@ -1006,7 +1034,6 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			// update the layout of the tab-button.
 			qx.ui.core.queue.Widget.add(this, "layout");
-
 		},
 
 		/**
@@ -1051,7 +1078,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 				var oldIndex = e.getOldData();
 
 				// moving a selected tab?
-				var selected = tabControl.getSelectedIndex() == oldIndex;
+				var selected = tabControl.getSelectedIndex() === oldIndex;
 
 				// preserve the selection.
 				if (selected) {
@@ -1084,32 +1111,57 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					layout.setColumnFlex(1, 0);
 					layout.setColumnFlex(2, 0);
 					layout.setRowFlex(0, 0);
-					layout.setRowFlex(1, 1);
+					layout.setRowFlex(1, 0);
 					layout.setRowFlex(2, 0);
 
-					if (this.__barPosition == "right" || this.__barPosition == "bottom") {
+					if (this.__barPosition === "right" || this.__barPosition === "bottom") {
+
 						icon.setLayoutProperties({ row: 0, column: 0 });
 						label.setLayoutProperties({ row: 1, column: 0 });
 						close.setLayoutProperties({ row: 2, column: 0 });
+
+						// flex either the label or the icon.
+						layout.setRowFlex(label.isVisible() ? 1 : 0, 1);
 					}
 					else {
+
 						close.setLayoutProperties({ row: 0, column: 0 });
 						label.setLayoutProperties({ row: 1, column: 0 });
 						icon.setLayoutProperties({ row: 2, column: 0 });
+
+						// flex either the label or the icon.
+						layout.setRowFlex(label.isVisible() ? 1 : 2, 1);
 					}
+
+					// invalidate the height that may have been set by the theme.
+					// when "vertical" we allow the theme to set the width and
+					// let the browser adjust the height to fit the label.
+					if (label.isVisible())
+						button.setHeight(null);
+
 					break;
 
 				case "horizontal":
 
 					layout.setColumnFlex(0, 0);
-					layout.setColumnFlex(1, 1);
+					layout.setColumnFlex(1, 0);
 					layout.setColumnFlex(2, 0);
 					layout.setRowFlex(0, 1);
 					layout.setRowFlex(1, 0);
 					layout.setRowFlex(2, 0);
+
 					icon.setLayoutProperties({ row: 0, column: 0 });
 					label.setLayoutProperties({ row: 0, column: 1 });
 					close.setLayoutProperties({ row: 0, column: 2 });
+
+					// flex either the label or the icon.
+					layout.setColumnFlex(label.isVisible() ? 1 : 0, 1);
+
+					// invalidate the width that may have been set by the theme.
+					// when "horizontal" we allow the theme to set the height and
+					// let the browser adjust the width to fit the label.
+					if (label.isVisible())
+						button.setWidth(null);
 
 					break;
 			}
@@ -1132,11 +1184,12 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			widget.resetMinHeight();
 			widget.invalidateLayoutCache();
 
-			var direction = this.__orientation == "horizontal"
-					  ? "none"
-					  : (this.__barPosition == "right" || this.__barPosition == "bottom"
-						  ? "right"
-						  : "left");
+			var direction =
+				this.__orientation === "horizontal"
+					? "none"
+					: this.__barPosition === "right" || this.__barPosition === "bottom"
+						? "right"
+						: "left";
 
 			wisej.utils.Widget.rotate(widget, direction);
 		},
@@ -1193,9 +1246,9 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					scroller.setScrollbarX("hide");
 				}
 				else {
-				scroller.setScrollbarY((scrollBars & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
-				scroller.setScrollbarX((scrollBars & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
-			}
+					scroller.setScrollbarY((scrollBars & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
+					scroller.setScrollbarX((scrollBars & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
+				}
 			}
 			else {
 				scroller.setScrollbarX("off");
@@ -1271,9 +1324,9 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					scroller.setScrollbarX("hide");
 				}
 				else {
-				scroller.setScrollbarY((value & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
-				scroller.setScrollbarX((value & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
-			}
+					scroller.setScrollbarY((value & wisej.web.ScrollableControl.VERTICAL_SCROLLBAR) ? "auto" : "off");
+					scroller.setScrollbarX((value & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "off");
+				}
 			}
 		},
 
@@ -1397,7 +1450,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 				tabView.remove(this);
 
 			this.base(arguments);
-		},
+		}
 	}
 
 });
@@ -1479,7 +1532,7 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 			}
 
 			return control || this.base(arguments, id);
-		},
+		}
 
 	}
 });

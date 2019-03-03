@@ -36,9 +36,14 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		wisej.mixin.MBorderStyle
 	],
 
+	implement: qx.ui.tree.core.IVirtualTreeDelegate,
+
 	construct: function () {
 
 		this.base(arguments, null, "label", "children");
+
+		// set up our binding delegate.
+		this.setDelegate(this);
 
 		this.addListener("dragstart", this._onItemDrag, this);
 
@@ -49,12 +54,11 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		this.addListener("resize", this.__resetCachedTopNode);
 		this.addListener("scrollAnimationYEnd", this.__resetCachedTopNode);
 
-		// set up our binding delegate.
-		this.setDelegate(new wisej.web.virtualTreeView.TreeViewDelegate(this));
-
 		// listen to selection changes.
 		this.getSelection().addListener("change", this._onSelectionChange, this);
 
+		// update the size of the cells.
+		this.addListener("changeFont", this._onUpdated);
 	},
 
 	properties: {
@@ -98,6 +102,13 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 * Gets or sets the indentation to add at each level of child nodes.
 		 */
 		indent: { init: null, check: "PositiveInteger", apply: "_applyIndent", nullable: true },
+
+		/** 
+		 *  ItemHeight property.
+		 *  
+		 *  Default item height.
+		 */
+		itemHeight: { init: null, refine: true },
 
 		/**
 		 * Scrollable property.
@@ -188,7 +199,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		/**
 		 * Determines the appearance of child nodes that can be expanded.
 		 */
-		folderAppearance: { init: "tree-folder", apply: "_applyFolderAppearance", themeable: true },
+		folderAppearance: { init: "tree-folder", apply: "_applyFolderAppearance", themeable: true }
 	},
 
 	members: {
@@ -318,7 +329,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 */
 		_applyIconSize: function (value, old, name) {
 
-			name = (name == "iconSize") ? "icon" : "iconState";
+			name = (name === "iconSize") ? "icon" : "iconState";
 
 			this.__forEachItem(function (item) {
 				item._updateIconSize(value, name);
@@ -412,10 +423,10 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 */
 		_applyRowHeight: function (value, old) {
 
-			if (value == old)
+			if (value === old)
 				return;
 
-			if (value == null || value == -1)
+			if (value === null || value === -1)
 				this.resetItemHeight();
 			else
 				this.getPane().getRowConfig().setDefaultItemSize(value);
@@ -488,7 +499,6 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 			this.base(arguments, value, old);
 		},
-
 
 		/**
 		 * Applies the selectedNodes property.
@@ -838,7 +848,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		},
 
 		/**
-		 * Overridden event handler for the changeBubble event. The handler rebuild the lookup
+		 * Overridden event handler for the changeBubble event. The handler rebuilds the lookup
 		 * table when the child structure changed.
 		 * 
 		 * When invoked while processing server actions, suspend the
@@ -847,6 +857,11 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 * @param e {qx.event.type.Data} The data event.
 		 */
 		_onChangeBubble: function (e) {
+
+			if (wisej.web.DesignMode) {
+				this.base(arguments, e);
+				return;
+			}
 
 			if (this.core.processingActions) {
 				qx.ui.core.queue.Widget.add(this, "applyModelChanges");
@@ -864,47 +879,11 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 				return;
 
 			this.__applyModelChanges();
-		}
+		},
 
-	}
-});
-
-
-/**
- * wisej.web.virtualTreeView.TreeViewDelegate
- *
- * Delegate implementation used by the virtual infrastructure
- * to create, initialize, pool the widgets used when rendering the nodes.
- *
- */
-qx.Class.define("wisej.web.virtualTreeView.TreeViewDelegate", {
-
-	extend: qx.core.Object,
-
-	implement: [
-		qx.ui.tree.core.IVirtualTreeDelegate
-	],
-
-	construct: function (tree) {
-
-		this.base(arguments);
-
-		this.__tree = tree;
-	},
-
-	members: {
-
-		/** the instance of wisej.web.VirtualTreeView that created this delegate. */
-		__tree: null,
-
-		/**
-		 * Gives the user the opportunity to set individual styles and properties
-		 * on the widget cells created by the controller.
-		 *
-		 * @param item {qx.ui.core.Widget} Item to modify.
-		 */
-		configureItem: function (item) { },
-
+		// ------------------------------------------------------
+		// qx.ui.tree.core.IVirtualTreeDelegate
+		// ------------------------------------------------------
 
 		/**
 		 * Creates a widget cell which will be used for rendering. Be sure to
@@ -915,7 +894,7 @@ qx.Class.define("wisej.web.virtualTreeView.TreeViewDelegate", {
 		 */
 		createItem: function () {
 
-			return new wisej.web.VirtualTreeItem().set({ tree: this.__tree });
+			return new wisej.web.VirtualTreeItem().set({ tree: this });
 		},
 
 		/**
@@ -925,7 +904,7 @@ qx.Class.define("wisej.web.virtualTreeView.TreeViewDelegate", {
 		 */
 		onPool: function (item) {
 
-			var editor = this.__tree.getChildControl("editor", true);
+			var editor = this.getChildControl("editor", true);
 			if (editor && editor.getLayoutParent() === item) {
 				editor.endEdit(true);
 			}
@@ -986,6 +965,11 @@ qx.Class.define("wisej.web.virtualTreeView.TreeViewDelegate", {
 				return value === null ? undefined : value;
 			}
 		}
+
+		// ------------------------------------------------------
+		// END: qx.ui.tree.core.IVirtualTreeDelegate
+		// ------------------------------------------------------
+
 	}
 });
 
@@ -1014,7 +998,7 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 
 	construct: function (label) {
 
-		this.base(arguments);
+		this.base(arguments, true /* weak */);
 
 		if (label)
 			this.setLabel(label);
@@ -1034,7 +1018,7 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 		/**
 		 * The label/caption/text.
 		 */
-		label: { init: "", check: "String", event: "changeLabel", },
+		label: { init: "", check: "String", event: "changeLabel" },
 
 		/**
 		 * Node icon.
@@ -1084,12 +1068,12 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 		/**
 		 * The background color.
 		 */
-		backgroundColor: { init: null, check: "Color", event: "changeBackgroundColor", },
+		backgroundColor: { init: null, check: "Color", event: "changeBackgroundColor" },
 
 		/**
 		 * The text color.
 		 */
-		textColor: { init: null, check: "Color", event: "changeTextColor", },
+		textColor: { init: null, check: "Color", event: "changeTextColor" },
 
 		/**
 		 * The font.
@@ -1382,7 +1366,7 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 		/**
 		 * Determines the appearance of child nodes that can be expanded.
 		 */
-		folderAppearance: { init: "tree-folder", apply: "_applyFolderAppearance" },
+		folderAppearance: { init: "tree-folder", apply: "_applyFolderAppearance" }
 	},
 
 	members: {

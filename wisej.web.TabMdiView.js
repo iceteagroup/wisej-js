@@ -433,9 +433,11 @@ qx.Class.define("wisej.web.tabmdiview.ThumbnailPage", {
 				var tabPage = tabPages[i];
 				if (tabPage instanceof wisej.web.tabmdiview.TabPage) {
 
-					// create the new thumbnail.
-					var thumbnail = new wisej.web.tabmdiview.WindowPreview(tabPage);
-					this.add(thumbnail);
+					if (!tabPage.isHidden()) {
+						// create the new thumbnail.
+						var thumbnail = new wisej.web.tabmdiview.WindowPreview(tabPage);
+						this.add(thumbnail);
+					}
 				}
 			}
 		},

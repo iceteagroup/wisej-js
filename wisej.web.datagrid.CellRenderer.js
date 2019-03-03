@@ -31,7 +31,7 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 	/**
 	 * Initializes the dynamic cell renderer.
 	 *
-	 * @param defaultCellRenderer {Object} The default cell renderer .
+	 * @param defaultCellRenderer {Object} The default cell renderer.
 	 */
 	construct: function (defaultCellRenderer) {
 
@@ -211,7 +211,7 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 
 						var cellHeight = 0;
 						var rowCount = dataModel.getRowCount();
-						for (var rowIndex = row, maxIndex = Math.min(rowCount, rowIndex + rowSpan) ;
+						for (var rowIndex = row, maxIndex = Math.min(rowCount, rowIndex + rowSpan);
 							rowIndex < maxIndex; rowIndex++) {
 							cellHeight += dataModel.getRowHeight(rowIndex);
 						}
@@ -320,8 +320,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				this._getTooltipAttribute(cellInfo),
 				this._getCellWidgetAttribute(cellInfo),
 				"style='left:", cellInfo.styleLeft, "px;",
-					this._getCellSizeStyle(cellInfo.styleWidth, cellInfo.styleHeight),
-					this._getCellStyle(cellInfo),
+				this._getCellSizeStyle(cellInfo.styleWidth, cellInfo.styleHeight),
+				this._getCellStyle(cellInfo),
 				"'>",
 
 				this._getContentHtml(cellInfo),
@@ -493,6 +493,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 						cellValue);
 				}
 			}
+
 			htmlArr.push("</div>");
 			html = htmlArr.join("");
 
@@ -826,28 +827,28 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			// translate and resolve the style values coming from the server.
 			if (!style.css) {
 
-				if (style.color)
+				if (style.color !== undefined)
 					style.color = this._colorMgr.resolve(style.color);
 
-				if (style.backgroundColor)
+				if (style.backgroundColor !== undefined)
 					style.backgroundColor = this._colorMgr.resolve(style.backgroundColor);
 
-				if (style.font)
+				if (style.font !== undefined)
 					this._translateFont(style, style.font);
 
-				if (style.padding)
+				if (style.padding !== undefined)
 					this._translatePadding(style, style.padding);
 
-				if (style.whiteSpace)
+				if (style.whiteSpace !== undefined)
 					this._translateWhiteSpace(style, style.whiteSpace);
 
-				if (style.textAlign)
+				if (style.textAlign !== undefined)
 					this._translateTextAlign(style, style.textAlign, cellInfo.rightToLeft);
 
-				if (style.backgroundLayout)
+				if (style.backgroundLayout !== undefined)
 					this._translateBackgroundLayout(style, style.backgroundLayout, cellInfo.rightToLeft);
 
-				if (style.backgroundPosition)
+				if (style.backgroundPosition !== undefined)
 					this._translateBackgroundPosition(style, style.backgroundPosition, cellInfo.rightToLeft);
 			}
 
@@ -920,7 +921,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 		_translateBackgroundPosition: function (style, value, rightToLeft) {
 
-			var left = rightToLeft ? "right": "left";
+			var left = rightToLeft ? "right" : "left";
 			var right = rightToLeft ? "left" : "right";
 
 			switch (value) {
@@ -957,16 +958,13 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 		_translateWhiteSpace: function (style, value) {
 
-			switch (value) {
-				case "true":
-					style.whiteSpace = "pre-wrap";
-					style.wordWrap = "inherit";
-					break;
-
-				case "false":
-					style.whiteSpace = "pre";
-					style.wordWrap = "normal";
-					break;
+			if (value === true) {
+				style.whiteSpace = "pre-wrap";
+				style.wordWrap = "inherit";
+			}
+			else if (value === false) {
+				style.whiteSpace = "pre";
+				style.wordWrap = "normal";
 			}
 		},
 
@@ -1115,7 +1113,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				"class='",
 				this._getCellClass(cellInfo), "' ",
 				"style='",
-					this._getCellStyle(cellInfo),
+				this._getCellStyle(cellInfo),
 				"'>",
 				this._getContentHtml(cellInfo),
 				"</div>"
@@ -1639,5 +1637,6 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.RowHeader", {
 
 			this.base(arguments);
 		}
+
 	}
 });
