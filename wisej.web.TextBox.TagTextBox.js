@@ -100,7 +100,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 		 *
 		 * Gets or sets the character used to detect a new tag in addition to the Return.
 		 */
-		separatorChar: { init: "", check: "String", event: "changeSeparatorChar" },
+		separatorChar: { init: "", check: "String", event: "changeSeparatorChar" }
 	},
 
 	events: {
@@ -125,7 +125,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 		 * the property {@link wisej.web.TagTextBox#allowDuplicateTags} is false or
 		 * the value in {@link wisej.web.TagTextBox#maxTags} has been reached.
 		 */
-		tagRejected: "qx.event.type.Data",
+		tagRejected: "qx.event.type.Data"
 	},
 
 	members: {
@@ -250,6 +250,8 @@ qx.Class.define("wisej.web.TagTextBox", {
 		 */
 		_onTap: function (e) {
 
+			this.focus();
+
 			var target = e.getTarget();
 			if (target instanceof wisej.web.tagtextbox.Tag) {
 				var element = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
@@ -258,26 +260,6 @@ qx.Class.define("wisej.web.TagTextBox", {
 					this.__removeTag(target);
 				else
 					this.__selectTag(target);
-			}
-		},
-
-		// overridden.
-		_onKeyDown: function (e) {
-			var identifier = e.getKeyIdentifier();
-
-			switch (identifier) {
-
-				case "Enter":
-					// if the edit field is empty, let the default
-					// TextBox class handle the enter.
-					if (this.__getFieldText() == "")
-						this.base(arguments, e);
-
-					break;
-
-				default:
-					this.base(arguments, e);
-					break;
 			}
 		},
 
@@ -369,7 +351,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 					// on chrome autocomplete key events are not
 					// passed to the control. but when pressing enter it fires
 					// a key event with keyCode undefined!
-					if (qx.core.Environment.get("browser.name") == "chrome" && e.getKeyCode() === undefined) {
+					if (qx.core.Environment.get("browser.name") === "chrome" && e.getKeyCode() === undefined) {
 						this.__addTag(this.__getFieldText());
 						this.__setFieldText("");
 					}
@@ -504,7 +486,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 				var children = container.getChildren();
 				for (var i = 0, count = this.__getTagCount() ; i < count; i++) {
 					var label = children[i].getValue().toLowerCase();
-					if (label == text)
+					if (label === text)
 						return children[i];
 				}
 			}
@@ -525,16 +507,14 @@ qx.Class.define("wisej.web.TagTextBox", {
 					control = new wisej.web.tagtextbox.TextField();
 					control.setFocusable(false);
 					control.addState("inner");
+					control.setMinWidth(1);
+					control.setMinHeight(1);
+					control.setAllowGrowY(true);
 					this._add(control, { flex: 1 });
 					break;
 
 				case "tag-container":
 					control = new wisej.web.tagtextbox.TagContainer();
-					control.set({
-						anonymous: true,
-						keepFocus: true,
-						keepActive: true
-					});
 					var textfield = this.getChildControl("textfield");
 					var index = this._indexOf(textfield);
 					this._addAt(control, index, { flex: 1 });
@@ -574,9 +554,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 		resetValue: function () {
 
 			this.setTags(null);
-		},
-
-
+		}
 	}
 
 });
@@ -631,7 +609,7 @@ qx.Class.define("wisej.web.tagtextbox.Tag", {
 			}
 
 			return control || this.base(arguments, id);
-		},
+		}
 	}
 });
 
@@ -656,7 +634,7 @@ qx.Class.define("wisej.web.tagtextbox.TextField", {
 				width: this.__textSize.width * this.getMinLength(),
 				height: this.__textSize.height || 16
 			};
-		},
+		}
 	}
 });
 
@@ -696,7 +674,7 @@ qx.Class.define("wisej.web.tagtextbox.TagContainer", {
 			check: "Integer",
 			apply: "_applySpacing",
 			themeable: true
-		},
+		}
 	},
 
 	members: {
@@ -740,8 +718,8 @@ qx.Class.define("wisej.web.tagtextbox.TagContainerLayout", {
 			}
 
 			var lineCalculator = new qx.ui.layout.LineSizeIterator(
-			  children,
-			  this.getSpacingX()
+				children,
+				this.getSpacingX()
 			);
 
 			var lineTop = padding.top;
@@ -760,7 +738,7 @@ qx.Class.define("wisej.web.tagtextbox.TagContainerLayout", {
 				this.__renderLine(line, lineTop, availWidth, padding);
 				lineTop += line.height + this.getSpacingY();
 			}
-		},
+		}
 	}
 
 });

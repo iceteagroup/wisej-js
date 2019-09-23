@@ -59,6 +59,9 @@ qx.Class.define("wisej.web.ListView", {
 
 		// auto select the item when dragging starts.
 		this.addListener("dragstart", this._onDragStart, this);
+
+		// handle the keyboard to implement the progressive item finder on the server side.
+		this.addListener("keyinput", this._onKeyInput, this);
 	},
 
 	properties: {
@@ -440,8 +443,8 @@ qx.Class.define("wisej.web.ListView", {
 
 			var position = this.getToolsPosition();
 			var vertical = position == "left" || position == "right";
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, position);
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position);
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, position, "listview");
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position, "listview");
 		},
 
 		/** 
@@ -616,12 +619,23 @@ qx.Class.define("wisej.web.ListView", {
 		 * Resize the columns width according to the specified parameters.
 		 *
 		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
-		 * @param autoSizeMode {String} Autosize mode: one of "columnHeader", "allCellsExceptHeader","allCells", "displayedCellsExceptHeader", "displayedCells".
+		 * @param autoSizeMode {String} Autosize mode: one of "none", "headerSize", "columnContent".
 		 */
 		autoResizeColumns: function (columnIndex, autoSizeMode) {
 
-			if (this.gridView.isVisible())
-				this.gridView.autoResizeColumns(columnIndex, autoSizeMode);
+			if (this.gridView.isVisible()) {
+
+				switch (autoSizeMode) {
+
+					case "headerSize":
+						this.gridView.autoResizeColumns(columnIndex, "columnHeader");
+						break;
+
+					case "columnContent":
+						this.gridView.autoResizeColumns(columnIndex, "allCellsExceptHeader");
+						break;
+				}
+			}
 		},
 
 		// overridden
@@ -637,7 +651,7 @@ qx.Class.define("wisej.web.ListView", {
 				case "item-view":
 					control = new wisej.web.listview.ItemView(this).set({
 						focusable: false,
-						visibility: "excluded",
+						visibility: "excluded"
 					});
 					control.addState("inner");
 					this.add(control, { row: 1, column: 1 });
@@ -647,7 +661,7 @@ qx.Class.define("wisej.web.ListView", {
 					control = new wisej.web.listview.GridView(this).set({
 						focusable: false,
 						visibility: "excluded",
-						columnVisibilityButtonVisible: false,
+						columnVisibilityButtonVisible: false
 					});
 					control.addState("inner");
 					this.add(control, { row: 1, column: 1 });
@@ -667,8 +681,8 @@ qx.Class.define("wisej.web.ListView", {
 
 			if (currentView != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
 				currentView.fireNonBubblingEvent("focusin", qx.event.type.Focus);
-				currentView.getFocusElement().focus();
 				currentView.fireNonBubblingEvent("focus", qx.event.type.Focus);
+				currentView.activate();
 			}
 		},
 
@@ -701,8 +715,40 @@ qx.Class.define("wisej.web.ListView", {
 			if (this.itemView.isVisible()) {
 				this.itemView._onDragStart(e);
 			}
-		}
+		},
 
+		// handles the "keyinput" event to 
+		// collect the keys typed by the user and
+		// fire a search event to the server.
+		_onKeyInput: function (e) {
+
+			// reset string after a second of non pressed key
+			if (((new Date).valueOf() - this.__lastKeyPress) > 1000) {
+				this.__pressedString = "";
+			}
+
+			// combine keys the user pressed to a string.
+			this.__pressedString += e.getChar();
+
+			// store timestamp.
+			this.__lastKeyPress = (new Date).valueOf();
+
+			// fire the "search" event after 250ms of not typing.
+			var me = this;
+			clearTimeout(this.__searchEventTimer);
+			this.__searchEventTimer = setTimeout(function () {
+
+				if (!me.isDisposed() && me.__pressedString) {
+					me.fireDataEvent("search", me.__pressedString);
+				}
+
+			}, 250);
+
+		},
+		// stores the pressed keys and time stamp.
+		__lastKeyPress: null,
+		__pressedString: null,
+		__searchEventTimer: 0
 	}
 });
 

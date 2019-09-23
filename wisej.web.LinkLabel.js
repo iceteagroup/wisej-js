@@ -96,6 +96,19 @@ qx.Class.define("wisej.web.LinkLabel", {
 		},
 
 		/**
+		 * Applies the Enabled property.
+		 * 
+		 * Overridden to trigger the style update since this widget
+		 * has it's own DisabledColor.
+		 */
+		_applyEnabled: function (value, old) {
+
+			this.base(arguments, value, old);
+
+			this.__applyStyles();
+		},
+
+		/**
 		 * Creates the styles for the inner link elements.
 		 */
 		__applyStyles: function (mouseState) {
@@ -103,18 +116,19 @@ qx.Class.define("wisej.web.LinkLabel", {
 			var dom = this.getContentElement().getDomElement();
 			if (dom) {
 
-				var colorMgr = qx.theme.manager.Color.getInstance()
+				var colorMgr = qx.theme.manager.Color.getInstance();
 
 				var styles = {
 					textDecoration: "underline",
 					color: colorMgr.resolve(this.getLinkColor())
 				};
 
-				if (mouseState == null)
+				if (mouseState == null) {
 					mouseState = {
 						over: false,
 						down: false
 					};
+				}
 
 				// textDecoration
 				switch (this.getBehavior()) {

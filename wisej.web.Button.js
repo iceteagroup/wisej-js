@@ -241,9 +241,9 @@ qx.Class.define("wisej.web.Button", {
 
 			// change the appearance, but preserve it in case it was 
 			// set from the control and it's a custom appearance key.
-			if (value != null && this.getAppearance() == "button")
+			if (value != null && this.getAppearance() === "button")
 				this.setAppearance("menubutton");
-			else if (value == null && this.getAppearance() == "menubutton")
+			else if (value == null && this.getAppearance() === "menubutton")
 				this.setAppearance("button");
 		},
 

@@ -87,11 +87,40 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 		// resizing update timer.
 		__timer: null,
 
+		// automatic IFrame blocker.
+		__blockerElement: null,
+
 		/**
 		 * Updates the panel size to fit the content.
 		 */
 		updateSize: function () {
-			this.__updateHtmlSize();
+
+			this.__processHtml();
+		},
+
+		/**
+		 * Enables or disables the automatic IFrame
+		 * blocker needed to capture pointer events.
+		 */
+		enableIFrameBlocker: function (enable) {
+
+			if (!enable) {
+				if (this.__blockerElement) {
+					qx.event.Registration.removeListener(document.body, "pointerdown", this.block, this, true);
+					qx.event.Registration.removeListener(document.body, "pointerup", this.release, this, true);
+					qx.event.Registration.removeListener(document.body, "losecapture", this.release, this, true);
+					this._disposeObjects("__blockerElement");
+				}
+			}
+
+			if (enable) {
+				if (!this.__blockerElement) {
+					qx.event.Registration.addListener(document.body, "pointerdown", this.block, this, true);
+					qx.event.Registration.addListener(document.body, "pointerup", this.release, this, true);
+					qx.event.Registration.addListener(document.body, "losecapture", this.release, this, true);
+					this.__blockerElement = this._createBlockerElement();
+				}
+			}
 		},
 
 		/**
@@ -129,7 +158,8 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 		 * The update interval is controlled by the {@link #updateTimeout} property.
 		 */
 		_onUpdateInterval: function () {
-			this.__updateHtmlSize();
+
+			this.__processHtml();
 		},
 
 		/**
@@ -144,7 +174,7 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 				+ "</div>");
 
 			// update the inner HTML element size.
-			this.__updateHtmlSize();
+			this.__processHtml();
 		},
 
 		/**
@@ -207,11 +237,11 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 
 		__onPaneResize: function (e) {
 
-			this.__updateHtmlSize();
+			this.__processHtml();
 
 		},
 
-		__updateHtmlSize: function () {
+		__processHtml: function () {
 
 			var html = this.getChildControl("html");
 			var el = html.getContentElement();
@@ -228,6 +258,9 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 						html.setHeight(wrapperDom.scrollHeight);
 					}
 				}
+
+				// enable/disable the automatic IFrame blocker.
+				this.enableIFrameBlocker(htmlDom.getElementsByTagName("IFRAME").length > 0);
 			}
 		},
 
@@ -257,6 +290,36 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 		},
 
 		/**
+		 * Cover the iframe with a transparent blocker div element. This prevents
+		 * pointer or key events to be handled by the iframe. To release the blocker
+		 * use {@link #release}.
+		 *
+		 */
+		block: function (e) {
+
+			if (!this.__blockerElement)
+				return;
+
+			// don't block when the pointer event is originated by the iframe, or we disable embedded content.
+			if (e.getTarget().tagName === "IFRAME")
+				return;
+
+			this.__blockerElement.setStyle("display", "block");
+
+			// adjust the blocker z-index, otherwise the fixed z-index at 20 blocks all clicks on all overlapping widgets.
+			this.__blockerElement.setStyle("z-index", this.getZIndex());
+		},
+
+
+		/**
+		 * Release the blocker set by {@link #block}.
+		 *
+		 */
+		release: function () {
+			this.__blockerElement.setStyle("display", "none");
+		},
+
+		/**
 		 * Overridden to create an inner scrollable pane.
 		 */
 		_createChildControlImpl: function (id, hash) {
@@ -275,6 +338,53 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 
 			return control || this.base(arguments, id);
 		},
+
+		// overridden
+		renderLayout: function (left, top, width, height) {
+			this.base(arguments, left, top, width, height);
+
+			var pixel = "px";
+			var insets = this.getInsets();
+
+			if (this.__blockerElement) {
+				this.__blockerElement.setStyles({
+					"left": (left + insets.left) + pixel,
+					"top": (top + insets.top) + pixel,
+					"width": (width - insets.left - insets.right) + pixel,
+					"height": (height - insets.top - insets.bottom) + pixel
+				});
+			}
+		},
+
+		// overridden
+		setLayoutParent: function (parent) {
+
+			// remove the blocker element from the layout parent, and avoid adding it twice causing a js error.
+			var oldParent = this.getLayoutParent();
+			if (oldParent && this.__blockerElement)
+				oldParent.getContentElement().remove(this.__blockerElement);
+
+			this.base(arguments, parent);
+
+			if (parent && this.__blockerElement) {
+				parent.getContentElement().add(this.__blockerElement);
+			}
+		},
+
+		/**
+		 * Creates <div> element which is aligned over iframe node to avoid losing pointer events.
+		 *
+		 * @return {Object} Blocker element node
+		 */
+		_createBlockerElement: function () {
+			var el = new qx.html.Blocker();
+			el.setStyles({
+				"zIndex": 20,
+				"display": "none"
+			});
+
+			return el;
+		}
 	},
 
 	destruct: function () {
@@ -286,5 +396,10 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 
 		this._stopUpdateInterval();
 		this._disposeObjects("__timer");
+
+		if (this.getLayoutParent() && this.__blockerElement && this.__blockerElement.getParent()) {
+			this.getLayoutParent().getContentElement().remove(this.__blockerElement);
+		}
+		this.enableIFrameBlocker(false);
 	}
 });

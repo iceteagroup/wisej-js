@@ -257,7 +257,7 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 
 		DEFAULT_OPEN_CSS: "float:left;height:100%;background-repeat:no-repeat;position:relative",
 		DEFAULT_SPACER_CSS: "float:left;height:100%;background-repeat:no-repeat;position:relative;background-image:none",
-		DEFAULT_CONTENT_CSS: "display:inline-block;height:100%;position:relative;box-sizing:border-box;background-repeat:no-repeat;overflow:hidden;white-space:pre;",
+		DEFAULT_CONTENT_CSS: "display:inline-block;height:100%;position:relative;box-sizing:border-box;background-repeat:no-repeat;overflow:hidden;white-space:pre"
 	},
 
 	properties: {
@@ -265,14 +265,13 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 		/**
 		 * Appearance key for the row renderer.
 		 */
-		appearance: { init: "propertygrid/grid-cell", refine: true },
+		appearance: { init: "propertygrid/grid-cell", refine: true }
 	},
 
 	members: {
 
 		// open/close icon element classes.
 		_contentSpacerClassName: null,
-		_contentCollapsedClassName: null,
 		_contentCollapsedClassName: null,
 
 		// builds the state map for the cell.
@@ -309,6 +308,8 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 			var htmlArr = [];
 
 			var data = cellInfo.rowData;
+			var cellStyle = this._resolveContentStyle(cellInfo);
+			var cellCss = cellStyle ? cellStyle.css : "";
 
 			// add the open/close/spacer div before the content for the name column.
 			if (data && cellInfo.col < 2) {
@@ -339,7 +340,7 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 			}
 
 			htmlArr.push(
-				"<div role='content' class='", this._contentClassName, "'>",
+				"<div role='content' class='", this._contentClassName, "' style='", cellCss, "'>",
 				"<div class='", this._contentMiddleClassName, "'>",
 				cellInfo.value,
 				"</div></div>");
@@ -352,17 +353,15 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 		 * Creates the additional css classes needed for this renderer.
 		 */
 		_registerCssClasses: function () {
-
-			this.base(arguments);
-
 			var styleMgr = this._styleMgr;
 			var appearanceKey = this.getAppearance();
 
-			// checkbox element.
 			this._contentClassName = styleMgr.getCssClass(appearanceKey + "/content", {}, wisej.web.propertygrid.CellRenderer.DEFAULT_CONTENT_CSS);
 			this._contentSpacerClassName = styleMgr.getCssClass(appearanceKey + "/open", {}, wisej.web.propertygrid.CellRenderer.DEFAULT_SPACER_CSS);
 			this._contentExpandedClassName = styleMgr.getCssClass(appearanceKey + "/open", { expanded: true }, wisej.web.propertygrid.CellRenderer.DEFAULT_OPEN_CSS);
 			this._contentCollapsedClassName = styleMgr.getCssClass(appearanceKey + "/open", { collapsed: true }, wisej.web.propertygrid.CellRenderer.DEFAULT_OPEN_CSS);
+
+			this.base(arguments);
 		},
 	}
 });

@@ -89,7 +89,7 @@ qx.Class.define("wisej.web.TreeView", {
 		 *  
 		 *  Default item height.
 		 */
-		itemHeight: { init: null, check: "Integer", apply: "_applyItemHeight", nullable:true, themeable: true },
+		itemHeight: { init: 24, check: "Integer", apply: "_applyItemHeight", nullable:true, themeable: true },
 
 		/**
 		 * Scrollable property.
@@ -492,8 +492,8 @@ qx.Class.define("wisej.web.TreeView", {
 			}
 
 			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 });
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 });
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, null, "treeview");
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 }, null, "treeview");
 		},
 
 		/**

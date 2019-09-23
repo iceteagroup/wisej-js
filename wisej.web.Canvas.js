@@ -442,7 +442,7 @@ qx.Class.define("wisej.web.Canvas", {
 				this.__ensureContext();
 
 			var method = this.ctx[name];
-			if (method instanceof Function) {
+			if (method instanceof Function || typeof method === "function") {
 				try {
 					method.apply(this.ctx, args);
 				}

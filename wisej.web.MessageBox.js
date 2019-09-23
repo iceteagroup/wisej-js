@@ -69,7 +69,7 @@ qx.Class.define("wisej.web.MessageBox", {
 		/**
 		 * Horizontal alignment of the buttons in the "buttonsPane" container.
 		 */
-		alignment: { init: "center", check: ["left", "center", "right"], apply: "_applyAlignment", themeable: true },
+		alignment: { init: "center", check: ["left", "center", "right"], apply: "_applyAlignment", themeable: true }
 	},
 
 	construct: function (title) {
@@ -91,7 +91,13 @@ qx.Class.define("wisej.web.MessageBox", {
 		this.setAlignX("center");
 		this.setAlignY("middle");
 
+		this.addListener("focusin", this._onFocusIn, this);
+		qx.event.Idle.getInstance().addListener("interval", this.__ensureActiveMessageBox, this);
+
+		// process Enter and Esc.
 		this.addListener("keypress", this._onKeyPress, this);
+
+		// adjust the size on rendering.
 		this.addListenerOnce("appear", this._onAppear, this);
 
 		// rightToLeft support.
@@ -142,12 +148,47 @@ qx.Class.define("wisej.web.MessageBox", {
 
 				// activate the owner window
 				var owner = this.getOwner();
-				if (owner != null && owner instanceof qx.ui.core.Widget)
-					owner.activate();
+				if (owner instanceof qx.ui.core.Widget) {
 
-			} catch (ex) { }
+					owner.activate();
+					if (owner instanceof qx.ui.window.Window)
+						owner.setActive(true);
+				}
+
+			} catch (ex) {
+
+				// ignore.
+			}
 
 			this.destroy();
+		},
+
+		/**
+		 * Ensures that the active message box has the focus and the keyboard.
+		 */
+		__ensureActiveMessageBox: function () {
+
+			if (!this.isActive())
+				return;
+
+			if (this.__defaultBtn)
+				this.__defaultBtn.focus();
+		},
+
+		/**
+		 * Handles the message box or a child widget getting the focus.
+		 */
+		_onFocusIn: function (e) {
+
+			if (!this.isActive())
+				return;
+
+			// change the default button when it gets the focus (tab or click).
+			var target = e.getTarget();
+			if (target instanceof qx.ui.form.Button) {
+				this.__defaultBtn = target;
+				return;
+			}
 		},
 
 		/** 
@@ -156,8 +197,16 @@ qx.Class.define("wisej.web.MessageBox", {
 		 */
 		_onKeyPress: function (e) {
 
-			if (e.getKeyIdentifier() == "Escape") {
-				this.close();
+			switch (e.getKeyIdentifier()) {
+
+				case "Escape":
+					this.close();
+					break;
+
+				case "Enter":
+					if (this.__defaultBtn)
+						this.__defaultBtn.execute();
+					break;
 			}
 		},
 
@@ -212,7 +261,7 @@ qx.Class.define("wisej.web.MessageBox", {
 
 				// activate the owner window
 				var owner = this.getOwner();
-				if (owner != null && owner instanceof qx.ui.core.Widget)
+				if (owner && owner instanceof qx.ui.core.Widget)
 					owner.activate();
 			}
 			catch (ex) { }
@@ -224,7 +273,7 @@ qx.Class.define("wisej.web.MessageBox", {
 
 			var image = this.getChildControl("image");
 
-			if (!value || value == "none") {
+			if (!value || value === "none") {
 				image.exclude();
 			}
 			else {
@@ -317,7 +366,13 @@ qx.Class.define("wisej.web.MessageBox", {
 		// overridden to increase the z-index of the messagebox.
 		_applyZIndex: function (value, old) {
 			this.getContentElement().setStyle("zIndex", value == null ? 0 : 1e7 + value);
-		},
+		}
+
+	},
+
+	destruct: function () {
+
+		qx.event.Idle.getInstance().removeListener("interval", this.__ensureActiveMessageBox, this);
 
 	}
 

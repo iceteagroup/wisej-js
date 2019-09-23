@@ -57,7 +57,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 		 */
 		run: function (animation) {
 
-			var component = Wisej.Core.getComponent(animation.id);
+			var component = this.__getAnimationTarget(animation.id);
 			if (!component)
 				return;
 
@@ -130,7 +130,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 		// to the trigger event.
 		__registerAnimation: function (animation) {
 
-			var component = Wisej.Core.getComponent(animation.id);
+			var component = this.__getAnimationTarget(animation.id);
 			if (!component)
 				return;
 
@@ -140,7 +140,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 
 			// animations bound to the "disappear" event must run
 			// before the element has actually disappeared.
-			if (animation.event == "disappear") {
+			if (animation.event === "disappear") {
 
 				this.__registerDisappearAnimation(animation, component);
 				return;
@@ -148,7 +148,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 
 			// animations bound to the "close" event must run
 			// before the component is destroyed.
-			if (animation.event == "close")
+			if (animation.event === "close")
 			{
 				this.__registerCloseAnimation(animation, component);
 				return;
@@ -198,7 +198,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 		// unregisters the specified animation on the widget.
 		__unregisterAnimation: function (animation) {
 
-			var component = Wisej.Core.getComponent(animation.id);
+			var component = this.__getAnimationTarget(animation.id);
 			if (!component)
 				return;
 
@@ -215,6 +215,20 @@ qx.Class.define("wisej.web.extender.Animation", {
 			}
 		},
 
+		// Returns the component that corresponds to the specified id.
+		__getAnimationTarget: function (id) {
+
+			var component = Wisej.Core.getComponent(id);
+
+			// special case for components that need to
+			// animate another related widget, i.e. the wisej.web.UserPopup 
+			// has to animate its popup container.
+			if (component && component.getAnimationTarget)
+				component = component.getAnimationTarget();
+
+			return component;
+		},
+
 		/**
 		 * Applies the custom property.
 		 *
@@ -222,14 +236,14 @@ qx.Class.define("wisej.web.extender.Animation", {
 		 */
 		_applyCustom: function (value, old) {
 			if (value != null && value.length > 0) {
-				for (var i = 0 ; i < value.length; i++) {
+				for (var i = 0; i < value.length; i++) {
 
 					// try to parse the JSON string and register with wisej.web.Animation.
 					try {
 
 						var animation = JSON.parse(value[i]);
 						for (var name in animation) {
-							if (name != null)
+							if (name)
 								wisej.web.Animation.register(name, animation[name]);
 
 							break;
@@ -240,7 +254,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 					}
 				}
 			}
-		},
+		}
 	}
 
 });

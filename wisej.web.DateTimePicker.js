@@ -55,10 +55,28 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 		// any action on the textbox marks this widget as dirty to update the state on the server.
 		var textField = this.getChildControl("textfield");
-		textField.addListener("keyup", function (e) { this.setDirty(true); }, this);
+		textField.addListener("input", function (e) { this.setDirty(true); }, this);
+
+		// redirect the focus to the inner textfield.
+		this.addListener("focusin", this.__onFocusIn, this);
 
 		// enable the native context menu by default.
 		this.setNativeContextMenu(true);
+	},
+
+	events:
+	{
+		/** Whenever the text is changed this event is fired
+		 *
+		 *  Event data: The new text value of the field.
+		 */
+		"changeText": "qx.event.type.Data",
+
+		/** Whenever the value is changed this event is fired
+		 *
+		 *  Event data: The new value.
+		 */
+		"changeValue": "qx.event.type.Data",
 	},
 
 	properties: {
@@ -190,21 +208,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 	},
 
-	events:
-	{
-		/** Whenever the text is changed this event is fired
-		 *
-		 *  Event data: The new text value of the field.
-		 */
-		"changeText": "qx.event.type.Data",
-
-		/** Whenever the value is changed this event is fired
-		 *
-		 *  Event data: The new value.
-		 */
-		"changeValue": "qx.event.type.Data"
-	},
-
 	members: {
 
 		// the mask provider implementation.
@@ -257,7 +260,9 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			else
 				this.removeState("readonly");
 
-			this.getChildControl("button").setEnabled(!value);
+            if (!this.isReadOnly())
+                this.getChildControl("button").resetEnabled();
+
 			this.getChildControl("textfield").setReadOnly(value);
 		},
 
@@ -411,8 +416,8 @@ qx.Class.define("wisej.web.DateTimePicker", {
 				return;
 
 			var index = this._indexOf(this.getChildControl("textfield"));
-			wisej.web.ToolContainer.install(this, this, value, "right", { index: index + 1 });
-			wisej.web.ToolContainer.install(this, this, value, "left", { index: 0 });
+			wisej.web.ToolContainer.install(this, this, value, "right", { index: index + 1 }, null, "editor");
+			wisej.web.ToolContainer.install(this, this, value, "left", { index: 0 }, null, "editor");
 		},
 
 		/**
@@ -476,6 +481,21 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 			if (value) {
 				this.setTextSelection(value.start, value.length + value.start);
+			}
+		},
+
+		// focus the inner textfield when gaining the focus, otherwise the editable
+		// textfield doesn't get the focus when clicking close or on the border.
+		__onFocusIn: function (e) {
+
+			var textField = this.getChildControl("textfield");
+			if (textField.isVisible()) {
+
+				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
+					qx.event.Timer.once(function () {
+						textField.getFocusElement().focus();
+					}, this, 0);
+				}
 			}
 		},
 
@@ -580,6 +600,15 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			var control;
 
 			switch (id) {
+
+				case "textfield":
+					control = this.base(arguments, id, hash);
+					control.setMinWidth(1);
+					control.setMinHeight(1);
+					control.setAllowGrowY(false);
+					// disable browser's autocomplete.
+					control.getContentElement().setAttribute("autocomplete", "off");
+					break;
 
 				case "checkbox":
 					control = new qx.ui.basic.Image();
@@ -692,13 +721,21 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		// overridden.
 		_onPopupChangeVisibility: function (e) {
 
-			e.getData() == "visible" ? this.addState("popupOpen") : this.removeState("popupOpen");
+			var popup = this.getChildControl("popup");
+			var opened = popup.isVisible();
+
+			// prevent firing on change of visibility from "hidden" to "excluded" or vice versa.
+			if (!opened && e.getOldData() !== "visible")
+				return;
+
+			e.getData() === "visible"
+				? this.addState("popupOpen")
+				: this.removeState("popupOpen");
 
 			// synchronize the chooser with the current value on every
 			// opening of the popup. This is needed when the value has been
 			// modified and not saved yet (e.g. no blur).
-			var popup = this.getChildControl("popup");
-			if (popup.isVisible()) {
+			if (opened) {
 
 				var chooser = this.getChildControl("list");
 
@@ -718,7 +755,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 			this.fireEvent(popup.isVisible() ? "open" : "close");
 
-			if (e.getOldData() == "visible")
+			if (e.getOldData() === "visible")
 				this.tabFocus();
 		},
 

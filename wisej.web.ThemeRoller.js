@@ -350,13 +350,12 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 					"overlapped-scrollbars": "os.scrollBarOverlayed"
 				};
 				for (var key in properties) {
-					if (settings[key] !== undefined) {
+					var option = properties[key];
+					qx.core.Environment.getChecks()[option] = undefined;
+					qx.core.Environment.invalidateCacheKey(option);
 
-						var option = properties[key];
-						qx.core.Environment.getChecks()[option] = undefined;
-						qx.core.Environment.invalidateCacheKey(option);
+					if (settings[key] !== undefined)
 						qx.core.Environment.add(option, settings[key]);
-					}
 				}
 			}
 			return theme;

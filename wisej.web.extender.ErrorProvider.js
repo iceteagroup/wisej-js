@@ -213,7 +213,7 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 	destruct: function () {
 
 		this.__errorWidgets = null;
-	},
+	}
 
 });
 
@@ -282,7 +282,9 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 
 		// invalidMessage implementation from IForm.
 		valid: { check: "Boolean", init: false },
-		invalidMessage: { check: "String", init: "" },
+
+		// invalidMessage implementation from IForm.
+		invalidMessage: { check: "String", init: "" }
 	},
 
 	members: {

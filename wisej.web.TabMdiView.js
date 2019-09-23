@@ -119,20 +119,9 @@ qx.Class.define("wisej.web.TabMdiView", {
 			for (var i = 0; i < pages.length; i++) {
 				var win = pages[i].getChildren()[0];
 				if (win instanceof qx.ui.window.Window) {
-					win.setActive(pages[i] == current);
+					win.setActive(pages[i] === current);
 				}
 			}
-		},
-
-		// overridden.
-		// prevents closing the thumbnails page when an
-		// mdi child window is activated.
-		setSelectedIndex: function (value) {
-
-			if (this._isThumbnailsVisible())
-				return;
-
-			this.base(arguments, value);
 		},
 
 		/**
@@ -207,7 +196,7 @@ qx.Class.define("wisej.web.TabMdiView", {
 				// if the current selection is still the thumbnails page, otherwise
 				// it means that we changed the selection and we don't want to flicker.
 				var thumbnails = this.getChildControl("thumbnails");
-				if (this.getSelection()[0] == thumbnails && this.indexOf(this.getSelection()[0]) > -1)
+				if (this.getSelection()[0] === thumbnails && this.indexOf(this.getSelection()[0]) > -1)
 					this.setSelection(this.__savedSelection);
 
 				this.remove(thumbnails);
@@ -247,9 +236,9 @@ qx.Class.define("wisej.web.TabMdiView", {
 			}
 
 			return control || this.base(arguments, id);
-		},
+		}
 
-	},
+	}
 
 });
 

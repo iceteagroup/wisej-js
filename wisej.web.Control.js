@@ -44,5 +44,5 @@ qx.Class.define("wisej.web.Control", {
 
 	members: {
 
-	},
+	}
 });

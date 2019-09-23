@@ -98,7 +98,7 @@ qx.Class.define("wisej.web.Label", {
 			init: "topLeft",
 			apply: "_applyTextAlign",
 			check: ["topRight", "middleRight", "bottomRight", "topLeft", "topCenter", "middleLeft", "middleCenter", "bottomLeft", "bottomCenter"]
-		},
+		}
 	},
 
 	members: {
@@ -113,15 +113,12 @@ qx.Class.define("wisej.web.Label", {
 				return false;
 
 			// focus the next widget.
-			var parent = this.getParent();
+			var parent = this.getParent() || this.getLayoutParent();
 			if (parent) {
 
-				// if this is a label and it has a buddy control, focus it.
-				var next = (this instanceof qx.ui.basic.Label)
-					? this.getBuddy()
-					: null;
-
-				if (next != null) {
+				// if the label a buddy control, focus it.
+				var next = this.getBuddy();
+				if (next) {
 					if (next.isFocusable())
 						next.focus();
 
@@ -138,10 +135,10 @@ qx.Class.define("wisej.web.Label", {
 				for (var i = 0; i < children.length; i++) {
 
 					var childTabIndex = children[i].getTabIndex();
-					if (children[i] == this || childTabIndex < myTabIndex)
+					if (children[i] === this || childTabIndex < myTabIndex)
 						continue;
 
-					if (next != null && childTabIndex > nextTabIndex)
+					if (next && childTabIndex > nextTabIndex)
 						continue;
 
 					next = children[i];
@@ -150,7 +147,7 @@ qx.Class.define("wisej.web.Label", {
 						next = null;
 				}
 
-				if (next != null && next.isFocusable()) {
+				if (next && next.isFocusable()) {
 					next.focus();
 					return true;
 				}
@@ -240,7 +237,7 @@ qx.Class.define("wisej.web.Label", {
 			if (value || old)
 				this._updateBackgroundImages();
 
-			if (name == "iconAlign")
+			if (name === "iconAlign")
 				this.scheduleLayoutUpdate();
 		},
 

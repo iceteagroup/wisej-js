@@ -103,12 +103,17 @@ qx.Class.define("wisej.web.TabControl", {
 		/**
 		 * Sets the size of the tab buttons when sizeMode is set to "fixed".
 		 */
-		itemSize: { init: { width: 0, height: 0 }, check: "Map", nullable: true, apply: "_applyItemSize", themeable: true },
+		itemSize: { init: null, check: "Map", nullable: true, apply: "_applyItemSize", themeable: true },
 
 		/**
 		 * Specifies how the tab buttons should be sized.
 		 */
 		sizeMode: { init: "normal", check: ["normal", "fill", "fixed", "center"], apply: "_applySizeMode", themeable: true },
+
+		/**
+		 * Allows the use to change the position of the tab buttons by dragging them (chrome style).
+		 */
+		movableTabs: { init: false, check: "Boolean", apply: "_applyMovableTabs" }
 
 	},
 
@@ -136,15 +141,25 @@ qx.Class.define("wisej.web.TabControl", {
 			// add the bounds of the tab-buttons container.
 			var barBounds = this.getChildControl("bar").getBounds();
 
-			var rects = [];
+			var rects = [], bounds;
 			var pages = this.getChildren();
 			for (var i = 0; i < pages.length; i++) {
 
-				var bounds = pages[i].getButton().getBounds();
-				bounds.top += barBounds.top;
-				bounds.left += barBounds.left;
+				bounds = pages[i].getButton().getBounds();
 
-				rects.push(bounds);
+				if (!bounds) {
+
+					// hidden tab.
+					rects.push(null);
+				}
+				else {
+					rects.push({
+						top: bounds.top + barBounds.top,
+						left: bounds.left + barBounds.left,
+						width: bounds.width,
+						height: bounds.height
+					});
+				}
 			}
 
 			return rects;
@@ -195,6 +210,22 @@ qx.Class.define("wisej.web.TabControl", {
 		},
 
 		/**
+		 * Applies the movableTabs property.
+		 */
+		_applyMovableTabs: function (value, old) {
+
+			var button;
+			var pages = this.getChildren();
+			for (var i = 0; i < pages.length; i++) {
+				button = pages[i].getButton();
+
+				button.setMovable(value);
+				if (value)
+					button._activateMoveHandle(button);
+			}
+		},
+
+		/**
 		 * Applies the iconSize property.
 		 *
 		 * Updates all the tab pages.
@@ -202,31 +233,78 @@ qx.Class.define("wisej.web.TabControl", {
 		_applyIconSize: function (value, old) {
 
 			var pages = this.getChildren();
-			for (var i = 0 ; i < pages.length; i++)
+			for (var i = 0; i < pages.length; i++)
 				pages[i]._updateIconSize(value);
 		},
 
 		/**
 		 * Applies the itemSize property.
-		 * When null, it resets to the theme's value.
+		 * 
+		 * When null, or when one of the dimensions is 0, uses the
+		 * value from the theme.
 		 */
 		_applyItemSize: function (value, old) {
 
-			if (value == null) {
-				this.resetItemSize();
-				return;
+			// reset the cached button size hint.
+			this.__buttonSizeHint = null;
+
+			// schedule the updateLayout.
+			qx.ui.core.queue.Widget.add(this, "updateLayout");
+		},
+
+		// returns the effective size of the tab button.
+		getButtonSizeHint: function (value) {
+
+			if (this.__buttonSizeHint)
+				return this.__buttonSizeHint;
+
+			var itemSize = this.getItemSize() || {};
+			var buttonSize = { width: 0, height: 0 };
+			var themeItemSize = qx.util.PropertyUtil.getThemeValue(this, "itemSize") || {};
+
+			var sizeMode = this.getSizeMode();
+			switch (this.getAlignment()) {
+				case "left":
+				case "right":
+					{
+						buttonSize.width = itemSize.height || themeItemSize.height;
+
+						// ignore the height?
+						if (sizeMode !== "fixed" && sizeMode !== "center")
+							buttonSize.height = null;
+						else
+							buttonSize.height = itemSize.width || themeItemSize.width;
+					}
+					break;
+
+				case "top":
+				case "bottom":
+				default:
+					{
+						buttonSize.height = itemSize.height || themeItemSize.height;
+
+						// ignore the width?
+						if (sizeMode !== "fixed" && sizeMode !== "center")
+							buttonSize.width = null;
+						else
+							buttonSize.width = itemSize.width || themeItemSize.width;
+					}
+					break;
 			}
 
-			var pages = this.getChildren();
-			for (var i = 0 ; i < pages.length; i++) {
-				this._updateTabButtonSizeMode(pages[i].getButton());
-			}
+			return this.__buttonSizeHint = buttonSize;
 		},
+
+		// suggested size of the tab button.
+		__buttonSizeHint: null,
 
 		/**
 		 * Applies the sizeMode property.
 		 */
 		_applySizeMode: function (value, old) {
+
+			// reset the cached button size hint.
+			this.__buttonSizeHint = null;
 
 			if (value == null) {
 				this.resetSizeMode();
@@ -248,17 +326,17 @@ qx.Class.define("wisej.web.TabControl", {
 					break;
 			}
 
-			var pages = this.getChildren();
-			for (var i = 0 ; i < pages.length; i++) {
-				this._updateTabButtonSizeMode(pages[i].getButton());
-			}
+			// schedule the updateLayout.
+			qx.ui.core.queue.Widget.add(this, "updateLayout");
+
 		},
 
 		/**
 		 * Updates the size of the specified button
 		 * according to the value of sizeMode and itemSize.
 		 */
-		_updateTabButtonSizeMode: function (button) {
+		_updateTabButtonSize: function (button) {
+
 			if (!button)
 				return;
 
@@ -266,8 +344,13 @@ qx.Class.define("wisej.web.TabControl", {
 			button.resetHeight();
 			button.invalidateLayoutCache();
 
-			var sizeMode = this.getSizeMode();
-			switch (sizeMode) {
+			var buttonSize = this.getButtonSizeHint();
+			if (buttonSize.height)
+				button.setHeight(buttonSize.height);
+			if (buttonSize.width)
+				button.setWidth(buttonSize.width);
+
+			switch (this.getSizeMode()) {
 
 				case "fill":
 					button.setLayoutProperties({ flex: 1 });
@@ -275,23 +358,10 @@ qx.Class.define("wisej.web.TabControl", {
 
 				case "fixed":
 				case "center":
-					{
-						button.setLayoutProperties({ flex: 0 });
-
-						var itemSize = this.getItemSize();
-						if (itemSize) {
-							if (this._getEffectiveOrientation() === "vertical") {
-								if (itemSize.height > 0)
-									button.setHeight(itemSize.height);
-							}
-							else {
-								if (itemSize.width > 0)
-									button.setWidth(itemSize.width);
-							}
-						}
-					}
+					button.setLayoutProperties({ flex: 0 });
 					break;
 
+				case "normal":
 				default:
 					button.setLayoutProperties({ flex: 0 });
 					break;
@@ -331,6 +401,9 @@ qx.Class.define("wisej.web.TabControl", {
 		 */
 		_applyAlignment: function (value, old) {
 
+			// reset the cached button size hint.
+			this.__buttonSizeHint = null;
+
 			if (value == null) {
 				this.resetAlignment();
 				return;
@@ -360,14 +433,17 @@ qx.Class.define("wisej.web.TabControl", {
 					break;
 			}
 
-			// schedule the updateMetrics callback.
-			qx.ui.core.queue.Widget.add(this, "updateMetrics");
+			// schedule the updateLayout.
+			qx.ui.core.queue.Widget.add(this, "updateLayout");
 		},
 
 		/**
 		 * Applies the orientation property.
 		 */
 		_applyOrientation: function (value, old) {
+
+			// reset the cached button size hint.
+			this.__buttonSizeHint = null;
 
 			if (value == null) {
 				this.resetOrientation();
@@ -377,15 +453,8 @@ qx.Class.define("wisej.web.TabControl", {
 			this.removeState(old);
 			this.addState(value);
 
-			var pages = this.getChildren();
-			var orientation = this._getEffectiveOrientation();
-			for (var i = 0 ; i < pages.length; i++) {
-				pages[i]._setOrientation(value);
-				this._updateTabButtonSizeMode(pages[i].getButton());
-			}
-
-			// schedule the updateMetrics callback.
-			qx.ui.core.queue.Widget.add(this, "updateMetrics");
+			// schedule the updateLayout.
+			qx.ui.core.queue.Widget.add(this, "updateLayout");
 		},
 
 		// returns the orientation value to use. it's either
@@ -415,7 +484,7 @@ qx.Class.define("wisej.web.TabControl", {
 
 			// set the show property on all child tab pages.
 			var pages = this.getChildren();
-			for (var i = 0 ; i < pages.length; i++)
+			for (var i = 0; i < pages.length; i++)
 				this.__applyDisplayToPage(pages[i], value);
 
 		},
@@ -434,17 +503,32 @@ qx.Class.define("wisej.web.TabControl", {
 			// block/unblock tooltips on all child tab pages.
 			var block = !value;
 			var pages = this.getChildren();
-			for (var i = 0 ; i < pages.length; i++)
+			for (var i = 0; i < pages.length; i++)
 				pages[i].getButton().setBlockToolTip(block);
 		},
 
 		syncWidget: function (jobs) {
 
-			if (!jobs || !jobs["updateMetrics"])
+			if (!jobs)
 				return;
 
-			// update the metrics on the server
-			this.__updateMetrics();
+			if (jobs["updateLayout"]) {
+				// update buttons sizes.
+				var page, button;
+				var pages = this.getChildren();
+				var orientation = this._getEffectiveOrientation();
+				for (var i = 0; i < pages.length; i++) {
+					page = pages[i];
+					button = page.getButton();
+					page._setOrientation(orientation);
+					this._updateTabButtonSize(button);
+				}
+			}
+
+			if (jobs["updateMetrics"]) {
+				// update the metrics on the server
+				this.__updateMetrics();
+			}
 		},
 
 		// overridden to propagate the orientation.
@@ -457,7 +541,7 @@ qx.Class.define("wisej.web.TabControl", {
 			page._updateIconSize(this.getIconSize());
 			page._setOrientation(this._getEffectiveOrientation());
 			page.getButton().setBlockToolTip(!this.getShowToolTips());
-			this._updateTabButtonSizeMode(page.getButton());
+			this._updateTabButtonSize(page.getButton());
 		},
 
 		// overridden to propagate the orientation.
@@ -470,7 +554,7 @@ qx.Class.define("wisej.web.TabControl", {
 			page._updateIconSize(this.getIconSize());
 			page._setOrientation(this._getEffectiveOrientation());
 			page.getButton().setBlockToolTip(!this.getShowToolTips());
-			this._updateTabButtonSizeMode(page.getButton());
+			this._updateTabButtonSize(page.getButton());
 		},
 
 		// overridden to suppress "beforeChange".
@@ -566,6 +650,38 @@ qx.Class.define("wisej.web.TabControl", {
 			this.base(arguments, e);
 		},
 
+		// changes the positions of the tab pages.
+		_swapTabPages: function (oldIndex, newIndex) {
+
+			this.__suspendEvents = true;
+			try {
+
+				var selected = this.getSelectedIndex() === oldIndex;
+
+				var pages = this.getChildren();
+				var pageToMove = pages[oldIndex];
+				this.addAt(pageToMove, newIndex);
+
+				qx.ui.core.queue.Layout.flush();
+
+				if (selected)
+					pageToMove.show();
+
+				// update the swapped tab buttons on the server, including the
+				// new tab rectamgles.
+				this.fireDataEvent("tabIndexChanged", {
+					oldIndex: oldIndex,
+					newIndex: newIndex,
+					tabRects: this.getTabRects()
+				});
+
+			}
+			finally {
+				this.__suspendEvents = false;
+			}
+
+		},
+
 		// overridden
 		_onPageClose: function (e) {
 
@@ -654,8 +770,7 @@ qx.Class.define("wisej.web.TabControl", {
 					});
 				}
 			}
-		},
-
+		}
 	}
 });
 
@@ -778,7 +893,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 * 
 		 * Replaces the built-in contextMenu.
 		 */
-		tabContextMenu: { init: null, nullable: true, apply: "_applyTabContextMenu", transform: "_transformMenu" },
+		tabContextMenu: { init: null, nullable: true, apply: "_applyTabContextMenu", transform: "_transformMenu" }
 	},
 
 	members: {
@@ -807,59 +922,26 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		// reference to the inner scroller panel.
 		__scroller: null,
 
-		// saved position and orientation.
-		__barPosition: "top",
-		__orientation: "horizontal",
-
 		// stored previous scroll positions, used in __fireScrollEvent.
 		__oldScrollX: 0,
 		__oldScrollY: 0,
 
-		// overridden.
-		addState: function (state) {
+		/**
+		 * Returns the TabControl that owns this tab page.
+		 * 
+		 * @returns {wisej.web.TabControl} Tab control that contains this page.
+		 */
+		getTabControl: function () {
 
-			this.base(arguments, state);
+			var tabControl = this.getParent();
 
-			var position = this.__barPosition;
-			var orientation = this.__orientation;
-
-			switch (state) {
-
-				case "barLeft":
-					position = "left";
-					break;
-
-				case "barRight":
-					position = "right";
-					break;
-
-				case "barTop":
-					position = "top";
-					break;
-
-				case "barBottom":
-					position = "bottom";
-					break;
-
-				case "vertical":
-					orientation = "vertical";
-					break;
-
-				case "horizontal":
-					orientation = "horizontal";
-					break;
+			if (!tabControl) {
+				for (tabControl = this.getLayoutParent();
+					tabControl && !(tabControl instanceof wisej.web.TabControl);
+					tabControl = tabControl.getLayoutParent());
 			}
 
-			// check if the position or orientation have changed.
-			if (position != this.__barPosition || orientation != this.__orientation) {
-
-				// update the save position and orientation for quick reuse and comparison.
-				this.__barPosition = position;
-				this.__orientation = orientation;
-
-				// schedule the layout of the button.
-				qx.ui.core.queue.Widget.add(this, "layout");
-			}
+			return tabControl;
 		},
 
 		/**
@@ -992,10 +1074,11 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			this.base(arguments, value, old);
 
-			var tabControl = this.getParent();
-			if (tabControl != null) {
-				this._updateIconSize(tabControl.getIconSize());
-			}
+			var tabControl = this.getTabControl();
+			if (!tabControl)
+				return;
+
+			this._updateIconSize(tabControl.getIconSize());
 		},
 
 		_updateIconSize: function (size) {
@@ -1034,6 +1117,14 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			// update the layout of the tab-button.
 			qx.ui.core.queue.Widget.add(this, "layout");
+
+			// initialize the movable state.
+			var tabControl = this.getTabControl();
+			if (tabControl && tabControl.getMovableTabs()) {
+				var button = e.getTarget();
+				button.setMovable(true);
+				button._activateMoveHandle(button);
+			}
 		},
 
 		/**
@@ -1053,6 +1144,8 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 				this.removeState(this.__orientation);
 
 			this.addState(value);
+
+			this._updateButtonLayout();
 		},
 
 		/**
@@ -1065,32 +1158,36 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			qx.ui.core.queue.Appearance.flush();
 
-			this.__updateButtonLayout();
+			this._updateButtonLayout();
 		},
 
 		// update the tab position when the child index changes.
 		__onChangeChildIndex: function (e) {
 
-			var tabControl = this.getParent();
-			if (tabControl) {
+			var tabControl = this.getTabControl();
+			if (!tabControl)
+				return;
 
-				var newIndex = e.getData();
-				var oldIndex = e.getOldData();
+			var newIndex = e.getData();
+			var oldIndex = e.getOldData();
 
-				// moving a selected tab?
-				var selected = tabControl.getSelectedIndex() === oldIndex;
+			// moving a selected tab?
+			var selected = tabControl.getSelectedIndex() === oldIndex;
 
-				// preserve the selection.
-				if (selected) {
-					this.setVisible(true);
-					tabControl.setSelectedIndex(newIndex);
-				}
+			// preserve the selection.
+			if (selected) {
+				this.setVisible(true);
+				tabControl.setSelectedIndex(newIndex);
 			}
 		},
 
 		// rotates the tab button and updates the layout
 		// according to the bar position and the orientation.
-		__updateButtonLayout: function () {
+		_updateButtonLayout: function () {
+
+			var tabControl = this.getTabControl();
+			if (!tabControl)
+				return;
 
 			var button = this.getButton();
 			var layout = button._getLayout();
@@ -1103,7 +1200,9 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			var close = button.getChildControl("close-button");
 
 			// rearrange the close button or the icon.
-			switch (this.__orientation) {
+			var barPosition = tabControl.getBarPosition();
+			var orientation = tabControl._getEffectiveOrientation();
+			switch (orientation) {
 
 				case "vertical":
 
@@ -1114,7 +1213,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					layout.setRowFlex(1, 0);
 					layout.setRowFlex(2, 0);
 
-					if (this.__barPosition === "right" || this.__barPosition === "bottom") {
+					if (barPosition === "right" || barPosition === "bottom") {
 
 						icon.setLayoutProperties({ row: 0, column: 0 });
 						label.setLayoutProperties({ row: 1, column: 0 });
@@ -1132,12 +1231,6 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 						// flex either the label or the icon.
 						layout.setRowFlex(label.isVisible() ? 1 : 2, 1);
 					}
-
-					// invalidate the height that may have been set by the theme.
-					// when "vertical" we allow the theme to set the width and
-					// let the browser adjust the height to fit the label.
-					if (label.isVisible())
-						button.setHeight(null);
 
 					break;
 
@@ -1157,26 +1250,20 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 					// flex either the label or the icon.
 					layout.setColumnFlex(label.isVisible() ? 1 : 0, 1);
 
-					// invalidate the width that may have been set by the theme.
-					// when "horizontal" we allow the theme to set the height and
-					// let the browser adjust the width to fit the label.
-					if (label.isVisible())
-						button.setWidth(null);
-
 					break;
 			}
 
 			label.resetWidth();
 			label.resetHeight();
 
-			this.__rotateWidget(icon);
-			this.__rotateWidget(label);
-			this.__rotateWidget(close);
+			this.__rotateWidget(icon, barPosition, orientation);
+			this.__rotateWidget(label, barPosition, orientation);
+			this.__rotateWidget(close, barPosition, orientation);
 		},
 
 		// rotates the inner tab-button widget 90deg 
 		// left or right maintaining its current layout box.
-		__rotateWidget: function (widget) {
+		__rotateWidget: function (widget, barPosition, orientation) {
 
 			widget.resetMaxWidth();
 			widget.resetMinWidth();
@@ -1185,9 +1272,9 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			widget.invalidateLayoutCache();
 
 			var direction =
-				this.__orientation === "horizontal"
+				orientation === "horizontal"
 					? "none"
-					: this.__barPosition === "right" || this.__barPosition === "bottom"
+					: barPosition === "right" || barPosition === "bottom"
 						? "right"
 						: "left";
 
@@ -1378,6 +1465,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 						allowGrowX: true,
 						allowGrowY: true,
 						focusable: false,
+						keepInBounds: true,
 						rich: true // needed for mnemonics.
 					});
 					control.setUserData("page", this);
@@ -1432,22 +1520,21 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			if (!this.isEnabled() || this.isHidden())
 				return false;
 
-			var tabControl = this.getParent();
-			if (tabControl) {
-				tabControl.setSelection([this]);
-				return true;
-			}
+			var tabControl = this.getTabControl();
+			if (!tabControl)
+				return false;
 
-			return false;
+			tabControl.setSelection([this]);
+			return true;
 		},
 
 		// overridden.
 		destroy: function () {
 
 			// remove the tab page from the owner tab control.
-			var tabView = this.getParent();
-			if (tabView && tabView.indexOf(this) > -1)
-				tabView.remove(this);
+			var tabControl = this.getTabControl();
+			if (tabControl && tabControl.indexOf(this) > -1)
+				tabControl.remove(this);
 
 			this.base(arguments);
 		}
@@ -1462,6 +1549,10 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 qx.Class.define("wisej.web.tabcontrol.TabButton", {
 
 	extend: qx.ui.tabview.TabButton,
+
+	include: [
+		qx.ui.core.MMovable
+	],
 
 	construct: function () {
 
@@ -1478,6 +1569,9 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 				});
 			}
 		}
+
+		this.addListener("endmove", this.__onEndMove);
+		this.addListener("startmove", this.__onStartMove);
 	},
 
 	properties: {
@@ -1487,22 +1581,41 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 		 *
 		 * Shows or hides the close button - only when the value of showCloseButton is set to true.
 		 */
-		showClose: { check: "Boolean", init: false, apply: "_applyShowClose", themeable: true },
+		showClose: { check: "Boolean", init: false, apply: "_applyShowClose", themeable: true }
 	},
 
 	members: {
 
 		// overridden
 		_forwardStates: {
-				focused: true,
-				checked: true,
-				barTop: true,
-				barRight: true,
-				barBottom: true,
-				barLeft: true,
-				horizontal: true,
-				vertical: true,
+			focused: true,
+			checked: true,
+			barTop: true,
+			barRight: true,
+			barBottom: true,
+			barLeft: true,
+			horizontal: true,
+			vertical: true
 		},
+
+		// true when the buttons is being dragged.
+		__moving: false,
+
+		// array with the bounds of all the buttons in the bar component while moving.
+		__moveButtons: null,
+
+		// new index.
+		__moveTargetIndex: -1,
+
+		// old index.
+		__moveCurrentIndex: -1,
+
+		// size of the button being moved.
+		__moveWidth: 0,
+		__moveHeight: 0,
+
+		// whether to drag the tab buttons vertically.
+		__moveVertically: false,
 
 		/**
 		 * Applies the showClose property.
@@ -1532,7 +1645,181 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 			}
 
 			return control || this.base(arguments, id);
+		},
+
+		// ======================================================
+		// moving logic
+		// ======================================================
+
+		__onEndMove: function (e) {
+
+			if (this.__moving) {
+				var bar = this.getLayoutParent();
+				if (bar.indexOf(this) !== this.__moveIndex) {
+					var page = this.getUserData("page");
+					if (page) {
+						var tabControl = page.getTabControl();
+
+						// restore the previous locations if the position
+						// of the tab button didn't change.
+						if (this.__moveTargetIndex === this.__moveCurrentIndex) {
+							var button, bounds;
+							var buttons = this.__moveButtons;
+							for (var i = 0; i < buttons.length; i++) {
+								button = buttons[i].button;
+								bounds = buttons[i].bounds;
+								if (button.isVisible() && bounds) {
+									button.setDomTop(bounds.top);
+									button.setDomLeft(bounds.left);
+								}
+							}
+							return;
+						}
+
+						if (tabControl) {
+							tabControl._swapTabPages(this.__moveCurrentIndex, this.__moveTargetIndex);
+						}
+					}
+				}
+			}
+
+			this.__moving = false;
+			this.__moveButtons = null;
+			this.__moveTargetIndex = this.__moveCurrentIndex = -1;
+
+		},
+		__onStartMove: function (e) {
+
+			this.__moving = true;
+			this.__moveButtons = [];
+			this.__moveVertically = this.hasState("barLeft") || this.hasState("barRight");
+
+			var button;
+			var bar = this.getLayoutParent();
+			this.__moveTargetIndex = this.__moveCurrentIndex = bar.indexOf(this);
+
+			// populate the list of buttons and their bounds, we'll 
+			// move these and update the DOM immediately. the actual
+			// position of the tab button is not changed until the moving ends.
+			var buttons = bar.getChildren();
+			for (var i = 0; i < buttons.length; i++) {
+				button = buttons[i];
+				this.__moveButtons.push({
+					button: button,
+					dom: button.getContentElement().getDomElement(),
+					bounds: qx.lang.Object.clone(button.getBounds())
+				});
+			}
+
+			this.__moveWidth = this.__moveButtons[this.__moveCurrentIndex].bounds.width;
+			this.__moveHeight = this.__moveButtons[this.__moveCurrentIndex].bounds.height;
+		},
+		setDomPosition: function (left, top) {
+
+			// moving happens here. the MMovable mixin calls this method in qx.ui.core.Widget
+			// when moving the target widget.
+
+			var dom = this.getContentElement().getDomElement();
+			if (!dom)
+				return;
+
+			this.base(arguments, left, top);
+
+			if (!this.__moving)
+				return;
+
+			// adjust the location of all the buttons.
+			var buttons = this.__moveButtons;
+			var right = left + this.__moveWidth;
+			var bottom = top + this.__moveHeight;
+			var bounds, button, buttonLeft, buttonTop;
+
+			// find the target index.
+			var targetIndex = -1;
+			for (var i = 0; i < buttons.length; i++) {
+				dom = buttons[i].dom;
+				button = buttons[i].button;
+				bounds = buttons[i].bounds;
+				if (button === this || !button.isVisible() || !bounds)
+					continue;
+
+				buttonTop = bounds.top;
+				buttonLeft = bounds.left;
+
+				if (this.__moveVertically) {
+
+					// moving down.
+					if (bottom < buttonTop + bounds.height && bottom > buttonTop + bounds.height / 2) {
+						targetIndex = i;
+						break;
+					}
+
+					// moving up.
+					if (top > buttonTop && top < buttonTop + bounds.height / 2) {
+						targetIndex = i;
+						break;
+					}
+
+				}
+				else {
+					// moving left.
+					if (left > buttonLeft && left < buttonLeft + bounds.width / 2) {
+						targetIndex = i;
+						break;
+					}
+
+					// moving right.
+					if (right < buttonLeft + bounds.width && right > buttonLeft + bounds.width / 2) {
+						targetIndex = i;
+						break;
+					}
+				}
+			}
+
+			if (targetIndex === -1)
+				return;
+
+			// make space.
+			for (var i = 0; i < buttons.length; i++) {
+				dom = buttons[i].dom;
+				button = buttons[i].button;
+				bounds = buttons[i].bounds;
+				if (button === this || !button.isVisible() || !bounds)
+					continue;
+
+				buttonTop = bounds.top;
+				buttonLeft = bounds.left;
+
+				if (this.__moveVertically) {
+					if (i <= targetIndex && i > this.__moveTargetIndex) {
+						bounds.top -= this.__moveHeight;
+					}
+					else if (i >= targetIndex && i < this.__moveTargetIndex) {
+						bounds.top += this.__moveHeight;
+					}
+				}
+				else {
+					if (i <= targetIndex && i > this.__moveTargetIndex) {
+						bounds.left -= this.__moveWidth;
+					}
+					else if (i >= targetIndex && i < this.__moveTargetIndex) {
+						bounds.left += this.__moveWidth;
+					}
+				}
+
+				button.setDomTop(bounds.top);
+				button.setDomLeft(bounds.left);
+			}
+
+			var temp = buttons[targetIndex];
+			buttons[targetIndex] = buttons[this.__moveTargetIndex];
+			buttons[this.__moveTargetIndex] = temp;
+
+			this.__moveTargetIndex = targetIndex;
 		}
 
+		// ======================================================
+		// end moving logic
+		// ======================================================
 	}
 });

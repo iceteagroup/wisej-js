@@ -324,8 +324,8 @@ qx.Class.define("wisej.web.accordion.Panel", {
 				return;
 
 			var captionBar = this.getChildControl("captionbar");
-			wisej.web.ToolContainer.install(this, captionBar, value, "left", { row: 0, column: 1 });
-			wisej.web.ToolContainer.install(this, captionBar, value, "right", { row: 0, column: 3 });
+			wisej.web.ToolContainer.install(this, captionBar, value, "left", { row: 0, column: 1 }, null, "panel");
+			wisej.web.ToolContainer.install(this, captionBar, value, "right", { row: 0, column: 3 }, null, "panel");
 		},
 
 		/**

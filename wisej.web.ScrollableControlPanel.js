@@ -169,7 +169,7 @@ qx.Class.define("wisej.web.Panel", {
 		 *
 		 * Collection of tool definitions to display on the caption bar.
 		 */
-		tools: { check: "Array", apply: "_applyTools" },
+		tools: { check: "Array", apply: "_applyTools" }
 
 	},
 
@@ -184,7 +184,7 @@ qx.Class.define("wisej.web.Panel", {
 			barTop: true,
 			barLeft: true,
 			barRight: true,
-			barBottom: true,
+			barBottom: true
 		},
 
 		// timer to hide the panel that was auto shown.
@@ -394,8 +394,8 @@ qx.Class.define("wisej.web.Panel", {
 			closeButton.resetMaxHeight();
 			closeButton.resetMinHeight();
 
-			wisej.utils.Widget.rotate(title, dockSide);
 			wisej.utils.Widget.rotate(closeButton, dockSide);
+			wisej.utils.Widget.rotate(title, dockSide === "bottom" ? "none" : dockSide);
 
 			// change the position of the tool containers.
 			if (this.__leftToolsContainer)
@@ -576,7 +576,7 @@ qx.Class.define("wisej.web.Panel", {
 				return;
 
 			var position = this.__getDockSide();
-			var vertical = position == "left" || position == "right";
+			var vertical = position === "left" || position === "right";
 			var captionBar = this.getChildControl("captionbar");
 			wisej.web.ToolContainer.install(this, captionBar, value, "left", vertical ? { row: 3, column: 0 } : { row: 0, column: 1 }, position, "panel");
 			wisej.web.ToolContainer.install(this, captionBar, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 3 }, position, "panel");

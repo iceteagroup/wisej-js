@@ -30,6 +30,36 @@ qx.Class.define("wisej.utils.Widget", {
 	statics: {
 
 		/**
+		 * Returns the name of the automation property set in options["automation.property"] to use
+		 * when options["automation.mode"] is set to true.
+		 * 
+		 * The default is "id".
+		 */
+		getAutomationPropertyName: function(){
+
+			if (this.__automationPropertyName === null)
+				this.__automationPropertyName = qx.core.Environment.get("automation.property") || "id";
+
+			return this.__automationPropertyName;
+		},
+		__automationPropertyName: null,
+
+		/**
+		 * Returns whether the system should generate automation ids for child widgets
+		 * when options["automation.drillDown"] is set to true.
+		 * 
+		 * The default is false.
+		 */
+		getAutomationDrillDown: function () {
+
+			if (this.__automationDrillDown === null)
+				this.__automationDrillDown = !!qx.core.Environment.get("automation.drillDown");
+
+			return this.__automationDrillDown;
+		},
+		__automationDrillDown: null,
+
+		/**
 		 * Creates a scaled clone of the dom for the specified widget.
 		 *
 		 * @param widget {qx.ui.core.Widget} The widget to clone and scale.
@@ -111,12 +141,7 @@ qx.Class.define("wisej.utils.Widget", {
 			// force the creation of the dom.
 			el.__flush();
 
-			var dom = el.getDomElement();
-			if (dom)
-				return dom;
-
-			var dom = el.getDomElement();
-			return dom;
+			return el.getDomElement();
 		},
 
 		/**
@@ -202,6 +227,17 @@ qx.Class.define("wisej.utils.Widget", {
 					// switch height and width.
 					width = size.height;
 					height = size.width;
+
+					widget.setWidth(width);
+					widget.setHeight(height);
+					widget.setMinWidth(width);
+					widget.setMinHeight(height);
+					break;
+
+				case "bottom":
+					rotate = "rotate(180deg)";
+					origin = "center center";
+					translate = " translateX(0px) translateY(0px)";
 
 					widget.setWidth(width);
 					widget.setHeight(height);
@@ -368,8 +404,6 @@ qx.Class.define("wisej.utils.Widget", {
 
 			var role = null;
 			for (var node = el; node != null; node = node.parentNode) {
-				if (node.$$widget)
-					break;
 
 				role = node.getAttribute ? node.getAttribute("role") : null;
 				if (role != null)
@@ -557,6 +591,8 @@ qx.Class.define("wisej.utils.Widget", {
 			if (target.getUserData("automationId"))
 				return;
 
+			var names = [], name, className;
+
 			var el = target.isWisejComponent ? target.getAutomationElement() : target.getContentElement();
 			if (el) {
 
@@ -564,6 +600,7 @@ qx.Class.define("wisej.utils.Widget", {
 				var ownerName = el.getAttribute("owner");
 				var openerName = el.getAttribute("opener");
 				var containerName = el.getAttribute("container");
+				var propertyName = this.getAutomationPropertyName();
 
 				if (containerName)
 					ids.push(containerName);
@@ -572,12 +609,10 @@ qx.Class.define("wisej.utils.Widget", {
 				if (openerName)
 					ids.push(openerName);
 
-				var names = [];
-
 				if (target.isWisejComponent) {
-					var name = target.getName();
+					name = target.getName();
 					if (!name) {
-						var className = target.name.split(".");
+						className = target.name.split(".");
 						name = className[className.length - 1];
 					}
 					if (name)
@@ -590,9 +625,9 @@ qx.Class.define("wisej.utils.Widget", {
 				for (var widget = target.getLayoutParent(); widget != null; widget = widget.getLayoutParent()) {
 
 					if (widget.isWisejComponent) {
-						var name = widget.getName();
+						name = widget.getName();
 						if (!name) {
-							var className = widget.name.split(".");
+							className = widget.name.split(".");
 							name = className[className.length - 1];
 						}
 						if (name)
@@ -628,20 +663,58 @@ qx.Class.define("wisej.utils.Widget", {
 					id = ids.join("_") + "_" + names.join("_");
 
 				// check collisions.
-				if (document.getElementById(id)) {
-					id = id + "_";
-					var counter = 1;
-					while (document.getElementById(id + counter)) {
-						counter++;
+				if (propertyName === "id") {
+					if (document.getElementById(id)) {
+						id = id + "_";
+						var counter = 1;
+						while (document.getElementById(id + counter)) {
+							counter++;
+						}
+						id = id + counter;
 					}
-					id = id + counter;
+				}
+				else {
+					if (document.querySelector("[" + propertyName + "='" + id + "']")) {
+						id = id + "_";
+						var counter = 1;
+						while (document.querySelector("[" + propertyName + "='" + id + counter + "']")) {
+							counter++;
+						}
+						id = id + counter;
+					}
 				}
 
-				el.setAttribute("id", id, true);
+				el.setAttribute(propertyName, id, true);
 				target.setUserData("automationId", id);
+
+				// drill down child widgets? (enabled using the "automation.drillDown" option)
+				if (this.getAutomationDrillDown() && target instanceof qx.ui.core.Widget) {
+					var child;
+					var childControls = target._getCreatedChildControls();
+					if (childControls && childControls.length > 0) {
+						for (var i = 0; i < childControls.length; i++) {
+							child = childControls[i];
+							if (child && child.$$subcontrol && child.getContentElement())
+								child.getContentElement().setAttribute(propertyName, id + "_" + child.$$subcontrol);
+						}
+					}
+				}
+
+				// always drill down anonymous children at all levels.
+				if (target instanceof qx.ui.core.Widget)
+				{
+					var anonymous;
+					var children = target._getChildren();
+					for (var i = 0; i < children.length; i++) {
+						anonymous = children[i];
+						if (anonymous.isWisejControl && anonymous.isAnonymous()) {
+							this.setAutomationID(anonymous);
+						}
+					}
+				}
 			}
 
-			// if the target has an accessibility element, ID that  one too.
+			// if the target has an accessibility element, ID that one too.
 			var acc = target.getAccessibilityTarget ? target.getAccessibilityTarget() : null;
 			if (acc && acc !== target) {
 				this.setAutomationID(acc);

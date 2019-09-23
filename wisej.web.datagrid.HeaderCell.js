@@ -218,7 +218,7 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 
 			// remove the previous widget.
 			if (this.__widget) {
-				if (this.__widget.getLayoutParent() == this)
+				if (this.__widget.getLayoutParent() === this)
 					this.remove(this.__widget);
 
 				this.__widget = null;
@@ -306,7 +306,6 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 						allowGrowY: true,
 						anonymous: true
 					});
-
 					this._add(control, { row: 1, column: 2 });
 					break;
 
@@ -333,9 +332,9 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 
 			return this.getChildControl("label");
 
-		},
+		}
 
-	},
+	}
 
 
 });

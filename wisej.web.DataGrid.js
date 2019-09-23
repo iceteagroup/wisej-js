@@ -88,6 +88,14 @@ qx.Class.define("wisej.web.DataGrid", {
 		// adds the inner target to the drop & drop event object.
 		this.addListener("drop", this._onDragEvent, this);
 		this.addListener("dragover", this._onDragEvent, this);
+
+		// handles focus changes between the datagrid, and inner editors or controls.
+		this.addListener("focusin", this._onFocusIn, this);
+		this.addListener("focusout", this._onFocusOut, this);
+
+		// remove the focus/blur handlers, we don't need to refresh the rows on focus changes.
+		this.removeListener("focus", this._onFocusChanged);
+		this.removeListener("blur", this._onFocusChanged);
 	},
 
 	properties: {
@@ -232,7 +240,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		headerBackColor: { init: null, nullable: true, check: "Color", apply: "_applyHeaderBackColor", themeable: true },
 
 		/**
-		 * Indicating whether the TAB key moves the focus to the next control in the tab order rather than moving focus to the next cell.
+		 * Indicates whether the TAB key moves the focus to the next control in the tab order rather than moving focus to the next cell.
 		 */
 		standardTab: { init: false, check: "Boolean" },
 
@@ -245,7 +253,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * Index of the column active in the designer.
 		 * Used to make sure it is scrolled into view.
 		 */
-		designActiveColumn: {init: -1, check: "Integer"},
+		designActiveColumn: { init: -1, check: "Integer" },
 
 		/**
 		 * Tools property.
@@ -263,6 +271,16 @@ qx.Class.define("wisej.web.DataGrid", {
 	},
 
 	members: {
+
+
+		// TODO: Test for marina, to remove.
+		renderLayout: function (left, top, width, height) {
+
+			this.base(arguments, left, top, width, height);
+
+			if (width == 50)
+				debugger;
+		},
 
 		// index of the row header column. 0 is the default.
 		// a derived class may set it to -1 if it doesn't create the header column.
@@ -408,6 +426,38 @@ qx.Class.define("wisej.web.DataGrid", {
 			var model = this.getTableModel();
 			return model.getRowStyle(rowIndex);
 
+		},
+
+		/**
+		 * Starts update mode. Any change to the data model
+		 * are not reflected in the grid.
+		 **/
+		beginUpdate: function () {
+
+			this.__updateMode = true;
+			this.__internalChange = 1;
+
+		},
+
+		/**
+		 * Ends update mode and updated the grid with the data in the model.
+		 */
+		endUpdate: function () {
+
+			if (this.__updateMode) {
+				this.__updateMode = false;
+				this.__internalChange = 0;
+
+				var model = this.getTableModel();
+				model.fireDataEvent(
+					"dataChanged",
+					{
+						firstRow: 0,
+						lastRow: model.getRowCount() - 1,
+						firstColumn: 0,
+						lastColumn: model.getColumnCount() - 1
+					});
+			}
 		},
 
 		/**
@@ -647,40 +697,50 @@ qx.Class.define("wisej.web.DataGrid", {
 		},
 
 		/**
-		 * Event handler. Called when the table gets or loses
-		 * the focus to hide or show the focus indicator.
-		 *
-		 * @param e {Map} the event data.
+		 * Handles when the focus is gained by the grid or a child control or child editor.
 		 */
-		_onFocusChanged: function (e) {
+		_onFocusIn: function (e) {
 
-			this.base(arguments, e);
-
-			// when editing always refocus the current cell editor.
+			var target = e.getTarget();
+			var related = e.getRelatedTarget();
 			var cellEditor = this.getCellEditor();
-			if (cellEditor && cellEditor.isFocusable()) {
-				cellEditor.focus();
+
+			if (target === this || related === this || related && qx.ui.core.Widget.contains(this, related)) {
+				this.visualizeFocus();
+				this._onFocusChanged(e);
+				this.__showFocusIndicator(true);
+
+				if (cellEditor && cellEditor.isFocusable())
+					cellEditor.focus();
+			}
+		},
+
+		/**
+		 * Handles when the focus is lost by the grid or a child control or child editor.
+		 */
+		_onFocusOut: function (e) {
+
+			var target = e.getTarget();
+			var related = e.getRelatedTarget();
+			var cellEditor = this.getCellEditor();
+
+			if (!related && target !== this) {
+				this.focus();
 				return;
 			}
 
-			var gotFocus = e.getType() === "focus";
+			if (cellEditor && qx.ui.core.Widget.contains(cellEditor, related))
+				return;
 
-			// show/hide the focus indicator.
-			if (gotFocus) {
+			if (related && related.isWisejComponent && !related.getTopLevelContainer())
+				return;
 
-				var row = this.getFocusedRow();
-				var col = this.getFocusedColumn();
-
-				// don't show the focus indicator when the current column is the row header.
-				if (col === this._rowHeaderColIndex)
-					return;
-
-				// don't show the focus indicator when we don't have a cell to focus.
-				if (row == null || col == null)
-					return;
+			if (related !== cellEditor && !qx.ui.core.Widget.contains(this, related)) {
+				this.stopEditing();
+				this.visualizeBlur();
+				this._onFocusChanged(e);
+				this.__showFocusIndicator(false);
 			}
-
-			this.__showFocusIndicator(gotFocus);
 		},
 
 		/**
@@ -704,7 +764,7 @@ qx.Class.define("wisej.web.DataGrid", {
 					var firstRow = this.getFirstVisibleRow();
 					var firstCol = this.getFirstVisibleColumn();
 					if (firstRow != null && firstCol != null)
-						this.setFocusedCell(firstCol, firstRow);
+						this.setFocusedCell(firstCol, firstRow, true);
 				}
 			}
 		},
@@ -714,6 +774,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		__showFocusIndicator: function (show) {
 
+			var col = this.getFocusedColumn();
 			var scrollerArr = this._getPaneScrollerArr();
 			for (var i = 0; i < scrollerArr.length; i++) {
 
@@ -721,19 +782,14 @@ qx.Class.define("wisej.web.DataGrid", {
 				if (scroller.getShowCellFocusIndicator()) {
 					var focusIndicator = scroller.__focusIndicator;
 					if (focusIndicator) {
+
 						scroller._updateFocusIndicator();
 
-						// show the focus indicator only if it's bound
-						// to a valid cell. otherwise hide it.
-						if (show
-							&& focusIndicator.getRow() != null
-							&& focusIndicator.getColumn() != null) {
-
+						// make sure the focus indicator is shown only on the correct scroller.
+						if (show && col != null && col >= -1 && focusIndicator.getColumn() === col)
 							focusIndicator.show();
-						}
-						else {
+						else
 							focusIndicator.hide();
-						}
 					}
 				}
 			}
@@ -867,8 +923,9 @@ qx.Class.define("wisej.web.DataGrid", {
 			var columnModel = this.getTableColumnModel();
 			if (columnModel && this._rowHeaderColIndex > -1) {
 
-				// show/hide the row headers column.
-				columnModel.setColumnVisible(this._rowHeaderColIndex, value);
+				// show/hide the row header column.
+				if (columnModel.getOverallColumnCount() > 0)
+					columnModel.setColumnVisible(this._rowHeaderColIndex, value);
 			}
 
 			// update the first scroller type: when the row
@@ -887,6 +944,10 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			if (value == null || value == old)
 				return;
+
+			// reset the current focused cell.
+			this.cancelEditing();
+			this.setFocusedCell(null, null);
 
 			this._updateMetaColumns();
 		},
@@ -1132,8 +1193,8 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 
 			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 });
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 });
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 }, null, "datagrid");
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, null,"datagrid");
 		},
 
 		/** 
@@ -1502,23 +1563,26 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (!this.isEnabled())
 				return;
 
-			// handle keys that are independent from the modifiers
 			var identifier = e.getKeyIdentifier();
 
-			if (!this.isEditing()) {
+			switch (identifier) {
+				case "C":
+				case "Insert":
+					if (!this.isEditing() && e.isCtrlPressed()) {
+						if (!this.isWired("keydown"))
+							this.fireEvent("copy");
+					}
+					break;
 
-				switch (identifier) {
-					case "C":
-					case "Insert":
-						if (e.isCtrlPressed()) {
-
-							if (!this.isWired("keydown"))
-								this.fireEvent("copy");
-						}
-						break;
-				}
+				case "Enter":
+				case "Escape":
+					// Escape and Enter should be processed by 
+					// accelerators only when not in edit mode.
+					if (this.isEditing()) {
+						e.stopPropagation();
+					}
+					break;
 			}
-
 		},
 
 		/**
@@ -1533,19 +1597,18 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			// let embedded widgets handle their own keystrokes.
 			var target = e.getTarget();
-			if (this != target &&
+			if (this !== target &&
 				!(target instanceof qx.ui.root.Inline) &&
 				!qx.ui.core.Widget.contains(this.__scrollerParent, target)) {
+
 				return;
 			}
 
 			var consumed = false;
 			var editMode = this.getEditMode();
+			var identifier = e.getKeyIdentifier();
 			var focusedRow = this.getFocusedRow();
 			var focusedCol = this.getFocusedColumn();
-
-			// handle keys that are independent from the modifiers.
-			var identifier = e.getKeyIdentifier();
 
 			// in editing mode?
 			if (this.isEditing()) {
@@ -1556,15 +1619,18 @@ qx.Class.define("wisej.web.DataGrid", {
 
 						case "Enter":
 							this.stopEditing(true /*notify*/);
+							consumed = true;
 							break;
 
 						case "Escape":
 							this.cancelEditing();
+							consumed = true;
 							break;
 
 						case "Up":
 							if (focusedRow > 0) {
 								this.moveFocusedCell(0, -1);
+								consumed = true;
 							}
 							break;
 
@@ -1572,12 +1638,12 @@ qx.Class.define("wisej.web.DataGrid", {
 							var tableModel = this.getTableModel();
 							if (focusedRow < tableModel.getRowCount() - 1) {
 								this.moveFocusedCell(0, 1);
+								consumed = true;
 							}
 							break;
 
 						case "Left":
-							var editor = e.getTarget();
-							if (editor.getTextSelectionStart && editor.getTextSelectionStart() == 0 && editor.getTextSelectionLength() == 0) {
+							if (this.__canMoveEditingCell(e.getTarget(), "Left")) {
 								this.moveFocusedCell(-1, 0);
 								consumed = true;
 							}
@@ -1585,7 +1651,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 						case "Right":
 							var editor = e.getTarget();
-							if (editor.getTextSelectionEnd && editor.getTextSelectionEnd() == editor.getValue().length && editor.getTextSelectionLength() == 0) {
+							if (this.__canMoveEditingCell(e.getTarget(), "Right")) {
 								this.moveFocusedCell(1, 0);
 								consumed = true;
 							}
@@ -1605,8 +1671,9 @@ qx.Class.define("wisej.web.DataGrid", {
 
 					case "Space":
 
-						if (editMode == "editOnKeystroke" || editMode == "editOnKeystrokeOrF2" || editMode == "editOnEnter") {
+						if (editMode === "editOnKeystroke" || editMode === "editOnKeystrokeOrF2" || editMode === "editOnEnter") {
 							this.startEditing();
+							consumed = true;
 						}
 
 						// select/unselect the current row.
@@ -1615,15 +1682,27 @@ qx.Class.define("wisej.web.DataGrid", {
 
 					case "Enter":
 
-						if (editMode == "editOnKeystroke" || editMode == "editOnKeystrokeOrF2" || editMode == "editOnEnter") {
+						if (editMode === "editOnKeystroke" || editMode === "editOnKeystrokeOrF2" || editMode === "editOnEnter") {
 							this.startEditing();
+							consumed = true;
+						}
+						break;
+
+					case "Escape":
+
+						// TODO: Check selection mode.
+						// pressing Esc when a cell is focused and not in edit mode selects the row.
+						if (focusedCol > this._rowHeaderColIndex && focusedRow >= 0) {
+							this.setFocusedCell(-1, focusedRow);
+							consumed = true;
 						}
 						break;
 
 					case "F2":
 
-						if (editMode == "editOnF2" || editMode == "editOnKeystrokeOrF2" || editMode == "editOnEnter") {
+						if (editMode === "editOnF2" || editMode === "editOnKeystrokeOrF2" || editMode === "editOnEnter") {
 							this.startEditing();
+							consumed = true;
 						}
 						break;
 
@@ -1631,35 +1710,43 @@ qx.Class.define("wisej.web.DataGrid", {
 
 						if (e.isCtrlPressed())
 							// go to the very first cell.
-							this.setFocusedCell(this.getFirstVisibleColumn(), 0, true);
+							this.setFocusedCell(this.getFirstVisibleColumn(), 0, true, false);
 						else
 							// go to the first cell in the current row.
-							this.setFocusedCell(this.getFirstVisibleColumn(), this.getFocusedRow(), true);
+							this.setFocusedCell(this.getFirstVisibleColumn(), focusedRow, true, false);
+
+						consumed = true;
 						break;
 
 					case "End":
 						if (e.isCtrlPressed())
 							// go to the very last cell.
-							this.setFocusedCell(this.getVisibleColumnCount() - 1, this.getRowCount() - 1, true);
+							this.setFocusedCell(this.getVisibleColumnCount() - 1, this.getRowCount() - 1, true, false);
 						else
 							// go to the last cell in the current row.
-							this.setFocusedCell(this.getVisibleColumnCount() - 1, this.getFocusedRow(), true);
+							this.setFocusedCell(this.getVisibleColumnCount() - 1, focusedRow, true, false);
+
+						consumed = true;
 						break;
 
 					case "Left":
 						this.moveFocusedCell(-1, 0);
+						consumed = true;
 						break;
 
 					case "Right":
 						this.moveFocusedCell(1, 0);
+						consumed = true;
 						break;
 
 					case "Up":
 						this.moveFocusedCell(0, -1);
+						consumed = true;
 						break;
 
 					case "Down":
 						this.moveFocusedCell(0, 1);
+						consumed = true;
 						break;
 
 					case "PageUp":
@@ -1669,6 +1756,7 @@ qx.Class.define("wisej.web.DataGrid", {
 						var visibleCount = this.getVisibleRowCount() - 1;
 						scroller.setScrollY(scroller.getScrollY() + direction * visibleCount);
 						this.moveFocusedCell(0, direction * visibleCount);
+						consumed = true;
 						break;
 
 					case "Tab":
@@ -1677,30 +1765,39 @@ qx.Class.define("wisej.web.DataGrid", {
 
 					case "Delete":
 						// fire the event only if we don't have a current cell.
-						if (this.getFocusedColumn() <= this._rowHeaderColIndex)
-							this.fireDataEvent("deleteRow", this.getFocusedRow());
+						if (focusedCol <= this._rowHeaderColIndex) {
+							this.fireDataEvent("deleteRow", focusedRow);
+							consumed = true;
+						}
 						break;
 
 					default:
 						if (editMode === "editOnKeystroke" || editMode === "editOnKeystrokeOrF2" || editMode === "editOnEnter") {
 
-							if (identifier.length === 1) {
-								if ((identifier >= "A" && identifier <= "Z") || (identifier >= "0" && identifier <= "9")) {
+							// start editing on keystroke.
+							if (identifier.length === 1 && e.isPrintable()) {
+								consumed = true;
 
-									consumed = true;
-
-									// start editing on keystroke.
-									var keyCode = e.getKeyCode();
-									var keyChar = keyCode > 0 ? String.fromCharCode(keyCode) : "";
-									this.startEditing(keyChar);
-								}
+								var keyCode = e.getKeyCode();
+								var keyChar = keyCode > 0 ? String.fromCharCode(keyCode) : "";
+								this.startEditing(keyChar);
 							}
 						}
 						break;
 				}
 			}
 
-			// Update the selection/focused-cell depending on the kayboard key
+			// fire "gridCellKeyPress" when the "keypress" event is not wired.
+			switch (identifier) {
+				case "Space":
+				case "Enter":
+					if (!this.isWired("keypress"))
+						this.fireEvent("gridCellKeyPress");
+
+					break;
+			}
+
+			// update the selection/focused-cell depending on the keyboard key
 			// that may have caused the change.
 			//
 			switch (identifier) {
@@ -1736,6 +1833,42 @@ qx.Class.define("wisej.web.DataGrid", {
 				e.stop();
 		},
 
+		// Determines whether the editor wants the Left or Right keys
+		// or the datagrid can move the current cell.
+		__canMoveEditingCell: function (editor, key) {
+
+			// verify that the editor allows for text selection methods.
+			if (!(editor.getValue
+				&& editor.getTextSelectionEnd
+				&& editor.getTextSelectionStart
+				&& editor.getTextSelectionLength)) {
+				return true;
+			}
+
+			switch (key) {
+				case "Left":
+
+					if (editor.getTextSelectionStart() === null)
+						return true;
+
+					if (editor.getTextSelectionStart() === 0 && editor.getTextSelectionLength() === 0)
+						return true;
+
+					break;
+
+				case "Right":
+					if (editor.getTextSelectionStart() === null)
+						return true;
+
+					if (editor.getTextSelectionLength() === 0 && editor.getTextSelectionEnd() === editor.getValue().length)
+						return true;
+
+					break;
+			}
+
+			return false;
+		},
+
 		/**
 		 * Stops editing and writes the editor's value to the model.
 		 *
@@ -1743,18 +1876,19 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		stopEditing: function (notify) {
 
+			if (!this.isEditing())
+				return;
+
+			this.base(arguments);
+
 			if (this.__canFireServerEvent()) {
 
 				if (notify !== false)
 					this.fireEvent("endEdit");
 			}
 
-			// if we are exiting edit mode because the focused widget changed
-			// the table doesn't get a focusout event.
-			if (!this.hasState("focused"))
-				this.__showFocusIndicator(false);
-
-			this.base(arguments);
+			// update the row to remove the editing state.
+			this.updateContent(this.getFocusedRow());
 		},
 
 		// Overridden: Fire "cancelEdit" to the server
@@ -1766,17 +1900,8 @@ qx.Class.define("wisej.web.DataGrid", {
 			this.base(arguments);
 
 			if (this.__canFireServerEvent()) {
-
 				this.fireEvent("cancelEdit");
-
-				if (this.isFocusable())
-					this.focus();
 			}
-
-			// if we are exiting edit mode because the focused widget changed
-			// the table doesn't get a focusout event.
-			if (!this.hasState("focused"))
-				this.__showFocusIndicator(false);
 
 			// update the row to remove the editing state.
 			this.updateContent(this.getFocusedRow());
@@ -2306,12 +2431,11 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				var column = columns[i];
 
-				if (column.isVisible()) {
+				if (column.isVisible() && !column.isFrozen()) {
 
 					switch (column.getSizeMode()) {
 						case "fill":
-							if (!column.isFrozen())
-								autoFillColumns.push(column);
+							autoFillColumns.push(column);
 							break;
 
 						default:
@@ -2736,8 +2860,8 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (row < 0 || row == null)
 				return;
 
-			// notify the server only when the row is unchanged and the column has changed
-			// when the row changed we fire "selectionChanged" which will also update
+			// notify the server only when the row is unchanged and the column has changed.
+			// when the row changes we fire "selectionChanged" which will also update
 			// the current cell.
 			// NOTE: this will change when the selection model will support cell and column selection.
 			var notify = (prevRow == row) && (prevCol != col);
@@ -2771,22 +2895,27 @@ qx.Class.define("wisej.web.DataGrid", {
 		 *
 		 * @param col {Integer?null} the model index of the focused cell's column.
 		 * @param row {Integer?null} the model index of the focused cell's row.
-		 * @param scrollVisible {Boolean ? false} whether to scroll the new focused cell visible.
-		 * @param notify {Boolean ? true} false to suppress sending the "focusCellChanged" event to the server..
+		 * @param scrollVisible {Boolean?false} whether to scroll the new focused cell visible.
+		 * @param notify {Boolean?true} false to suppress sending the "focusCellChanged" event to the server.
 		 */
 		setFocusedCell: function (col, row, scrollVisible, notify) {
 
-			notify = notify !== false ? true : false;
+			// default to false.
+			scrollVisible = scrollVisible === true ? true : false;
 
-			var hasFocus = this.hasFocus();
-			var savedRow = this.getFocusedRow();
-			var savedCol = this.getFocusedColumn();
+			// default to true.
+			notify = notify === false ? false : true;
 
-			if (col == savedCol && row == savedRow) {
+			var me = this;
+			var focusedRow = this.getFocusedRow();
+			var focusedColumn = this.getFocusedColumn();
 
-				if (scrollVisible)
-					this.scrollCellVisible(col, row);
-
+			if (col === focusedColumn && row === focusedRow) {
+				if (scrollVisible && row != null) {
+					setTimeout(function () {
+						me.scrollCellVisible(col || 0, row);
+					}, 1);
+				}
 				return;
 			}
 
@@ -2814,46 +2943,36 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (col != null && col >= columnModel.getOverallColumnCount())
 				col = null;
 
-			this.base(arguments, col, row, scrollVisible);
+			this.base(arguments, col, row, false /* scrollVisible */);
+
+			if (scrollVisible && row != null) {
+				setTimeout(function () {
+					me.scrollCellVisible(col || 0, row);
+				}, 1);
+			}
 
 			if (this.__canFireServerEvent() && notify) {
 				this.fireDataEvent("focusCellChanged", { col: col, row: row });
 			}
 
 			// start editing on enter, when focused.
-			if (hasFocus && this.getEditMode() === "editOnEnter") {
-
-				// if the focus cell is being changed by the server, start editing
-				// without delay, unlike when the user is navigating quickly.
-				if (!this.__canFireServerEvent()) {
-					this.startEditing();
-					return;
-				}
+			if (scrollVisible && this.getEditMode() === "editOnEnter") {
 
 				// start this after a delay to prevent the widget from
 				// generating a train of events when the user rapidly
 				// moves from cell to cell.
 
-				var me = this;
 				clearTimeout(this.__startEditingTimer);
-				this.__startEditingTimer = 0;
 				this.__startEditingTimer = setTimeout(function () {
 
-					me.startEditing();
 					me.__startEditingTimer = 0;
 
-				}, 150);
+					if (me._isFocused()) {
+						me.startEditing();
+					}
+
+				}, 250);
 			}
-		},
-
-		/**
-		 * Returns true if the wisej.web.DataGrid has the focus
-		 * or if any child widget is focused.
-		 */
-		hasFocus: function () {
-
-			var focusWidget = qx.ui.core.FocusHandler.getInstance().getFocusedWidget();
-			return (focusWidget == this) || (qx.ui.core.Widget.contains(this, focusWidget) == true);
 		},
 
 		/**
@@ -2880,12 +2999,12 @@ qx.Class.define("wisej.web.DataGrid", {
 		startEditing: function (text, col, row, force) {
 
 			if (!this.isVisible())
-				return;
+				return false;
 
 			// defer the call after the data is loaded.
 			if (row != null && col != null && row >= this.getRowCount()) {
 				this.__postCall(arguments);
-				return;
+				return false;
 			}
 
 			// when editing is started by the server, ensure that the
@@ -2897,7 +3016,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				&& (this.getFocusedColumn() != null && this.getFocusedRow() != null)) {
 
 				this.core.logInfo("Edit mode not started: the current cell doesn't match the cell entering edit mode.");
-				return;
+				return false;
 			}
 
 			// update the focused cell, if the coordinates have been specified.
@@ -2941,6 +3060,13 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 
 			return null;
+		},
+
+		// checks whether the datagrid has the focus.
+		_isFocused: function () {
+			return this.isEditing()
+				|| this.hasState("focused")
+				|| qx.ui.core.FocusHandler.getInstance().getFocusedWidget() === this;
 		},
 
 		/**
@@ -3008,10 +3134,6 @@ qx.Class.define("wisej.web.DataGrid", {
 		_afterAddChild: function (child) {
 			if (child.isWisejControl) {
 				child.addState("inner");
-				if (child.getWidth() == null)
-					child.setWidth(child.getSizeHint().width);
-				if (child.getHeight() == null)
-					child.setHeight(child.getSizeHint().height);
 			}
 		},
 

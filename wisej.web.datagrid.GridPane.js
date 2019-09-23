@@ -189,6 +189,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			  rtl ? (colCount - 1) : (0) ;
 			  rtl ? (x > -1) : (x < colCount) ;
 			  rtl ? (x--) : (x++)) {
+
 				var col = paneModel.getColumnAtX(x);
 				var cellWidth = columnModel.getColumnWidth(col);
 

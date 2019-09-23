@@ -41,6 +41,8 @@ qx.Class.define("wisej.web.Desktop", {
 		qx.ui.core.MRightToLeftLayout
 	],
 
+	implement: qx.ui.window.IDesktop,
+
 	construct: function () {
 
 		this.base(arguments, new qx.ui.layout.Dock());
@@ -59,7 +61,7 @@ qx.Class.define("wisej.web.Desktop", {
 		/**
 		 * A wisej.web.DesktopTaskBarItem is double clicked.
 		 */
-		itemDblClick: "qx.event.type.Mouse",
+		itemDblClick: "qx.event.type.Mouse"
 	},
 
 	properties: {
@@ -185,7 +187,7 @@ qx.Class.define("wisej.web.Desktop", {
 				this.activate();
 				Wisej.Platform.setDesktop(this);
 			}
-			else if (Wisej.Platform.getDesktop() == this) {
+			else if (Wisej.Platform.getDesktop() === this) {
 
 				Wisej.Platform.setDesktop(null);
 			}
@@ -419,7 +421,7 @@ qx.Class.define("wisej.web.Desktop", {
 				var widget = all[i];
 				if (widget.isWisejComponent && widget.isSeeable()) {
 
-					var widgetRect = widget.getBounds();
+					var widgetRect = qx.lang.Object.clone(widget.getBounds());
 					var containerRect = widget.getLayoutParent().getBounds();
 					widgetRect.top += taskbarRect.top + containerRect.top;
 					widgetRect.left += taskbarRect.left + containerRect.left;
@@ -604,7 +606,7 @@ qx.Class.define("wisej.web.DesktopTaskBarItemDateTime", {
 		}
 	}
 
-})
+});
 
 
 /**
@@ -1533,7 +1535,7 @@ qx.Class.define("wisej.web.desktop.Workspace", {
 		/**
 		 * Appearance key.
 		 */
-		appearance: { init: "workspace", refine: true },
+		appearance: { init: "workspace", refine: true }
 
 	},
 
@@ -1573,7 +1575,7 @@ qx.Class.define("wisej.web.desktop.Workspace", {
 				if (taskbar)
 					taskbar.removeWindow(child);
 			}
-		},
+		}
 	}
 });
 

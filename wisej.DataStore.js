@@ -59,10 +59,10 @@ qx.Class.define("wisej.DataStore", {
 				// success.
 				function (data) {
 
-					if (callback) {
+					if (callback && data != null) {
 						callback.call(
 							context,
-							(parseInt(data) || 0));
+							parseInt(data) || 0);
 					}
 				}
 			);
@@ -90,11 +90,11 @@ qx.Class.define("wisej.DataStore", {
 				// success.
 				function (data) {
 
-					if (callback) {
+					if (callback && data != null) {
 
 						callback.call(
 							context,
-							data || []);
+							data);
 					}
 				}
 			);
@@ -128,7 +128,7 @@ qx.Class.define("wisej.DataStore", {
 
 							var action = actions[i];
 
-							if (action && action.type == WisejCore.ActionType.data) {
+							if (action && action.type === WisejCore.ActionType.data) {
 
 								// found the data response!
 								if (callback)
@@ -144,7 +144,7 @@ qx.Class.define("wisej.DataStore", {
 					}
 				}
 			);
-		},
+		}
 	}
 
 });

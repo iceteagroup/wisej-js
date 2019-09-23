@@ -58,10 +58,6 @@ qx.Class.define("wisej.web.listview.GridView", {
 		this.addListener("selectionChanged", this.__bubbleDataEvent, this);
 		this.addListener("columnWidthChanged", this.__bubbleDataEvent, this);
 		this.addListener("columnPositionChanged", this.__bubbleDataEvent, this);
-
-		// make sure the grid view handles the keyboard, when in the listview
-		// it's not focusable but we still need the keyboard events.
-		this.addListener("tap", function (e) { this.getFocusElement().focus(); });
 	},
 
 	properties: {
@@ -489,8 +485,6 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 		 */
 		_registerCssClasses: function () {
 
-			this.base(arguments);
-
 			var styleMgr = this._styleMgr;
 			var appearance = this.getAppearance();
 
@@ -499,6 +493,8 @@ qx.Class.define("wisej.web.listview.CellRenderer", {
 			this._stateIconClassName = styleMgr.getCssClass(appearance + "/stateIcon", {}, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
 			this._checkBoxClassName = styleMgr.getCssClass(appearance + "/checkbox", {}, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
 			this._checkBoxCheckedClassName = styleMgr.getCssClass(appearance + "/checkbox", { checked: true }, wisej.web.listview.CellRenderer.DEFAULT_ICON_CSS);
+
+			this.base(arguments);
 		},
 	}
 });

@@ -227,7 +227,7 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 			var appearance = this.getAppearance();
 			var state = this.getRowState(rowInfo);
 
-			return "qx-row " + styleMgr.getCssClass(appearance, state, wisej.web.datagrid.RowRenderer.DEFAULT_CSS);
+			return qx.theme.manager.Decoration.CSS_CLASSNAME_PREFIX + "row " + styleMgr.getCssClass(appearance, state, wisej.web.datagrid.RowRenderer.DEFAULT_CSS);
 		},
 
 		// builds the state map for the row.
@@ -243,12 +243,11 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 
 			// selected?
 			if (rowInfo.selected) {
-
 				state.selected = true;
 			}
 
 			// even or odd...
-			if (rowInfo.row % 2 == 0)
+			if (rowInfo.row % 2 === 0)
 				state.even = true;
 			else
 				state.odd = true;
@@ -353,11 +352,7 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 		 */
 		getInsets: function (rowInfo) {
 
-			return this._styleMgr.getBorder(
-				this.getAppearance(), {
-					focused: rowInfo.selected,
-					selected: rowInfo.focusedRow
-				});
+			return this._styleMgr.getBorder(this.getAppearance(), this.getRowState(rowInfo));
 		},
 
 		/**

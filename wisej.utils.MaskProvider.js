@@ -20,7 +20,7 @@
 /**
  * wisej.utils.MaskProvider
  * 
- * Provides efdit mask services to controls that implement masked editing.
+ * Provides edit mask services to controls that implement masked editing.
  */
 qx.Class.define("wisej.utils.MaskProvider", {
 
@@ -70,10 +70,8 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			"C": /(.|\s)/,
 			"A": /[0-9a-zA-Z]/,
 			"a": /[0-9a-zA-Z\s]/,
-			"ascii": /[a-zA-Z]/,
-
-		},
-
+			"ascii": /[a-zA-Z]/
+		}
 	},
 
 	properties: {
@@ -96,6 +94,9 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 * > = Shift up. Converts all characters that follow to uppercase.
 		 * | = Disable a previous shift up or shift down.
 		 * \ = Escape. Escapes a mask character, turning it into a literal. "\\" is the escape sequence for a backslash.
+		 * . = Localized decimal separator.
+		 * , = Localized group separator.
+		 * $ = Localized currency symbol.
 		 * All other characters Literals = All non-mask elements will appear as themselves within MaskedTextBox. Literals always occupy a static position in the mask at run time, and cannot be moved or deleted by the user.
 		 */
 		mask: { init: "", check: "String", apply: "_applyMask" },
@@ -103,12 +104,19 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		/**
 		 * The placeholder character to show in place of the mask. 
 		 */
-		prompt: { init: "_", check: "String", apply: "_applyPrompt" },
+		prompt: { init: "_", check: "String", apply: "_applyPrompt", transform:"_transformPrompt" },
 
 		/**
 		 * When true, the prompt is hidden when the textfield loses the focus.
 		 */
 		hidePrompt: { init: true, check: "Boolean", apply: "_applyHidePrompt" },
+
+		/**
+		 * Localization.
+		 * 
+		 * Defines the group separator, decimal separator and currency symbol in a map: {group, decimal, currency}.
+		 */
+		localization: { init: null, check: "Map" }
 	},
 
 	members: {
@@ -135,7 +143,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		processKeyPress: function (e) {
 
-			if (this.__maskChars.length == 0 || this.__isReadOnly)
+			if (this.__maskChars.length === 0 || this.__isReadOnly)
 				return;
 
 			var direction = 0;
@@ -150,12 +158,28 @@ qx.Class.define("wisej.utils.MaskProvider", {
 					direction = 0;
 					break;
 
+				case "Home":
+					if (e.getModifiers() === 0) {
+						var pos = this.__getNextInsertPosition(0);
+						this.__textfield.setTextSelection(pos, pos);
+						e.stop();
+					}
+					return;
+
+				case "End":
+					if (e.getModifiers() === 0) {
+						var pos = this.__adjustTextSelection(0, 0).start;
+						this.__textfield.setTextSelection(pos, pos);
+						e.stop();
+					}
+					return;
+
 				default:
 					return;
 			}
 
 			// read the value in the textfield without unmasking.
-			var text = this.getValue(true);
+			var value = this._getValue();
 
 			// read the caret position and selection.
 			var selection = {
@@ -165,7 +189,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 			// if some text is selected, Backspace and Delete act the same way.
 			if (selection.length > 0)
-				direction == 0;
+				direction = 0;
 			else
 				selection.start += direction;
 
@@ -175,12 +199,17 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 			// delete the character(s) to the left or right of the caret.
 			selection.length = selection.length == 0 ? 1 : selection.length;
-			text =
-				text.substr(0, selection.start)
-				+ text.substr(selection.start + selection.length);
+
+			// delete selection and all trailing literals or the mask code may use them as valid input.
+			var mask = this.__maskChars;
+			var text = value.substr(0, selection.start);
+			for (var i = selection.start + selection.length; i < value.length && i < mask.length; i++) {
+				if (this.__isMaskChar(mask[i]))
+					text += value[i];
+			}
 
 			// update the textfield.
-			this.setValue(text);
+			this._setValue(this.mask(text, true, true));
 
 			// move the caret position.
 			var pos = selection.start;
@@ -196,21 +225,21 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		processClipboard: function (e) {
 
-			if (this.__maskChars.length == 0 || this.__isReadOnly)
+			if (this.__maskChars.length === 0 || this.__isReadOnly)
 				return;
 
 			var type = e.getType();
+			var value = this._getValue();
 			switch (type) {
 
 				case "cut":
-					break;
 				case "paste":
+					this._setValue(this.mask(value));
 					break;
 
 				default:
 					return;
 			}
-
 		},
 
 		/**
@@ -229,7 +258,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			var char = e.getChar();
 
 			// read the value in the textfield without unmasking.
-			var text = this.getValue(true);
+			var value = this._getValue();
 
 			// read the caret position and selection.
 			var selection = {
@@ -238,33 +267,41 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			};
 
 			// find the next mask position.
-			var position = this.__getNextInsertPosition(selection.start);
+			var pos = this.__getNextInsertPosition(selection.start);
 
 			// mask the char before applying the mask to the full text to
 			// validate the single char.
-			var mask = this.__maskChars[position];
-			var mchar = this.__transformChar(char, mask);
+			var mask = this.__maskChars;
+			var prompt = this.getPrompt();
+			var mchar = this.__transformChar(char, this.__maskChars[pos], prompt);
 			if (!mchar) {
 
 				// compare if the typed char matches the literal in the mask, advance one position.
-				if (text[selection.start] === char)
+				if (value[selection.start] === char) {
 					this.__textfield.setTextSelection(selection.start + 1, selection.start + 1);
-
-				// TODO: if needed, we can fire a character rejected event here.
-				return;
+					return;
+				}
+				else if (" " === char) {
+					mchar = this.getPrompt();
+				}
+				else {
+					// TODO: if needed, we can fire a character rejected event here.
+					return;
+				}
 			}
 
-			// insert the typed character at the caret position.
-			text =
-				text.substr(0, position)
-				+ mchar
-				+ text.substr(position + selection.length);
+			// insert the typed character at the caret position and the trailing characters without literals.
+			var text = value.substr(0, selection.start) + mchar;
+			for (var i = selection.start + selection.length; i < value.length && i < mask.length; i++) {
+				if (this.__isMaskChar(mask[i]))
+					text += value[i];
+			}
 
 			// update the textfield.
-			this.setValue(text);
+			this._setValue(this.mask(text, true, true));
 
 			// move the caret position to  the next editable mask position.
-			var pos = this.__getNextInsertPosition(position + 1);
+			pos = this.__getNextInsertPosition(pos + 1);
 			this.__textfield.setTextSelection(pos, pos);
 		},
 
@@ -278,27 +315,14 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			if (this.__maskChars.length === 0)
 				return;
 
-			// update the masked value.
-			this.setValue(this.getValue());
-			var value = this.getValue();
+			if (this.getHidePrompt())
+				this._setValue(this.mask(this._getValue(), true, true));
 
-			var me = this;
-			setTimeout(function () {
-
-				var field = me.__textfield;
-				var selStart = me.__textfield.getTextSelectionStart();
-				var selLength = me.__textfield.getTextSelectionLength();
-
-				// if the field is empty, make sure the caret is at the first editable position.
-				if (selLength === 0) {
-
-					if (value.length === 0 || selStart === 0) {
-						var pos = me.__getNextInsertPosition(0);
-						field.setTextSelection(pos, pos);
-					}
-				}
-
-			}, 1);
+			// adjust the selection.
+			var start = this.__textfield.getTextSelectionStart();
+			var lenght = this.__textfield.getTextSelectionLength();
+			var selection = this.__adjustTextSelection(start, length);
+			this.__textfield.setTextSelection(selection.start, selection.end);
 		},
 
 		/**
@@ -311,53 +335,8 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			if (this.__maskChars.length === 0)
 				return;
 
-			this.setValue(this.getValue());
-
-		},
-
-		/**
-		 * unmask.
-		 *
-		 * Removes the mask from the text.
-		 */
-		unmask: function (text, options) {
-
-			if (!text)
-				return text;
-
-			if (this.__maskChars.length === 0)
-				return text;
-
-			options = options || {};
-
-			var c = "",
-				mask = "",
-				result = "",
-				isMask = false,
-				textLength = text.length,
-				prompt = options.prompt == null ? this.getPrompt() : options.prompt;
-
-			mask = this.__getFirstMask();
-			for (var i = 0; i < textLength; i++) {
-
-				c = text[i];
-				if (!mask)
-					break;
-
-				if (options.keepPrompt || c !== prompt) {
-
-					isMask = this.__isMaskChar(mask);
-					if (isMask && this.__transformChar(c, mask))
-						result += c;
-					else if (options.keepLiterals)
-						result += c;
-				}
-
-				// advance the mask.
-				mask = this.__getNextMask();
-			}
-
-			return result.trimEnd();
+			if (this.getHidePrompt())
+				this._setValue(this.mask(this._getValue(), false, true));
 		},
 
 		/**	
@@ -365,12 +344,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 *
 		 * Applies the mask to the text.
 		 */
-		mask: function (text, options) {
+		mask: function (text, keepPrompt, keepLiterals) {
 
 			if (this.__maskChars.length === 0)
 				return text;
-
-			options = options || {};
 
 			var c = "",
 				mask = "",
@@ -378,11 +355,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				literals = "",
 				isMask = false,
 				textLength = text.length,
-				maskLength = this.__maskChars.length,
-				prompt = options.prompt == null ? this.getPrompt() : options.prompt;
+				prompt = this.getPrompt();
 
-			if (!options.keepPrompt)
-				prompt = " ";
+			keepPrompt = keepPrompt !== false;
+			keepLiterals = keepLiterals !== false;
 
 			mask = this.__getFirstMask();
 			for (var i = 0; i < textLength;) {
@@ -396,7 +372,8 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 					// if the mask is a literal, collect the literal to add it 
 					// as soon as we get a mask match.
-					literals += mask;
+					if (keepLiterals)
+						literals += mask;
 
 					// find the next matching character in the input to align the mask.
 					var skipTo = text.indexOf(mask, i);
@@ -407,12 +384,15 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				}
 				else {
 
-					var mchar = this.__transformChar(c, mask);
+					var mchar = this.__transformChar(c, mask, prompt);
 					if (mchar) {
 
 						// add pending literals first.
 						result += literals;
 						literals = "";
+
+						if (keepPrompt && mchar === " ")
+							mchar = prompt;
 
 						// add the masked-transformed char.
 						result += mchar;
@@ -432,11 +412,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 						// skip the invalid input char.
 						i++;
 
-						// if the input char matches the prompt, add it as-is.
-						if (c === prompt) {
+						// if the input char matches the prompt?
+						if (c === prompt || c === " ") {
 
-							if (options.keepPrompt)
-								result += prompt;
+							result += keepPrompt ? prompt : " ";
 
 							// advance the mask.
 							mask = this.__getNextMask();
@@ -447,12 +426,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 							// ahead in the list.
 							if (this.__maskChars.indexOf(c, this.__maskIndex) > -1) {
 
-								if (prompt) {
-									for (; mask !== c; mask = this.__getNextMask()) {
+								for (; mask !== c; mask = this.__getNextMask()) {
 
-										if (this.__isMaskChar(mask))
-											result += prompt;
-									}
+									if (this.__isMaskChar(mask))
+										result += keepPrompt ? prompt : " ";
 								}
 
 								// add to the result and advance the mask.
@@ -473,10 +450,9 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 				if (mask) {
 					if (this.__isMaskChar(mask)) {
-						if (prompt)
-							result += prompt;
+						result += keepPrompt ? prompt : " ";
 					}
-					else {
+					else if (keepLiterals) {
 						result += mask;
 					}
 				}
@@ -490,24 +466,19 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		_applyPrompt: function (value, old) {
 
-			if (this.__textfield == null)
+			if (!this.__textfield)
 				return;
 
 			// apply the new prompt to the existing text.
-			if (old) {
+			this._applyHidePrompt(this.getHidePrompt());
+		},
 
-				var text = this.getValue(true);
-				text = this.unmask(text, {
-					prompt: old,
-					keepPrompt: false,
-					keepLiterals: false
-				});
-				this.setValue(text);
-			}
-			else {
-
-				this.setValue(this.getValue());
-			}
+		// ensure we always have a 1 char prompt.
+		_transformPrompt: function (value) {
+			if (value !== " " && !value)
+				return "_";
+			else
+				return value[0];
 		},
 
 		/**
@@ -515,11 +486,13 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 */
 		_applyHidePrompt: function (value, old) {
 
-			if (this.__textfield == null)
+			if (!this.__textfield)
 				return;
 
-			if (this.__textfield.hasState("focused"))
-				this.setValue(this.getValue());
+			if (value && !this.__textfield.hasState("focused"))
+				this._setValue(this.mask(this._getValue(), false, true));
+			else
+				this._setValue(this.mask(this._getValue(), true, true));
 		},
 
 		/**
@@ -530,54 +503,27 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		_applyMask: function (value, old) {
 
 			// parse the mask.
-			var maskChars = value ? maskChars = value.split("") : [];
-
-			// unmask the current value using the previous mask.
-			var text = this.getValue();
-
-			// update the parsed masked chars.
-			this.__maskChars = maskChars;
-
-			// reapply the mask.
-			this.setValue(text);
+			this.__maskChars = value
+				? maskChars = value.split("")
+				: [];
 		},
 
 		// returns the value from the input element.
-		getValue: function (keepMask) {
+		_getValue: function () {
 
-			if (this.__textfield == null)
+			if (!this.__textfield)
 				return null;
 
-			var el = this.__textfield.getContentElement();
-			var text = el.getValue();
-			if (!keepMask)
-				text = this.unmask(text, {
-					keepPrompt: false,
-					keepLiterals: false
-				});
-
-			return text;
+			return this.__textfield.getValue();
 		},
 
 		// sets the value in the input element.
-		setValue: function (value, applyMask) {
+		_setValue: function (value) {
 
-			if (this.__textfield == null)
+			if (!this.__textfield)
 				return;
 
-			// show the prompt if we are in design mode or if the 
-			// the textfield has the focus and hidePrompt is false.
-			var keepPrompt = wisej.web.DesignMode ||
-				!this.isHidePrompt() || this.__textfield.hasState("focused");
-
-			var el = this.__textfield.getContentElement();
-			if (applyMask !== false)
-				value = this.mask(value, {
-					keepLiterals: true,
-					keepPrompt: keepPrompt
-				});
-
-			el.setValue(value);
+			this.__textfield.setValue(value);
 		},
 
 		// returns the next valid insert position in the mask.
@@ -588,6 +534,28 @@ qx.Class.define("wisej.utils.MaskProvider", {
 						mask = this.__maskChars[++pos]);
 
 			return pos;
+		},
+
+		// moves the cursor forward to the first available space in the text.
+		__adjustTextSelection: function (start, length) {
+			var text = this._getValue();
+			var prompt = this.getPrompt();
+			if (start === text.length)
+				start = 0;
+
+			var pos = start;
+			if (pos === 0) {
+				for (var mask = this.__maskChars[pos];
+					mask != null && (!this.__isMaskChar(mask) || text[pos] !== prompt);
+					mask = this.__maskChars[++pos]);
+
+				length = Math.max(0, length - (pos - length));
+			}
+
+			return {
+				start: pos,
+				end: pos + length
+			};
 		},
 
 		// resets all mask related state vars and
@@ -634,6 +602,21 @@ qx.Class.define("wisej.utils.MaskProvider", {
 					case "\\":
 						this.__escape = true;
 						return this.__getNextMask();
+
+					case ".":
+						return this.getLocalization()
+							? this.getLocalization().decimal
+							: qx.locale.Number.getDecimalSeparator();
+
+					case ",":
+						return this.getLocalization()
+							? this.getLocalization().group
+							: qx.locale.Number.getGroupSeparator();
+
+					case "$":
+						return this.getLocalization()
+							? this.getLocalization().currency
+							: qx.locale.Number.getCurrencySymbol();
 				}
 			}
 
@@ -641,10 +624,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		},
 
 		// applies the current mask transformation to the char.
-		__transformChar: function (c, mask) {
+		__transformChar: function (c, mask, prompt) {
 
-			if (!c)
-				return c;
+			if (!c || c === prompt)
+				return null;		
 
 			if (this.__lowercase)
 				c = c.toLowerCase();
@@ -665,7 +648,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			this.__escape = false;
 
 			// test the literal.
-			if (c != mask)
+			if (c !== mask)
 				return null;
 
 			return c;
@@ -674,14 +657,14 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		// checks if the character is a mask or a literal.
 		__isMaskChar: function (c) {
 
-			return this.__regexp[c] != null;
+			return !!(this.__regexp[c]);
 		},
 
 		// handles changes to the readOnly property
 		// and store it locally - this code needs to check it on every keystroke.
 		_onChangeReadOnly: function (e) {
 			this.__isReadOnly = e.getData();
-		},
+		}
 
 	}
 

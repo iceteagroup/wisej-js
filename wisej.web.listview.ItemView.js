@@ -53,17 +53,17 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		this.__selectionManager = new qx.ui.virtual.selection.CellRectangle(this.getPane(), this);
 		this.__selectionManager.setDrag(true);
 		this.__selectionManager.attachPointerEvents();
-		this.__selectionManager.attachKeyEvents(owner);
+		this.__selectionManager.attachKeyEvents(this);
 		this.__selectionManager.addListener("changeSelection", this._onChangeSelection, this);
 
 		// hook he resize event to adjust the number of columns.
 		this.getPane().addListener("resize", this._onPaneResize, this);
 
+		// listen to the keyboard to start editing or toggle the checkboxes.
+		this.getPane().addListener("keypress", this._onKeyPress, this);
+
 		// issue the first data load when becoming visible.
 		this.addListenerOnce("appear", this.reloadData, this);
-
-		// listen to the keyboard to start editing or toggle the checkboxes.
-		this.addListener("keypress", this._onKeyPress);
 
 		this.addListener("blur", this._onFocusChanged);
 		this.addListener("focus", this._onFocusChanged);
@@ -103,7 +103,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 *
 		 * Sets the size of the state icon in the listView item. The state icon is displayed before the item's icon.
 		 */
-		stateIconSize: { init: { width: 16, height: 16 }, check: "Map" },
+		stateIconSize: { init: { width: 16, height: 16 }, check: "Map" }
 	},
 
 	members: {
@@ -576,6 +576,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 			var widget = Wisej.Core.getComponent(data.styles[0].widgetId);
 			if (widget) {
+				widget.setUserData("owner", this.__owner);
 				cellWidget.setHostedWidget(widget, data.styles[0].widgetDock);
 			}
 		},
@@ -812,6 +813,15 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		},
 
 		_onKeyPress: function (e) {
+
+			// let embedded widgets handle their own keystrokes.
+			var target = e.getTarget();
+			target = target ? target.getFocusTarget() : null;
+			if (this !== target && target && target.getLayoutParent().$$subcontrol === "host") {
+
+				e.stopPropagation();
+				return;
+			}
 
 			// if checkboxes are visible, toggle the check state
 			// when pressing enter.
@@ -1514,8 +1524,8 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 						visibility: "visible"
 					});
 					this._add(control, { row: 1, column: 0, colSpan: 2 });
-					control.addListener("mousedown", this.__onLabelMouseDown, this);
 					control.addListener("changeVisibility", this.__updateLayout, this);
+					control.addListener("pointerdown", this.__onLabelPointerDown, this);
 					break;
 
 
@@ -1533,10 +1543,10 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 			return control || this.base(arguments, id);
 		},
 
-		__onLabelMouseDown: function (e) {
+		__onLabelPointerDown: function (e) {
 
 			this.fireEvent("labelclick");
-		},
+		}
 	}
 });
 

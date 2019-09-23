@@ -50,8 +50,11 @@ qx.Mixin.define("wisej.utils.FocusHandlerPatch", {
 		 */
 		__getChildIndex: function (widget) {
 			var parent = widget.getLayoutParent();
+			if (!parent)
+				return -1;
+
 			return parent.indexOf ? parent.indexOf(widget) : parent._indexOf(widget);
-		},
+		}
 
 	},
 
@@ -66,14 +69,14 @@ qx.Mixin.define("wisej.utils.FocusHandlerPatch", {
 		 */
 		__compareTabOrder: function (widget1, widget2) {
 
-			if (widget1 == widget2)
+			if (widget1 === widget2)
 				return 0;
 
 			var tabPath1 = wisej.utils.FocusHandlerPatch.__collectTabIndexPath(widget1);
 			var tabPath2 = wisej.utils.FocusHandlerPatch.__collectTabIndexPath(widget2);
 
 			for (var i = 0; i < tabPath1.length && i < tabPath2.length; i++) {
-				if (tabPath1[i] != tabPath2[i]) {
+				if (tabPath1[i] !== tabPath2[i]) {
 					return tabPath1[i] - tabPath2[i];
 				}
 			}
@@ -81,10 +84,10 @@ qx.Mixin.define("wisej.utils.FocusHandlerPatch", {
 			var z1 = wisej.utils.FocusHandlerPatch.__getChildIndex(widget1);
 			var z2 = wisej.utils.FocusHandlerPatch.__getChildIndex(widget2);
 
-			return z1 == z2
+			return z1 === z2
 				? tabPath1.length - tabPath2.length
 				: z1 - z2;
-		},
+		}
 	}
 });
 

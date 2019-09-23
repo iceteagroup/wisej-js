@@ -83,7 +83,7 @@ qx.Class.define("wisej.web.SplitContainer", {
 		 *
 		 * Enables or disables the splitter bar.
 		 */
-		splitterEnabled: { init: true, check: "Boolean", apply: "_applySplitterEnabled" },
+		splitterEnabled: { init: true, check: "Boolean", apply: "_applySplitterEnabled" }
 
 	},
 

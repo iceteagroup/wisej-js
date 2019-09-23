@@ -30,8 +30,8 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 
 		// pass all pointer events through the focus indicator.
 		this.getContentElement().setStyles({
-			"pointer-events": "none",
-			"disabled": "disabled"
+			"disabled": "disabled",
+			"pointer-events": "none"
 		});
 	},
 
@@ -51,8 +51,8 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 			if (state === "editing") {
 				// capture pointer events.
 				this.getContentElement().setStyles({
-					"pointer-events": null,
-					"disabled": null
+					"disabled": null,
+					"pointer-events": null
 				});
 			}
 
@@ -167,11 +167,11 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 				w -= cellInsets.left + cellInsets.right;
 				h -= cellInsets.top + cellInsets.bottom + rowInsets.top + rowInsets.bottom;
 
-				this.setUserBounds(x, y, w, h);
 				this.setRow(row);
 				this.setColumn(col);
+				this.setUserBounds(x, y, w, h);
 
-				if (table.hasState("focused"))
+				if (table._isFocused())
 					this.show();
 			}
 		},

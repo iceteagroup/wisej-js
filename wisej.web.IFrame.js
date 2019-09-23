@@ -157,7 +157,7 @@ qx.Class.define("wisej.web.IFrame", {
 			// inform Wisej that we user is still alive
 			Wisej.Core.userIsAlive();
 
-			if (e.getType() == "pointerdown") {
+			if (e.getType() === "pointerdown") {
 				// close all menus and popups when clicking on an IFrame.
 				qx.ui.menu.Manager.getInstance().hideAll();
 				qx.ui.popup.Manager.getInstance().hideAll();

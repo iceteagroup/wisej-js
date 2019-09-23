@@ -68,7 +68,7 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 
 		__onOverflowChangeVisibility: function (e) {
 
-			if (e.getData() == "visible") {
+			if (e.getData() === "visible") {
 				this.__updateOverflowItems();
 			}
 		},
@@ -314,6 +314,11 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 	// to provide services to the Wisej core.
 	include: [wisej.mixin.MWisejMenu],
 
+	construct: function () {
+
+		this.base(arguments);
+	},
+
 	members: {
 
 		/**
@@ -325,13 +330,36 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 		 */
 		show: function (opener, offset, position) {
 
+			// if the menu was opened by the framework, preserver
+			// whatever placement is being used.
+			if (offset === undefined && position === undefined) {
+
+				this.base(arguments);
+				this.fireDataEvent("show", this.getOpener());
+				return;
+			}
+
 			this.setOffset(0);
+
+			opener = opener || this.getOpener();
+
+			// try to preserve the alignment when we have an opener.
+			if (opener && !offset) {
+				this.setPlacementModeX("keep-align");
+				this.setPlacementModeY("keep-align");
+			}
+			else {
+				// otherwise, make sure the context menus is within the view area.
+				this.setPlacementModeX("best-fit");
+				this.setPlacementModeY("best-fit");
+			}
 
 			if (opener) {
 
 				// retrieve the header widget if the opened is a column header.
 				if (opener instanceof wisej.web.datagrid.ColumnHeader)
 					opener = opener.getHeaderWidget();
+
 				// retrieve the TabPage button, if the opener is a TabPage.
 				if (opener instanceof qx.ui.tabview.Page)
 					opener = opener.getButton();
@@ -352,11 +380,9 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 				if (position)
 					this.setPosition(qx.lang.String.hyphenate(position));
 
-				this.setPlacementModeX("best-fit");
-				this.setPlacementModeY("best-fit");
 				this.placeToWidget(opener, true);
 			}
-			else if (offset != null) {
+			else if (offset) {
 
 				this.placeToPoint({ left: offset[3], top: offset[0] });
 			}

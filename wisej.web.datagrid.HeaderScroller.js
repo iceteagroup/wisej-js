@@ -22,6 +22,6 @@
  */
 qx.Class.define("wisej.web.datagrid.HeaderScroller", {
 
-	extend: qx.ui.table.pane.Header,
+	extend: qx.ui.table.pane.Header
 
 });

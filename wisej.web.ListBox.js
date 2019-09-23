@@ -35,6 +35,11 @@ qx.Class.define("wisej.web.ListBox", {
 
 		this.base(arguments);
 
+		// add local state properties.
+		this.setStateProperties(this.getStateProperties().concat(["topIndex"]));
+		// add local state events.
+		this.setStateEvents(this.getStateEvents().concat(["scrollAnimationYEnd"]));
+
 		this.addListener("changeSelection", this.__onChangeSelection);
 
 		// adds the inner target to the drop & drop event object.
@@ -44,6 +49,7 @@ qx.Class.define("wisej.web.ListBox", {
 		// auto select the item when dragging starts.
 		this.addListener("dragstart", this._onDragStart, this);
 
+		this.addState("multiline");
 	},
 
 	properties: {
@@ -72,6 +78,12 @@ qx.Class.define("wisej.web.ListBox", {
 		// selectedIndices: { check: "Array", apply: "_applySelectedIndices" },
 
 		/**
+		 * TopIndex property.
+		 * Property defined with the setter/getter methods.
+		 */
+		// topIndex: { check: "Integer", apply: "_applyTopIndex" },
+
+		/**
 		 * ReadOnly property.
 		 */
 		readOnly: { check: "Boolean", apply: "_applyReadOnly", init: false },
@@ -94,7 +106,7 @@ qx.Class.define("wisej.web.ListBox", {
 		 * height of the largest item used also to calculate he maximum width.
 		 *
 		 */
-		itemHeight: { init: null, check: "Integer", apply: "_applyItemHeight", nullable: true, themeable: true },
+		itemHeight: { init: 24, check: "Integer", apply: "_applyItemHeight", nullable: true, themeable: true },
 
 		/**
 		 * Determines the appearance of child items.
@@ -176,14 +188,15 @@ qx.Class.define("wisej.web.ListBox", {
 					this.destroyChildren();
 				}
 
+				var index, item;
 				var children = this.getChildren();
 
 				// add new items.
 				if (items.added && items.added.length > 0) {
 					var added = items.added;
 					for (var i = 0; i < added.length; i++) {
-						var index = added[i].index;
-						var item = this._createListItem(added[i]);
+						index = added[i].index;
+						item = this._createListItem(added[i]);
 						this.addAt(item, index);
 					}
 				}
@@ -192,7 +205,7 @@ qx.Class.define("wisej.web.ListBox", {
 				if (items.modified && items.modified.length > 0) {
 					var modified = items.modified;
 					for (var i = 0; i < modified.length; i++) {
-						var index = modified[i].index;
+						index = modified[i].index;
 
 						if (index < 0 || index >= children.length)
 							throw new Error("index out of bounds: " + index + " (0.." + children.length + ")");
@@ -206,7 +219,7 @@ qx.Class.define("wisej.web.ListBox", {
 					var deleted = items.deleted;
 					for (var i = deleted.length - 1; i >= 0; i--) {
 
-						var index = deleted[i];
+						index = deleted[i];
 
 						if (index < 0 || index >= children.length)
 							throw new Error("index out of bounds: " + index + " (0.." + children.length + ")");
@@ -214,6 +227,19 @@ qx.Class.define("wisej.web.ListBox", {
 						children[index].destroy();
 					}
 				}
+
+				// align the indexes of the items if items have been added or deleted.
+				if (!items.clear && (items.added || items.deleted)) {
+					for (var i = 0, l = children.length; i < l; i++) {
+						children[i].setIndex(i);
+					}
+				}
+
+				// update the listbox container for the horizontal scrollbar.
+				if (!items.clear && (items.added || items.deleted || items.modified)) {
+					qx.ui.core.queue.Layout.add(this);
+				}
+
 			} finally {
 
 				this.__suspendEvents = false;
@@ -237,6 +263,41 @@ qx.Class.define("wisej.web.ListBox", {
 		},
 
 		/**
+		 * TopIndex property.
+		 */
+		getTopIndex: function () {
+
+			var items = this.getChildren();
+			if (items.length < 2)
+				return 0;
+
+			var scrollY = this.getScrollY(), item, bounds;
+			for (var i = 0; i < items.length; i++) {
+				item = items[i];
+				bounds = item.getBounds();
+				if (!bounds)
+					break;
+
+				// include items that are half visible.
+				if (bounds.top + bounds.height / 2 >= scrollY)
+					return i;
+			}
+
+			return 0;
+		},
+		setTopIndex: function (value) {
+
+			var items = this.getChildren();
+			if (items.length < 2)
+				return;
+
+			if (value < 0 || value >= items.length)
+				return;
+
+			this.scrollChildIntoViewY(items[value], "top");
+		},
+
+		/**
 		 * SelectedIndices property.
 		 */
 		getSelectedIndices: function () {
@@ -244,13 +305,13 @@ qx.Class.define("wisej.web.ListBox", {
 			var indices = [];
 			var selection = this.getSelection();
 			for (var i = 0; i < selection.length; i++) {
-				var index = this.indexOf(selection[i]);
+				var index = selection[i].getIndex();
 				if (index > -1)
 					indices.push(index);
 			}
 			return indices;
 		},
-		setSelectedIndices: function (value, old) {
+		setSelectedIndices: function (value) {
 
 			this.__suspendEvents = true;
 			try {
@@ -267,6 +328,7 @@ qx.Class.define("wisej.web.ListBox", {
 							items.push(children[index]);
 						}
 					}
+
 					this.setSelection(items);
 				}
 			} finally {
@@ -303,8 +365,8 @@ qx.Class.define("wisej.web.ListBox", {
 			}
 
 			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 });
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 });
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, null, "listbox");
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 }, null, "listbox");
 
 		},
 
@@ -515,7 +577,7 @@ qx.Class.define("wisej.web.CheckedListBox", {
 				return;
 
 			var key = e.getKeyIdentifier();
-			if (key == "Space") {
+			if (key === "Space") {
 
 				var items = this.getSelection();
 				for (var i = 0; i < items.length; i++) {
@@ -710,7 +772,7 @@ qx.Class.define("wisej.web.listbox.CheckedListItem", {
 						triState: false,
 						anonymous: false,
 						focusable: false,
-						keepFocus: true,
+						keepFocus: false,
 						keepActive: true,
 						alignY: "middle"
 					});

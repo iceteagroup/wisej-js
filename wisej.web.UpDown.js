@@ -47,6 +47,15 @@ qx.Class.define("wisej.web.UpDownBase", {
 		// add local state events.
 		this.setStateEvents(this.getStateEvents().concat(["changeValue"]));
 
+		// any action on the textbox marks this widget as dirty to update the state on the server.
+		var textField = this.getChildControl("textfield");
+		textField.addListener("input", function (e) { this.setDirty(true); }, this);
+
+		// forward the focusin and focusout events to the textField.
+		// is not focusable so the events need to be forwarded manually.
+		this.addListener("focusin", this.__onFocusIn, this);
+		this.addListener("focusout", this.__onFocusOut, this);
+
 		// hovered event handlers.
 		this.addListener("pointerover", this._onPointerOver);
 		this.addListener("pointerout", this._onPointerOut);
@@ -109,11 +118,13 @@ qx.Class.define("wisej.web.UpDownBase", {
 		 *
 		 * Changes the text in the inner textfield.
 		 */
-		setText: function (value, old) {
-			this.getChildControl("textfield").setValue(value);
-		},
 		getText: function () {
+
 			return this.getChildControl("textfield").getValue();
+		},
+		setText: function (value, old) {
+
+			this.getChildControl("textfield").setValue(value);
 		},
 
 		// overridden
@@ -216,6 +227,31 @@ qx.Class.define("wisej.web.UpDownBase", {
 			}
 		},
 
+		// forward the "focus" event and 
+		// focus the inner textfield when gaining the focus, otherwise the editable
+		// textfield doesn't get the focus when clicking close or on the border.
+		__onFocusIn: function (e) {
+
+			var textField = this.getChildControl("textfield");
+			if (textField.isVisible()) {
+
+				textField.fireNonBubblingEvent("focusin", qx.event.type.Focus);
+
+				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
+					qx.event.Timer.once(function () {
+						textField.getFocusElement().focus();
+					}, this, 0);
+				}
+			}
+		},
+
+		// forward the "blur" event.
+		__onFocusOut: function (e) {
+
+			var textField = this.getChildControl("textfield");
+			textField.fireNonBubblingEvent("focusout", qx.event.type.Focus);
+		},
+
 		/**
 		 * Transfer the focus.
 		 *
@@ -245,7 +281,7 @@ qx.Class.define("wisej.web.UpDownBase", {
 				return;
 
 			// don't change on wheel rolls unless it has the focus.
-			if (e.getPointerType() == "wheel" && !this.hasState("focused"))
+			if (e.getPointerType() === "wheel" && !this.hasState("focused"))
 				return;
 
 			this.base(arguments, e);
@@ -287,13 +323,32 @@ qx.Class.define("wisej.web.UpDownBase", {
 			this.removeState("hovered");
 		},
 
+		// overridden
+		_createChildControlImpl: function (id, hash) {
+			var control;
+
+			switch (id) {
+				case "textfield":
+					control = this.base(arguments, id, hash);
+					control.setMinWidth(1);
+					control.setMinHeight(1);
+					control.setAllowGrowY(false);
+					// disable browser's autocomplete.
+					control.getContentElement().setAttribute("autocomplete", "off");
+
+					break;
+			}
+
+			return control || this.base(arguments, id);
+		},
+
 		// Arranges the child components according to the settings.
 		__layoutChildComponents: function () {
 
 			var textField = this.getChildControl("textfield");
 			var upButton = this.getChildControl("upbutton");
 			var downButton = this.getChildControl("downbutton");
-			var horizontal = this.getButtonsLayout() == "horizontal";
+			var horizontal = this.getButtonsLayout() === "horizontal";
 			var layout = this._getLayout();
 			var align = this.getUpDownAlign();
 
@@ -387,15 +442,6 @@ qx.Class.define("wisej.web.NumericUpDown", {
 		 * Displays the value as an hexadecimal number.
 		 */
 		hexadecimal: { init: false, check: "Boolean", apply: "_applyHexadecimal" },
-	},
-
-	construct: function (min, value, max) {
-
-		this.base(arguments, min, value, max);
-
-		// any action on the textbox marks this widget as dirty to update the state on the server.
-		var textField = this.getChildControl("textfield");
-		textField.addListener("keyup", function (e) { this.setDirty(true); }, this);
 	},
 
 	members: {
@@ -515,9 +561,8 @@ qx.Class.define("wisej.web.NumericUpDown", {
 			} else {
 				textField.setValue(null);
 			}
-
-		},
-	},
+		}
+	}
 
 });
 
@@ -528,16 +573,6 @@ qx.Class.define("wisej.web.NumericUpDown", {
 qx.Class.define("wisej.web.DomainUpDown", {
 
 	extend: wisej.web.UpDownBase,
-
-	properties: {
-
-		/**
-		 * Items property.
-		 * 
-		 * List of items to iterate in the spinner.
-		 */
-		items: { init: null, nullable: true, check: "Array", apply: "_applyItems" },
-	},
 
 	construct: function () {
 
@@ -553,6 +588,16 @@ qx.Class.define("wisej.web.DomainUpDown", {
 		this.setText("");
 	},
 
+	properties: {
+
+		/**
+		 * Items property.
+		 * 
+		 * List of items to iterate in the spinner.
+		 */
+		items: { init: null, nullable: true, check: "Array", apply: "_applyItems" }
+	},
+
 	members: {
 
 
@@ -564,6 +609,9 @@ qx.Class.define("wisej.web.DomainUpDown", {
 		 */
 		_applyItems: function (value, old) {
 
+			// update the index of the selected item.
+			this._index = this.__findItem(this.getText());
+
 			this._updateButtons();
 		},
 
@@ -572,6 +620,7 @@ qx.Class.define("wisej.web.DomainUpDown", {
 
 			// update the index of the selected item.
 			this._index = this.__findItem(e.getData());
+
 			this._updateButtons();
 
 			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
@@ -597,10 +646,8 @@ qx.Class.define("wisej.web.DomainUpDown", {
 				this._index--;
 			}
 
-			var textField = this.getChildControl("textfield");
-			textField.setValue(items[this._index]);
+			this.getChildControl("textfield").setValue(items[this._index]);
 		},
-
 
 		// overridden
 		// use the list instead of the numeric value.
@@ -622,8 +669,7 @@ qx.Class.define("wisej.web.DomainUpDown", {
 				this._index++;
 			}
 
-			var textField = this.getChildControl("textfield");
-			textField.setValue(items[this._index]);
+			this.getChildControl("textfield").setValue(items[this._index]);
 		},
 
 		// overridden to eliminate the numeric filter.

@@ -315,10 +315,10 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				"<div role='cell' ",
 				"col='", cellInfo.col, "' ",
 				"row='", cellInfo.row, "' ",
-				"class='",
-				this._getCellClass(cellInfo), "' ",
+				"class='", this._getCellClass(cellInfo), "' ",
 				this._getTooltipAttribute(cellInfo),
 				this._getCellWidgetAttribute(cellInfo),
+				this._getCellAutomationAttributes(cellInfo),
 				"style='left:", cellInfo.styleLeft, "px;",
 				this._getCellSizeStyle(cellInfo.styleWidth, cellInfo.styleHeight),
 				this._getCellStyle(cellInfo),
@@ -346,7 +346,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			var appearance = this.getAppearance();
 			var state = this._getCellState(cellInfo);
 
-			return "qx-cell " + styleMgr.getCssClass(appearance, state, wisej.web.datagrid.CellRenderer.DEFAULT_CSS);
+			return qx.theme.manager.Decoration.CSS_CLASSNAME_PREFIX + "cell " + styleMgr.getCssClass(appearance, state, wisej.web.datagrid.CellRenderer.DEFAULT_CSS);
 		},
 
 		// builds the state map for the cell.
@@ -434,39 +434,15 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			var cellStyle = this._resolveContentStyle(cellInfo);
 			var cellCss = cellStyle ? cellStyle.css : "";
 			var vAlign = cellStyle ? cellStyle.verticalAlign : null;
-
-			// if this is a tree-cell, add the open/close icon.
-			if (cellInfo.xPos === 0
+			var isNode = cellInfo.xPos === 0
 				&& !cellInfo.scroller.isFrozenPane()
 				&& !cellInfo.scroller.isRowHeaderPane()
 				&& cellInfo.col > table._rowHeaderColIndex
-				&& data && (data.expanded !== undefined || data.level !== undefined)) {
+				&& data && (data.expanded !== undefined || data.level !== undefined);
 
-				// add the spacer.
-				if (data.level > 0) {
-					var paddingLeft = data.level * cellInfo.table.getIndent();
-					htmlArr.push(
-						"<div role='spacer' class='", this._contentSpacerClassName,
-						"' style='padding-left:", paddingLeft, "px");
-
-					// copy the background and close the element.
-					if (cellStyle.backgroundColor)
-						htmlArr.push(";background-color:", cellStyle.backgroundColor);
-
-					htmlArr.push("'></div>");
-				}
-
-				if (data.expanded === true)
-					htmlArr.push("<div role='close' class='", this._contentExpandedClassName);
-				else if (data.expanded === false)
-					htmlArr.push("<div role='open' class='", this._contentCollapsedClassName);
-				else
-					htmlArr.push("<div role='spacer' class='", this._contentButtonSpacerClassName);
-
-				// copy the background and close the element.
-				if (cellStyle.backgroundColor)
-					htmlArr.push("' style='background-color:", cellStyle.backgroundColor);
-				htmlArr.push("'></div>");
+			// if this is a tree-cell, add the open/close icon.
+			if (isNode) {
+				this._renderNode(htmlArr, data, cellStyle, cellInfo);
 			}
 
 			htmlArr.push(
@@ -495,9 +471,56 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			}
 
 			htmlArr.push("</div>");
+
 			html = htmlArr.join("");
 
 			return html;
+		},
+
+		/**
+		 * Renders the node portion of the cell when the row is a child row.
+		 * 
+		 * @param {Array} htmlArr Array with the current cell's html rendering data.
+		 * @param {Map} data Cell content data.
+		 * @param {Map} cellStyle Current cell style.
+		 * @param {Map} cellInfo Cell rendering data.
+		 */
+		_renderNode: function (htmlArr, data, cellStyle, cellInfo) {
+
+			// add the spacer.
+			if (data.level > 0) {
+
+				var width = data.level * cellInfo.table.getIndent();
+				htmlArr.push(
+					"<div role='spacer' class='", this._contentSpacerClassName,
+					"' style='padding-left:", width, "px;");
+
+				// create the local style to inherit the background color and float right for RTL.
+				if (cellStyle.backgroundColor)
+					htmlArr.push("background-color:" + cellStyle.backgroundColor + ";");
+				if (cellInfo.rightToLeft)
+					htmlArr.push("float:right;");
+
+				htmlArr.push("'></div>");
+			}
+
+			if (data.expanded === true)
+				htmlArr.push("<div role='close' class='", this._contentExpandedClassName);
+			else if (data.expanded === false)
+				htmlArr.push("<div role='open' class='", this._contentCollapsedClassName);
+			else
+				htmlArr.push("<div role='spacer' class='", this._contentButtonSpacerClassName);
+
+			// create the local style to inherit the background color and float right for RTL.
+			var style = "";
+			if (cellStyle.backgroundColor)
+				style += "background-color:" + cellStyle.backgroundColor + ";";
+			if (cellInfo.rightToLeft)
+				style += "float:right;";
+			if (style)
+				htmlArr.push("' style='", style);
+
+			htmlArr.push("'></div>");
 		},
 
 		/**
@@ -600,6 +623,29 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				if (styles && styles.widgetId) {
 					return "qx-widget-id='" + styles.widgetId + "' " +
 							"qx-widget-dock='" + styles.widgetDock + "' ";
+				}
+			}
+
+			return "";
+		},
+
+		/**
+		 * Returns the automation attributes to add to the cell's element definition.
+		 * 
+		 * @param cellInfo {Map} The information about the cell.
+		 */
+		_getCellAutomationAttributes: function(cellInfo) {
+
+			if (qx.core.Environment.get("automation.mode") === true) {
+
+				var table = cellInfo.table;
+				if (table) {
+					var colName = table.getColumns()[cellInfo.col].getName();
+					var propName = wisej.utils.Widget.getAutomationPropertyName();
+					var ownerId = table.getContentElement().getAttribute(propName);
+
+					return propName + "'=" + ownerId + "_" + colName + "_" + cellInfo.row + "' " +
+							"name='" + colName + "_" + cellInfo.row + "' ";
 				}
 			}
 
@@ -1092,11 +1138,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		 */
 		getInsets: function (cellInfo) {
 
-			var insets = this._styleMgr.getBorder(
-				this.getAppearance(),
-				{ focused: cellInfo.focusedRow || cellInfo.focusedCol, selected: cellInfo.selected });
-
-			return insets;
+			return this._styleMgr.getBorder(this.getAppearance(), this._getCellState(cellInfo));
 		},
 
 		/**
@@ -1211,8 +1253,6 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.CheckBoxCell", {
 		 */
 		_registerCssClasses: function () {
 
-			this.base(arguments);
-
 			var styleMgr = this._styleMgr;
 			var appearance = this.getAppearance() + "/checkbox";
 
@@ -1220,6 +1260,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.CheckBoxCell", {
 			this._contentCheckBoxClassName = styleMgr.getCssClass(appearance, {}, wisej.web.datagrid.cellRenderer.CheckBoxCell.DEFAULT_CHECKBOX_CSS);
 			this._contentCheckBoxCheckedClassName = styleMgr.getCssClass(appearance, { checked: true }, wisej.web.datagrid.cellRenderer.CheckBoxCell.DEFAULT_CHECKBOX_CSS);
 			this._contentCheckBoxUndeterminedClassName = styleMgr.getCssClass(appearance, { undetermined: true }, wisej.web.datagrid.cellRenderer.CheckBoxCell.DEFAULT_CHECKBOX_CSS);
+
+			this.base(arguments);
 		}
 
 	}
@@ -1395,8 +1437,6 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ButtonCell", {
 		 */
 		_registerCssClasses: function () {
 
-			this.base(arguments);
-
 			var styleMgr = this._styleMgr;
 			var appearance = this.getAppearance() + "/button";
 
@@ -1407,6 +1447,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ButtonCell", {
 			// we cannot handle it in the code because cells are not widgets.
 			styleMgr.createCssPseudoClass(this._buttonClassName + ":hover", appearance, { hovered: true }, "");
 			styleMgr.createCssPseudoClass(this._buttonClassName + ":active", appearance, { pressed: true }, "");
+
+			this.base(arguments);
 		}
 	}
 });

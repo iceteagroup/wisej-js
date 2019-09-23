@@ -38,17 +38,12 @@ qx.Class.define("wisej.web.SlideBar", {
 		 *
 		 * Changes the scroll buttons background color set in the theme.
 		 */
-		buttonsBackColor: { init: null, check: "Color", apply: "_applyButtonsBackColor" },
-
-		/**
-		 * Spacing property.
-		 *
-		 * Changes the spacing between the child control.
-		 */
-		spacing: { init: 0, check: "PositiveInteger", apply: "_applySpacing" },
+		buttonsBackColor: { init: null, check: "Color", apply: "_applyButtonsBackColor" }
 	},
 
 	construct: function () {
+
+		this._createChildControl("content");
 
 		this.base(arguments);
 	},
@@ -75,20 +70,51 @@ qx.Class.define("wisej.web.SlideBar", {
 		},
 
 		/**
-		 * Applies the spacing property.
+		 * Applies the orientation property.
 		 */
-		_applySpacing: function (value, old) {
+		_applyOrientation: function (value, old) {
 
-			this.getLayout().setSpacing(value);
+			// overridden to prevent changing the layout engines.
+
+			var buttonForward = this.getChildControl("button-forward");
+			var buttonBackward = this.getChildControl("button-backward");
+
+			// old can also be null, so we have to check both explicitly to set
+			// the states correctly.
+			if (old === "vertical" && value === "horizontal") {
+				buttonForward.removeState("vertical");
+				buttonBackward.removeState("vertical");
+				buttonForward.addState("horizontal");
+				buttonBackward.addState("horizontal");
+			}
+			else if (old === "horizontal" && value === "vertical") {
+				buttonForward.removeState("horizontal");
+				buttonBackward.removeState("horizontal");
+				buttonForward.addState("vertical");
+				buttonBackward.addState("vertical");
+			}
+
+			var oldLayout = this._getLayout();
+			this._setLayout(value === "horizontal" ? new qx.ui.layout.HBox() : new qx.ui.layout.VBox());
+			if (oldLayout)
+				oldLayout.dispose();
 		},
 
 		// overridden
-		_applyOrientation: function (value, old) {
+		_createChildControlImpl: function (id, hash) {
+			var control;
 
-			this.base(arguments, value, old);
+			switch (id) {
 
-			// update the spacing in the new layout.
-			this._applySpacing(this.getSpacing());
+				case "content":
+					control = new qx.ui.container.Composite(new qx.ui.layout.Canvas());
+					control.setAllowShrinkX(false);
+					control.setAllowShrinkY(false);
+					this.getChildControl("scrollpane").add(control);
+					break;
+			}
+
+			return control || this.base(arguments, id);
 		},
 
 		/**
@@ -122,7 +148,7 @@ qx.Class.define("wisej.web.SlideBar", {
 			data.type = position == 0 ? "first" : position == maxPos ? "last" : "step";
 
 			this.fireDataEvent("scroll", data);
-		},
-	},
+		}
+	}
 
 });

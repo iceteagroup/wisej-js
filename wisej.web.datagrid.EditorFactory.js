@@ -100,13 +100,13 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 				var editor = column.getEditor();
 				if (editor && !editor.isDisposed()) {
 
-					editor.addState("celleditor");
+					editor.exclude();
 					editor.setAllowGrowX(true);
 					editor.setAllowGrowY(true);
 					editor.setAllowShrinkX(true);
 					editor.setAllowShrinkY(true);
-					editor.resetUserBounds();
 					editor.setRtl(table.isRtl());
+					editor.addState("celleditor");
 					editor.setUserData("owner", table);
 					editor.setUserData("opener", column);
 

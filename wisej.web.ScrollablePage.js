@@ -93,7 +93,7 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				this._disposeObjects("__acceptButtonAccel");
 
 			if (value && !this.__acceptButtonAccel) {
-				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter", true, false, document.body);
+				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter", false, false, document.body);
 				this.__acceptButtonAccel.addListener("execute", function (e) {
 
 					var acceptButton = this.getAcceptButton();
@@ -125,7 +125,7 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				this._disposeObjects("__cancelButtonAccel");
 
 			if (value && !this.__cancelButtonAccel) {
-				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape", true, false, document.body);
+				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape", false, false, document.body);
 				this.__cancelButtonAccel.addListener("execute", function (e) {
 
 					var cancelButton = this.getCancelButton();

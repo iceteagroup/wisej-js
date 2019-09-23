@@ -29,8 +29,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 	extend: qx.ui.core.Widget,
 
 	implement: [
-	  qx.ui.form.IStringForm,
-	  qx.ui.form.IForm
+		qx.ui.form.IStringForm,
+		qx.ui.form.IForm
 	],
 
 	// All Wisej components must include this mixin
@@ -57,13 +57,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		// add local state properties.
 		this.setStateProperties(this.getStateProperties().concat(["value", "selection"]));
 
-		// any action on the textbox marks it as dirty to update the state on the server
-		// also when the selection and the caret have changed.
-		this.addListener("keydown", function (e) { this.setDirty(true); }, this);
-		this.addListener("mousedown", function (e) { this.setDirty(true); }, this);
-
-		// forward the focusin and focusout events to the textfield. The textfield
-		// is not focusable so the events need to be forwarded manually.
+		// forward the focusin and focusout events to the textField.
+		// it's not focusable so the events need to be forwarded manually.
 		this.addListener("focusin", this.__onFocusIn, this);
 		this.addListener("focusout", this.__onFocusOut, this);
 
@@ -71,11 +66,11 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		this.addListener("pointerover", this._onPointerOver);
 		this.addListener("pointerout", this._onPointerOut);
 
+		// any action on the textbox marks it as dirty to update the state on the server.
 		var textField = this.getChildControl("textfield");
-		textField.addListener("changeValue", function (e) {
-			this.setDirty(true);
-			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
-		}, this);
+		textField.addListener("changeValue", this.__onTextFieldChangeValue, this);
+		textField.addListener("input", function (e) { this.setDirty(true); }, this);
+		textField.addListener("mousedown", function (e) { this.setDirty(true); }, this);
 
 		// attach the native event "oncopy" to update the clipboard on the server.
 		this.__getTextFieldElement().addListener("copy", function (e) { this.fireEvent("copy"); }, this);
@@ -89,7 +84,7 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 	events: {
 		/**
-		 * The event is fired each time the text field looses focus and the
+		 * The "changeValue" event is fired each time the text field looses focus and the
 		 * text field values has changed.
 		 *
 		 * If you change {@link #liveUpdate} to true, the changeValue event will
@@ -99,7 +94,7 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * The method {@link qx.event.type.Data#getData} returns the
 		 * current text value of the field.
 		 */
-		"changeValue": "qx.event.type.Data"
+		"changeValue": "qx.event.type.Data",
 	},
 
 	properties: {
@@ -176,6 +171,34 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 */
 		autoCompleteList: { init: null, nullable: true, check: "Array", apply: "_applyAutoCompleteList" },
 
+		/**
+		 * AllowTextSelection property.
+		 * 
+		 * When set to false, it skips calls to the text selection API. It's used when
+		 * the TextBox type is set to "checkbox" or "radio".
+		 */
+		allowTextSelection: { init: true, check: "Boolean" }
+	},
+
+	statics: {
+
+		__defaultAutoComplete: "off",
+
+		/**
+		 * Sets the default value for the "autocomplete" attribute when the
+		 * property is set to "default".
+		 * @param {string} value default autoComplete attribute value.
+		 */
+		setAutoCompleteDefault: function (value) {
+			this.__defaultAutoComplete = value;
+		},
+
+		/**
+		 * Returns the default "autocomplete" attribute value.
+		 */
+		getAutoCompleteDefault: function () {
+			return this.__defaultAutoComplete;
+		}
 	},
 
 	members: {
@@ -231,7 +254,11 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		_applyAutoComplete: function (value, old) {
 
 			var textField = this.getChildControl("textfield");
-			textField.getContentElement().setAttribute("autocomplete", value === "default" ? null : value);
+			textField.getContentElement().setAttribute(
+				"autocomplete",
+				value === "default"
+					? wisej.web.TextBoxBase.getAutoCompleteDefault()
+					: value);
 		},
 
 		/**
@@ -323,6 +350,24 @@ qx.Class.define("wisej.web.TextBoxBase", {
 			el.setStyle("textTransform", transform);
 		},
 
+		/**
+		 * Applies the capitalization defined in the @characterCasing property.
+		 */
+		_applyTextTransform: function (text) {
+
+			if (text) {
+				switch (this.getCharacterCasing()) {
+
+					case "upper": return text.toUpperCase();
+					case "lower": return text.toLowerCase();
+					case "capitalize": return qx.lang.String.capitalize(text);
+					default: return text;
+				}
+			}
+
+			return text;
+		},
+
 		/** 
 		 * Applies the tools property.
 		 */
@@ -334,8 +379,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 			if (value.length == 0 && (old == null || old.length == 0))
 				return;
 
-			wisej.web.ToolContainer.install(this, this, value, "left", { index: 0 });
-			wisej.web.ToolContainer.install(this, this, value, "right", { index: -1 });
+			wisej.web.ToolContainer.install(this, this, value, "left", { index: 0 }, null, "editor");
+			wisej.web.ToolContainer.install(this, this, value, "right", { index: -1 }, null, "editor");
 		},
 
 		/**
@@ -364,6 +409,9 @@ qx.Class.define("wisej.web.TextBoxBase", {
 					control = this.__createInnerTextField();
 					control.setFocusable(false);
 					control.addState("inner");
+					control.setMinWidth(1);
+					control.setMinHeight(1);
+
 					this._add(control, { flex: 1 });
 					break;
 			}
@@ -373,7 +421,9 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 		__createInnerTextField: function () {
 
-			return new qx.ui.form.TextField();
+			return new qx.ui.form.TextField().set({
+				allowGrowY: false
+			});
 		},
 
 		__getTextFieldElement: function () {
@@ -391,8 +441,11 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 				textField.fireNonBubblingEvent("focusin", qx.event.type.Focus);
 
-				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget()))
-					textField.getContentElement().focus();
+				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
+					qx.event.Timer.once(function () {
+						textField.getFocusElement().focus();
+					}, this, 0);
+				}
 			}
 		},
 
@@ -401,6 +454,18 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 			var textField = this.getChildControl("textfield");
 			textField.fireNonBubblingEvent("focusout", qx.event.type.Focus);
+		},
+
+		// forward the "changeValue" event.
+		__onTextFieldChangeValue: function (e) {
+
+			this.setDirty(true);
+			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
+		},
+
+		// checks whether the textbox has the focus.
+		_isFocused: function () {
+			return qx.ui.core.FocusHandler.getInstance().getFocusedWidget() === this;
 		},
 
 		/**
@@ -453,7 +518,9 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 			var textField = this.getChildControl("textfield");
 			textField.getFocusElement().focus();
-			textField.selectAllText();
+
+			if (this.getAllowTextSelection())
+				textField.selectAllText();
 		},
 
 		focus: function () {
@@ -467,12 +534,33 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 		setValue: function (value) {
 
-			var oldValue = this.getValue();
-			this.getChildControl("textfield").setValue(value);
+			value = this._applyTextTransform(value);
+
+			var textField = this.getChildControl("textfield");
+			if (textField.getValue() === value)
+				return;
+
+			if (this._isFocused() && this.getAllowTextSelection()) {
+				var selectAll, selStart, selEnd;
+				selEnd = textField.getTextSelectionEnd();
+				selStart = textField.getTextSelectionStart();
+				selectAll = selStart < 1 && value && value.length <= selEnd;
+
+				textField.setValue(value);
+
+				if (selectAll)
+					textField.selectAllText();
+				else
+					textField.setTextSelection(selStart, selEnd);
+			}
+			else {
+				textField.setValue(value);
+			}
 		},
 		getValue: function () {
 
-			return this.getChildControl("textfield").getValue();
+			return  this._applyTextTransform(this.getChildControl("textfield").getValue());
+
 		},
 		resetValue: function () {
 
@@ -491,7 +579,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * @return {String|null}
 		 */
 		getTextSelection: function () {
-			return this.getChildControl("textfield").getTextSelection();
+			if (this.getAllowTextSelection())
+				return this.getChildControl("textfield").getTextSelection();
 		},
 
 
@@ -503,7 +592,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * @return {Integer|null}
 		 */
 		getTextSelectionLength: function () {
-			return this.getChildControl("textfield").getTextSelectionLength();
+			if (this.getAllowTextSelection())
+				return this.getChildControl("textfield").getTextSelectionLength();
 		},
 
 		/**
@@ -514,7 +604,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * @return {Integer|null} Start of selection or null if not available
 		 */
 		getTextSelectionStart: function () {
-			return this.getChildControl("textfield").getTextSelectionStart();
+			if (this.getAllowTextSelection())
+				return this.getChildControl("textfield").getTextSelectionStart();
 		},
 
 		/**
@@ -525,7 +616,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * @return {Integer|null} End of selection or null if not available
 		 */
 		getTextSelectionEnd: function () {
-			return this.getChildControl("textfield").getTextSelectionEnd();
+			if (this.getAllowTextSelection())
+				return this.getChildControl("textfield").getTextSelectionEnd();
 		},
 
 
@@ -540,7 +632,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * @param end {Integer} end of the selection
 		 */
 		setTextSelection: function (start, end) {
-			this.getChildControl("textfield").setTextSelection(start, end);
+			if (this.getAllowTextSelection())
+				this.getChildControl("textfield").setTextSelection(start, end);
 		},
 
 
@@ -551,7 +644,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 *
 		 */
 		clearTextSelection: function () {
-			this.getChildControl("textfield").clearTextSelection();
+			if (this.getAllowTextSelection())
+				this.getChildControl("textfield").clearTextSelection();
 		},
 
 
@@ -560,7 +654,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 *
 		 */
 		selectAllText: function () {
-			this.getChildControl("textfield").selectAllText();
+			if (this.getAllowTextSelection())
+				this.getChildControl("textfield").selectAllText();
 		},
 
 
@@ -594,6 +689,13 @@ qx.Class.define("wisej.web.TextBox", {
 		 */
 		inputType: { init: null, nullable: true, check: "Map", apply: "_applyInputType" },
 
+		/**
+		 * Checked property.
+		 * 
+		 * Works only when the TextBox is of type "checkbox" or "radio".
+		 */
+		checked: { init: false, check:"Boolean", apply: "_applyChecked", event: "changeChecked" }
+
 	},
 
 	members: {
@@ -602,15 +704,73 @@ qx.Class.define("wisej.web.TextBox", {
 		 * Applies the inputType property.
 		 */
 		_applyInputType: function (value, old) {
-			if (value) {
-				var el = this.getChildControl("textfield").getContentElement();
 
-				el.setAttribute("type", qx.lang.String.hyphenate(value.type));
+			var textField = this.getChildControl("textfield");
+			var el = textField.getContentElement();
+			var dom = el.getDomElement();
+
+			if (old) {
+
+				if (this.__onCheckTextBoxChangeListener)
+					qx.bom.Event.removeNativeListener(dom, "change", this.__onCheckTextBoxChangeListener);
+
+				this.removeState(old.type);
+				this.setAllowTextSelection(true);
+			}
+
+			if (value) {
 
 				el.setAttribute("min", value.min);
 				el.setAttribute("max", value.max);
 				el.setAttribute("step", value.step);
+				el.setAttribute("type", qx.lang.String.hyphenate(value.type));
+
+				this.addState(value.type);
+
+				if (value.type === "checkbox" || value.type === "radio") {
+
+					this.setAllowTextSelection(false);
+					this.__onCheckTextBoxChangeListener =
+						this.__onCheckTextBoxChangeListener || qx.lang.Function.listener(this.__onCheckTextBoxChange, this);
+
+					if (dom)
+						qx.bom.Event.addNativeListener(target, "change", this.__onCheckTextBoxChangeListener);
+					else
+						this.addListenerOnce("appear", this.__onCheckTextBoxAppear, this);
+				}
 			}
+		},
+
+		__onCheckTextBoxAppear: function (e) {
+
+			// complete the of the non-standard textbox using the native input-type.
+			var textField = this.getChildControl("textfield");
+			var dom = textField.getContentElement().getDomElement();
+			var inputType = this.getInputType();
+			if (dom && (inputType.type === "checkbox" || inputType.type === "radio")) {
+				dom.checked = this.isChecked();
+				qx.bom.Event.addNativeListener(dom, "change", this.__onCheckTextBoxChangeListener);
+			}
+
+		},
+
+		__onCheckTextBoxChange: function (e) {
+			var textField = this.getChildControl("textfield");
+			var dom = textField.getContentElement().getDomElement();
+			if (dom) {
+				this.setChecked(dom.checked);
+			}
+		},
+
+		/**
+		 * Applies the Checked property.
+		 */
+		_applyChecked: function (value, old) {
+
+			var textField = this.getChildControl("textfield");
+			var dom = textField.getContentElement().getDomElement();
+			if (dom)
+				dom.checked = value === true;
 		}
 	}
 });
@@ -629,10 +789,8 @@ qx.Class.define("wisej.web.TextArea", {
 
 		this.addState("multiline");
 
-		// handles "Enter" and "Tab" according to the acceptsReturn and acceptsTab properties.
-		this.addListener("keydown", this._onKeyDown);
+		// stop Enter from adding newlines to the text area.
 		this.addListener("keypress", this._onKeyPress);
-
 	},
 
 	properties: {
@@ -649,19 +807,19 @@ qx.Class.define("wisej.web.TextArea", {
 		 *
 		 * true if the ENTER key creates a new line of text in a multiline version of the control; false if the ENTER key activates the default button for the form.
 		 */
-		acceptsReturn: { init: false, check: "Boolean" },
+		acceptsReturn: { init: false, check: "Boolean", apply: "_applyAcceptsReturnOrTab" },
 
 		/** 
 		 * AcceptsTab property.
 		 *
 		 * true if users can enter tabs in a multiline text box using the TAB key; false if pressing the TAB key moves the focus.
 		 */
-		acceptsTab: { init: false, check: "Boolean" },
+		acceptsTab: { init: false, check: "Boolean", apply: "_applyAcceptsReturnOrTab" },
 
 		/**
 		 * Determines which scrollbars should be visible: 0 = None, 1 = Horizontal, 2 = Vertical, 3 = Both, 4 = Hidden.
 		 */
-		scrollBars: { init: 3, check: "PositiveInteger", apply: "_applyScrollBars" },
+		scrollBars: { init: 3, check: "PositiveInteger", apply: "_applyScrollBars" }
 	},
 
 	members: {
@@ -687,27 +845,28 @@ qx.Class.define("wisej.web.TextArea", {
 
 		__createInnerTextField: function () {
 
-			return new qx.ui.form.TextArea();
+			return new qx.ui.form.TextArea().set({
+				allowGrowY: true
+			});
 		},
 
-		_onKeyDown: function (e) {
+		/**
+		 * Applies the AcceptsReturn or AcceptsTab properties.
+		 */
+		_applyAcceptsReturnOrTab: function (value, old) {
 
-			var modifiers = e.getModifiers();
-			var identifier = e.getKeyIdentifier();
-
-			switch (identifier) {
-
-				case "Enter":
-					if (modifiers === 0) {
-						if (this.getAcceptsReturn())
-							e.stopPropagation();
-						else if (!this.__hasAcceptButton())
-							e.stopPropagation();
-					}
-					break;
+			if (value && !this.__keyHandlerDone) {
+				this.__keyHandlerDone = true;
+				// register the document level handlers to override shortcuts.
+				qx.event.Registration.addListener(document.documentElement, "keydown", this.__onDocumentKeyEvent, this, true);
+				qx.event.Registration.addListener(document.documentElement, "keypress", this.__onDocumentKeyEvent, this, true);
 			}
 		},
 
+		// true when the document key handlers are registered.
+		__keyHandlerDone: false,
+
+		// handles "keydown" to stop Enter from adding newlines to the text area.
 		_onKeyPress: function (e) {
 
 			var modifiers = e.getModifiers();
@@ -716,60 +875,110 @@ qx.Class.define("wisej.web.TextArea", {
 			switch (identifier) {
 
 				case "Enter":
-					if (modifiers === 0) {
-						if (this.getAcceptsReturn())
-							e.stopPropagation();
-						else if (!this.__hasAcceptButton())
-							e.stopPropagation();
+					if (modifiers === 0)
+						e.preventDefault();
+					break;
+			}
+		},
+
+		// handles "keydown" and "keypress" from the document.
+		_handleEnterTabKeys: function (e) {
+
+			var handled = false;
+			var modifiers = e.getModifiers();
+			var identifier = e.getKeyIdentifier();
+
+			switch (identifier) {
+
+				case "Enter":
+					if (modifiers === 0 || modifiers === qx.event.type.Dom.CTRL_MASK) {
+
+						handled = true;
+
+						// insert the \r\n character.
+						if (e.getType() === "keydown") {
+							this.__insert("\r\n");
+						}
 					}
 					break;
 
 				case "Tab":
 
-					if (this.getAcceptsTab()) {
+					if (modifiers === 0) {
 
-						if (modifiers === 0) {
+						handled = true;
 
-							e.stop();
-
-							// insert the \t character.
-							var value = this.getValue();
-							var start = this.getTextSelectionStart();
-							var end = this.getTextSelectionEnd();
-
-							value = value.substring(0, start) + "\t" + value.substring(end);
-							this.setValue(value);
-							this.setTextSelection(start + 1, start + 1);
-
-						} else if (modifiers === qx.event.type.Dom.SHIFT_MASK) {
-
-							e.stop();
-							qx.ui.core.FocusHandler.getInstance().focusNext(this);
+						// insert the \t character.
+						if (e.getType() === "keydown") {
+							this.__insert("\t");
 						}
+					}
+					else if (modifiers === qx.event.type.Dom.SHIFT_MASK) {
+
+						handled = true;
+
+						if (e.getType() === "keypress")
+							qx.ui.core.FocusHandler.getInstance().focusNext(this);
 					}
 					break;
 			}
+
+			return handled;
 		},
 
-		// check if the container form defines an accept button.
-		// if the form is an mdi child, check also the parent mdi.
-		__hasAcceptButton: function () {
+		// inserts the specified characters at the current position.
+		__insert: function (characters) {
 
-			var container = this.getTopLevelContainer();
-			if (container instanceof wisej.web.Form) {
-				if (container.getAcceptButton())
-					return true;
+			var textField = this.getChildControl("textfield");
+			var value = textField.getValue();
+			var end = textField.getTextSelectionEnd();
+			var start = textField.getTextSelectionStart();
 
-				if (container.isMdiChild()) {
-					container = container.getMdiParent();
-					if (container instanceof wisej.web.Form) {
-						return container.getAcceptButton();
+			value = value.substring(0, start) + characters + value.substring(end);
+			textField.setValue(value);
+			textField.setTextSelection(start + 1, start + 1);
+		},
+
+		/**
+		 * Event handler for the "keydown" and "keypress" event at the document level. 
+		 * Needed when the TextArea has the AcceptsReturn and AcceptsTab property set to true.
+		 * 
+		 * @param {qx.event.type.KeySequence} e The event data.
+		 */
+		__onDocumentKeyEvent: function (e) {
+
+			// verify the event was meant for this instance.
+			if (e.getTarget() !== this.__getTextFieldElement().getDomElement())
+				return;
+
+			switch (e.getKeyIdentifier()) {
+
+				case "Enter":
+					if (this.getAcceptsReturn() || e.isCtrlPressed()) {
+						if (this._handleEnterTabKeys(e))
+							e.stop();
 					}
-				}
-			}
+					break;
 
-			return false;
+				case "Tab":
+					if (this.getAcceptsTab()) {
+						if (this._handleEnterTabKeys(e))
+							e.stop();
+					}
+					break;
+			}
 		}
+	},
+
+	destruct: function () {
+
+		if (this.__keyHandlerDone) {
+			this.__keyHandlerDone = false;
+			// un-register the Enter and Tab accelerators.
+			qx.event.Registration.removeListener(document.documentElement, "keydown", this.__onDocumentKeyEvent, this, true);
+			qx.event.Registration.removeListener(document.documentElement, "keypress", this.__onDocumentKeyEvent, this, true);
+		}
+
 	}
 });
 
@@ -807,6 +1016,9 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		 * C = Character, optional. Any non-control character. If the AsciiOnly property is set to true, this element behaves like the "?" element.
 		 * A = Alphanumeric, required. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "a" element.
 		 * a = Alphanumeric, optional. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "A" element.
+		 * . = Decimal separator (localized).
+		 * , = Group separator (localized).
+		 * $ = Currency symbol (localized).
 		 * < = Shift down. Converts all characters that follow to lowercase.
 		 * > = Shift up. Converts all characters that follow to uppercase.
 		 * | = Disable a previous shift up or shift down.
@@ -831,6 +1043,13 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		 * Specifies the type, min, max and step properties to associate to the &lt;input&gt; element.
 		 */
 		inputType: { init: null, nullable: true, check: "Map", apply: "_applyInputType" },
+
+		/**
+		 * Localization.
+		 * 
+		 * Defines the group separator, decimal separator and currency symbol in a map: {group, decimal, currency}.
+		 */
+		localization: { init: null, check: "Map", apply: "_applyLocalization" }
 	},
 
 	members: {
@@ -839,12 +1058,22 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		__maskProvider: null,
 
 		/**
-		 * Overridden: Returns the unmasked value from the input element.
+		 * Overridden: Returns the masked value.
+		 * 
+		 * @param {Boolean} unmasked When true it returns the unmasked text. The default is false.
+		 * @returns {String} String value in the text box.
 		 */
-		getValue: function () {
+		getValue: function (unmasked) {
 
-			return this.__maskProvider.getValue(false);
+			var value = this.base(arguments);
 
+			if (unmasked === true) {
+				return this.__maskProvider.mask(value, false, false);
+			}
+			else {
+				var keepLiterals = this.hasState("celleditor");
+				return this.__maskProvider.mask(value, false /*keepPrompt*/, keepLiterals);
+			}
 		},
 
 		/**
@@ -852,20 +1081,19 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		 */
 		setValue: function (value) {
 
-			this.setDirty(true);
-			this.__maskProvider.setValue(value, true);
+			var keepPrompt = this._isFocused() || !this.getHidePrompt() || wisej.web.DesignMode;
+			value = this.__maskProvider.mask(value, keepPrompt, true /*keepLiterals*/);
+
+			this.base(arguments, value);
 		},
 
 		/**
-		 * Returns the masked value to the cell when this
-		 * editor is used in a data grid.
-		 * 
-		 * We need the masked value to update the screen immediately
-		 * while waiting for the server to update the cell.
+		 * Overridden. Selects the full text when gaining the focus by tabbing in.
 		 */
-		getCellValue: function () {
+		tabFocus: function () {
 
-			return this.__maskProvider.getValue(true);
+			this.__maskProvider.processFocus();
+			this.base(arguments);
 		},
 
 		/**
@@ -874,8 +1102,11 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		 */
 		_createMaskProvider: function () {
 
-			if (this.__maskProvider == null)
+			if (this.__maskProvider == null) {
 				this.__maskProvider = new wisej.utils.MaskProvider(this.getChildControl("textfield"));
+				this.__maskProvider.setPrompt(this.getPrompt());
+				this.__maskProvider.setHidePrompt(this.getHidePrompt());
+			}
 		},
 
 		/**
@@ -885,7 +1116,9 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		 */
 		_applyMask: function (value, old) {
 
+			var text = this.getValue(true);
 			this.__maskProvider.setMask(value);
+			this.setValue(text);
 
 		},
 
@@ -906,6 +1139,17 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		_applyHidePrompt: function (value, old) {
 
 			this.__maskProvider.setHidePrompt(value);
+
+		},
+
+		/**
+		 * Applies the localization property
+		 */
+		_applyLocalization: function (value, old) {
+
+			var text = this.getValue(true);
+			this.__maskProvider.setLocalization(value);
+			this.setValue(text);
 
 		},
 

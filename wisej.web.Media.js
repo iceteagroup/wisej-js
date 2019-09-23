@@ -113,7 +113,7 @@ qx.Class.define("wisej.web.Media", {
 		 *
 		 * Sets or returns the current playback position in the audio/video (in seconds).
 		 */
-		currentTime: { init: 0, check: "Number", apply: "_applyCurrentTime" },
+		currentTime: { init: 0, check: "Number", apply: "_applyCurrentTime" }
 
 	},
 
@@ -207,6 +207,7 @@ qx.Class.define("wisej.web.Media", {
 		 */
 		_applyVolume: function (value, old) {
 
+
 			this._media.setVolume(value);
 		},
 
@@ -215,7 +216,7 @@ qx.Class.define("wisej.web.Media", {
 		 */
 		_applyCurrentTime: function (value, old) {
 
-			if (this._media.readyState > 0)
+			if (this._media.getMediaObject().readyState > 0)
 				this._media.setCurrentTime(value);
 		},
 
@@ -227,14 +228,21 @@ qx.Class.define("wisej.web.Media", {
 		// volumechange event
 		__onVolumeChange: function () {
 
-			this.setVolume(this._media.getVolume());
-			this.fireDataEvent("volumechanged", this.getVolume());
+			var muted = this._media.isMuted();
+			var value = muted ? 0 : this._media.getVolume();
+			this.fireDataEvent("volumechange", value);
+
+			//  update the property without invoking the apply method.
+			qx.util.PropertyUtil.setUserValue(this, "volume", value);
 		},
 		// timeupdate event
 		__onTimeUpdate: function () {
 
-			this.setCurrentTime(this._media.getCurrentTime());
-			this.fireDataEvent("timeupdated", this.getCurrentTime());
+			var value = this._media.getCurrentTime();
+			this.fireDataEvent("timeupdate", value);
+
+			//  update the property without invoking the apply method.
+			qx.util.PropertyUtil.setUserValue(this, "currentTime", value);
 		},
 		// pause event
 		__onPause: function () {
@@ -260,7 +268,7 @@ qx.Class.define("wisej.web.Media", {
 		__onError: function () {
 
 			this.fireEvent("error");
-		},
+		}
 
 	},
 
@@ -316,16 +324,15 @@ qx.Class.define("wisej.web.Video", {
 
 			// if the video widget being designed
 			// and it specified a source, we wait for the video to be loaded
-			// or an error to occurr to fire the render event.
+			// or an error to occur to fire the render event.
 			if (this.getSource()) {
 
-				var me = this;
 				var video = this._media.getMediaObject();
 
 				var renderWhenReady = function () {
 
 					if (video.readyState >= 2 /*HAVE_CURRENT_DATA*/
-						|| video.networkState == 3 /*NETWORK_NO_SOURCE*/) {
+						|| video.networkState === 3 /*NETWORK_NO_SOURCE*/) {
 
 						setTimeout(function () {
 							me.fireEvent("render");
@@ -334,7 +341,7 @@ qx.Class.define("wisej.web.Video", {
 					else {
 						setTimeout(renderWhenReady, 50);
 					}
-				}
+				};
 
 				setTimeout(renderWhenReady, 50);
 				return;
@@ -344,9 +351,9 @@ qx.Class.define("wisej.web.Video", {
 			setTimeout(function () {
 				me.fireEvent("render");
 			}, 10);
-		},
+		}
 
-	},
+	}
 
 });
 
@@ -359,7 +366,7 @@ qx.Class.define("wisej.web.Audio", {
 
 	properties: {
 
-		appearance: { init: "audio", refine: true },
+		appearance: { init: "audio", refine: true }
 
 	},
 
@@ -372,6 +379,6 @@ qx.Class.define("wisej.web.Audio", {
 
 			return new qx.bom.media.Audio();
 
-		},
-	},
+		}
+	}
 });

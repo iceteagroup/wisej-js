@@ -104,7 +104,7 @@ qx.Class.define("wisej.web.MonthCalendar", {
 		/**
 		 * firstDayOfWeek property.
 		 *
-		 * The text to display in the today widget.
+		 * The first day of the week displayed in the drop down calendar.
 		 */
 		firstDayOfWeek: { init: -1, check: "Integer", apply: "_applyFirstDayOfWeek" },
 
@@ -940,7 +940,7 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		 *
 		 * Determines whether the calendar shows grayed-out days from the previous and/or next month.
 		 */
-		showOtherMonth: { init: "both", check: ["none", "previous", "next", "both"], apply: "_applyShowOtherMonth" },
+		showOtherMonth: { init: "both", check: ["none", "previous", "next", "both"], apply: "_applyShowOtherMonth" }
 
 	},
 
@@ -1096,6 +1096,6 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
  */
 qx.Class.define("wisej.web.monthCalendar.Today", {
 
-	extend: qx.ui.basic.Atom,
+	extend: qx.ui.basic.Atom
 
 });
