@@ -642,8 +642,8 @@ qx.Class.define("wisej.web.MonthCalendar", {
 
 			var position = this.getToolsPosition();
 			var vertical = position == "left" || position == "right";
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, position);
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position);
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, position, "calendar");
+			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position, "calendar");
 		},
 
 		/** 
