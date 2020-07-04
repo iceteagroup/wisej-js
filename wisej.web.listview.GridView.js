@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -49,6 +51,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 		this._rowHeaderColIndex = -1;
 		this.setBorderStyle("none");
 		this.setRowHeadersVisible(false);
+		this.setShowCellFocusIndicator(false);
 		this.setEditMode("editProgrammatically");
 
 		// attach to the events to redirect to the owner ListView.

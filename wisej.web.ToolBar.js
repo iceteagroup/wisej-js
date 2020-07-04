@@ -54,7 +54,7 @@ qx.Class.define("wisej.web.ToolBar", {
 		 *
 		 * Assigns the list of child buttons.
 		 */
-		buttons: { init: null, nullable: true, check: "Array", apply: "_applyButtons", transform: "_transformComponents" },
+		buttons: { init: [], nullable: true, check: "Array", apply: "_applyButtons", transform: "_transformComponents" },
 	},
 
 	members: {
@@ -218,29 +218,33 @@ qx.Class.define("wisej.web.ToolBar", {
 
 			// return only the relevant components.
 			var items = [];
-			for (var i = 0, l = all.length; i < l; i++) {
-				var widget = all[i];
-				if (widget.isWisejComponent && widget.isSeeable()) {
 
-					var widgetRect = widget.getBounds();
+			if (all != null && all.length > 0) {
+				for (var i = 0, l = all.length; i < l; i++) {
+					var widget = all[i];
+					if (widget.isWisejComponent && widget.isSeeable()) {
 
-					items.push({
-						id: widget.getId(),
-						rect: widgetRect
-					});
+						var widgetRect = widget.getBounds();
 
-					//// add the rect for the wrapped control.
-					//if (widget instanceof wisej.web.toolbar.ButtonControl) {
-					//	var control = widget.getControl();
-					//	if (control && control.isWisejComponent) {
-					//		items.push({
-					//			id: control.getId(),
-					//			rect: control.getBounds()
-					//		});
-					//	}
-					//}
+						items.push({
+							id: widget.getId(),
+							rect: widgetRect
+						});
+
+						//// add the rect for the wrapped control.
+						//if (widget instanceof wisej.web.toolbar.ButtonControl) {
+						//	var control = widget.getControl();
+						//	if (control && control.isWisejComponent) {
+						//		items.push({
+						//			id: control.getId(),
+						//			rect: control.getBounds()
+						//		});
+						//	}
+						//}
+					}
 				}
 			}
+
 			return items;
 		},
 

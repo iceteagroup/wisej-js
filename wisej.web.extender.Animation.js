@@ -28,6 +28,14 @@ qx.Class.define("wisej.web.extender.Animation", {
 	// to provide services to the Wisej core.
 	include: [wisej.mixin.MWisejComponent],
 
+	construct: function(){
+	
+		this.base(arguments);
+
+		this._handles = {};
+
+	},
+
 	properties: {
 
 		/**
@@ -49,6 +57,9 @@ qx.Class.define("wisej.web.extender.Animation", {
 	},
 
 	members: {
+
+		/** Keeps a map between a running animation handle and a widget. */
+		_handles: null,
 
 		/**
 		 * Performs the specified animation immediately.
@@ -81,7 +92,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 				options.keep = animation.keep;
 
 			var me = this;
-			wisej.web.Animation.animate(component, animation.name, options, {
+			var handle = wisej.web.Animation.animate(component, animation.name, options, {
 
 				// start callback.
 				start: function () {
@@ -104,8 +115,33 @@ qx.Class.define("wisej.web.extender.Animation", {
 
 					me.fireDataEvent("end", { name: animation.name, target: component });
 				}
-
 			});
+
+			// save the handle in relation to the component.
+			this._handles[component.getId()] = handle;
+
+		},
+
+		/**
+		 * Stops the currently running animation on the component.
+		 */
+		stop: function (component) {
+
+			if (component && component.isWisejComponent) {
+				var handle = this._handles[component.getId()];
+				if (handle) {
+					delete this._handles[component.getId()];
+
+					if (handle.jsAnimation) {
+						qx.bom.element.AnimationJs.stop(handle);
+					}
+					else {
+						var el = component.getContentElement().getDomElement();
+						if (el)
+							el.style[qx.core.Environment.get("css.animation")["name"]] = "";
+					}
+				}
+			}
 		},
 
 		/**
@@ -158,7 +194,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 			var me = this;
 			animation.listenerId = component.addListener(animation.event, function (e) {
 
-				if (e.getTarget() != this)
+				if (e.getCurrentTarget() != this)
 					return;
 
 				me.run(animation);
@@ -202,6 +238,8 @@ qx.Class.define("wisej.web.extender.Animation", {
 			if (!component)
 				return;
 
+			var el = component.getContentElement();
+
 			if (animation.listenerId) {
 				component.removeListenerById(animation.listenerId);
 				delete animation.listenerId;
@@ -209,10 +247,12 @@ qx.Class.define("wisej.web.extender.Animation", {
 
 			if (animation.hideElement)
 			{
-				var el = component.getContentElement();
 				el.hide = animation.hideElement;
 				delete animation.hideElement;
 			}
+
+			// try to stop the animation.
+			this.stop(component);
 		},
 
 		// Returns the component that corresponds to the specified id.

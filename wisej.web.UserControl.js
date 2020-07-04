@@ -30,6 +30,9 @@ qx.Class.define("wisej.web.UserControl", {
 		_applyCaption: function (value, old) {
 		},
 
+		isTabable: function () {
+			return false;
+		}
 	}
 
 });

@@ -930,7 +930,7 @@ qx.Class.define("wisej.web.Panel", {
 		},
 
 		/**
-		 * Floats or unfloats the collapsed panel when the user clicks on the caption bar.
+		 * Floats or unfloats the collapsed panel when the user taps/clicks on the caption bar.
 		 */
 		__onPointerTapCaptionBar: function (e) {
 
@@ -1096,8 +1096,8 @@ qx.Class.define("wisej.web.Panel", {
 					this.__captionLayout.setColumnFlex(2, 1);
 					control = new qx.ui.container.Composite(this.__captionLayout);
 					control.addListener("tap", this.__onPointerTapCaptionBar, this);
-					control.addListener("pointerover", this.__onPointerOverCaptionBar, this);
 					control.addListener("dbltap", this.__onPointerDblTapCaptionBar, this);
+					control.addListener("pointerover", this.__onPointerOverCaptionBar, this);
 					control.exclude();
 					this._add(control, { edge: "north" });
 					break;
@@ -1127,6 +1127,7 @@ qx.Class.define("wisej.web.Panel", {
 	},
 
 });
+
 
 /**
  * wisej.web.panel.FloatableScroll

@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -41,6 +43,8 @@ qx.Class.define("wisej.web.DataGrid", {
 		wisej.mixin.MBorderStyle
 	],
 
+	implement: [wisej.web.toolContainer.IToolPanelHost],
+
 	construct: function (dataModel) {
 
 		// use the design-mode data model?
@@ -56,7 +60,10 @@ qx.Class.define("wisej.web.DataGrid", {
 		this.base(arguments, dataModel);
 
 		// add local state properties.
-		this.setStateProperties(this.getStateProperties().concat(["firstVisibleRow", "scrollX", "visibleRowCount"]));
+		this.setStateProperties(this.getStateProperties().concat(["firstVisibleRow", "scrollX", "visibleRowCount", "vScroll", "hScroll"]));
+
+		// add local state events.
+		this.setStateEvents(this.getStateEvents().concat(["verticalScrollBarChanged", "horizontalScrollBarChanged"]));
 
 		// use our row renderer.
 		this.getDataRowRenderer().dispose();
@@ -81,8 +88,9 @@ qx.Class.define("wisej.web.DataGrid", {
 		layout.setColumnFlex(1, 1);
 		this._setLayout(layout);
 		var children = this._getChildren();
-		for (var i = 0; i < children.length; i++) {
-			children[i].setLayoutProperties({ row: i + 1, column: 1 });
+		for (var i = 0, r = 0; i < children.length; i++) {
+			if (!children[i].hasUserBounds())
+				children[i].setLayoutProperties({ row: ++r, column: 1 });
 		}
 
 		// adds the inner target to the drop & drop event object.
@@ -135,7 +143,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		 *
 		 * Array of column descriptors: wisej.web.datagrid.ColumnHeader.
 		 */
-		columns: { init: null, check: "Array", apply: "_applyColumns", transform: "_transformComponents" },
+		columns: { init: [], check: "Array", apply: "_applyColumns", transform: "_transformComponents" },
 
 		/**
 		 * SelectionMode
@@ -162,6 +170,14 @@ qx.Class.define("wisej.web.DataGrid", {
 		frozenColumns: { init: 0, check: "PositiveInteger", apply: "_applyFrozenColumns" },
 
 		/**
+		 * TreeColumn
+		 * 
+		 * Determines on which column to display the open/close icons when showing nested rows.
+		 * The default value (null) uses the first visible non-frozen column.
+		 */
+		treeColumn: { init: null, check: "PositiveInteger", nullable: true },
+
+		/**
 		 * LiveResize
 		 *
 		 * Enables/disables live resizing of rows and columns.
@@ -169,11 +185,18 @@ qx.Class.define("wisej.web.DataGrid", {
 		liveResize: { init: true, check: "Boolean", apply: "_applyLiveResize" },
 
 		/**
-		 * GridLines property.
+		 * CellBorder property.
 		 *
 		 * Sets the type of border to use for the grid's cells.
 		 */
-		gridLines: { init: "single", check: ["none", "vertical", "horizontal", "both"], apply: "_applyGridLines" },
+		cellBorder: { init: "both", check: ["none", "vertical", "horizontal", "both"], apply: "_applyCellBorder" },
+
+		/**
+		 * ColHeadersBorder property.
+		 *
+		 * Sets the type of border to use for the grid's column headers.
+		 */
+		colHeadersBorder: { init: "both", check: ["none", "vertical", "horizontal", "both"], apply: "_applyColHeadersBorder" },
 
 		/**
 		 * TopScrollOffset property.
@@ -208,6 +231,11 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * The minimum height of the table rows.
 		 */
 		minRowHeight: { init: 20, check: "PositiveInteger", themeable: true },
+
+		/**
+		 * The minimum height of the table rows.
+		 */
+		maxRowHeight: { init: 32000, check: "PositiveInteger", themeable: true },
 
 		/**
 		 * The indent in pixels to increase the indentation of child rows.
@@ -256,6 +284,12 @@ qx.Class.define("wisej.web.DataGrid", {
 		designActiveColumn: { init: -1, check: "Integer" },
 
 		/**
+		 * Milliseconds to wait before sending selection events to the server when the selection
+		 * using the keyboard.
+		 */
+		selectionDelay: { init: 0, check: "PositiveInteger" },
+
+		/**
 		 * Tools property.
 		 *
 		 * Collection of tool definitions to display on top, left, bottom, right of the grid.
@@ -272,16 +306,6 @@ qx.Class.define("wisej.web.DataGrid", {
 
 	members: {
 
-
-		// TODO: Test for marina, to remove.
-		renderLayout: function (left, top, width, height) {
-
-			this.base(arguments, left, top, width, height);
-
-			if (width == 50)
-				debugger;
-		},
-
 		// index of the row header column. 0 is the default.
 		// a derived class may set it to -1 if it doesn't create the header column.
 		_rowHeaderColIndex: 0,
@@ -292,7 +316,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		// keep track of internal change mode.
 		__internalChange: 0,
 
-		// keep track of requests to focus (and optionally to edit) a cell that is not yet loaded.
+		// keep track of requests that depend on the data being loaded.
 		__pendingCellCalls: null,
 		__processingPendingCalls: false,
 
@@ -627,9 +651,12 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (!this.__updateMode)
 				this.base(arguments, e);
 
-			// call the deferred scrollIntoView or setFocusedCell that couldn't
-			// have been called when the table we not populated yet.
-			this.__executePendingCalls();
+			// call the deferred functions that couldn't
+			// have been called when the table was not populated yet.
+			var data = e.getData();
+			var model = this.getTableModel();
+			if (model.getRowData(data.firstRow))
+				this.__executePendingCalls();
 		},
 
 		// Executes pending calls.
@@ -725,7 +752,11 @@ qx.Class.define("wisej.web.DataGrid", {
 			var cellEditor = this.getCellEditor();
 
 			if (!related && target !== this) {
-				this.focus();
+
+				if (target === cellEditor || (target != null && target.hasState("celleditor"))) {
+					this.focus();
+				}
+
 				return;
 			}
 
@@ -822,6 +853,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 
 			this.__updateMode = true;
+
 			try {
 
 				var columns = value;
@@ -839,8 +871,9 @@ qx.Class.define("wisej.web.DataGrid", {
 					this.__columnModel.dispose();
 					this.__columnModel = null;
 
-					for (var i = 0; i < old.length; i++)
+					for (var i = 0; i < old.length; i++) {
 						old[i].setTable(null);
+					}
 				}
 
 				// build the grid columns in the table column model
@@ -1057,7 +1090,6 @@ qx.Class.define("wisej.web.DataGrid", {
 			for (var i = 0; i < scrollerArr.length; i++) {
 				var header = scrollerArr[i].getHeader();
 				header.setHeight(value);
-				header.setMinHeight(value);
 				header.setMaxHeight(value);
 			}
 		},
@@ -1089,12 +1121,47 @@ qx.Class.define("wisej.web.DataGrid", {
 		},
 
 		/**
-		 * Applies the gridLines property.
+		 * Applies the cellBorder property.
 		 *
 		 */
-		_applyGridLines: function (value, old) {
+		_applyCellBorder: function (value, old) {
 
-			this._gridLinesStateName = "border" + qx.lang.String.firstUp(value);
+			this._cellBorderStyle = "border" + qx.lang.String.firstUp(value);
+			qx.ui.core.queue.Widget.add(this, "updateContent");
+		},
+
+		/**
+		 * Applies the colHeadersBorder property.
+		 *
+		 */
+		_applyColHeadersBorder: function (value, old) {
+
+			this._colHeadersBorderStyle = "border" + qx.lang.String.firstUp(value);
+
+			var scrollerArr = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollerArr.length; i++) {
+				var header = scrollerArr[i].getChildControl("header-container", true);
+				if (header) {
+					header.removeState("borderNone");
+					header.removeState("borderBoth");
+					header.removeState("borderVertical");
+					header.removeState("borderHorizontal");
+					header.addState(this._colHeadersBorderStyle);
+				}
+			}
+
+			var columns = this.getColumns();
+			for (var i = 0; i < columns.length; i++) {
+				var header = columns[i].getHeaderWidget();
+				if (header) {
+					header.removeState("borderNone");
+					header.removeState("borderBoth");
+					header.removeState("borderVertical");
+					header.removeState("borderHorizontal");
+					header.addState(this._colHeadersBorderStyle);
+				}
+			}
+
 			qx.ui.core.queue.Widget.add(this, "updateContent");
 		},
 
@@ -1102,7 +1169,13 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * The full name of the state to add to the inner cells.
 		 * Cached here to speed up cell rendering. It is used in wisej.web.datagrid.cellRenderer.Cell._getCellState.
 		 */
-		_gridLinesStateName: "borderSingle",
+		_cellBorderStyle: "borderBoth",
+
+		/**
+		 * The full name of the state to add to the inner cells.
+		 * Cached here to speed up cell rendering. It is used in wisej.web.datagrid.ColumnHeader._applyHeaderWidget.
+		 */
+		_colHeadersBorderStyle: "borderBoth",
 
 		/**
 		 * Applies the scrollBar property.
@@ -1175,26 +1248,20 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		_applyTools: function (value, old) {
 
-			if (value == null)
-				return;
+			var tools = this.getChildControl("tools", true);
 
-			var toolsContainer = this.getChildControl("tools", true);
-
-			if (value.length == 0) {
-				if (toolsContainer)
-					toolsContainer.exclude();
-
+			if (value == null || value.length == 0) {
+				if (tools)
+					tools.exclude();
 				return;
 			}
 
-			if (!toolsContainer) {
-				toolsContainer = this.getChildControl("tools");
-				this._add(toolsContainer, { row: 0, column: 1 });
-			}
+			tools = this.getChildControl("tools");
+			tools.show();
 
-			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 }, null, "datagrid");
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, null,"datagrid");
+			wisej.web.ToolContainer.add(this, tools);
+			wisej.web.ToolContainer.install(this, tools, value, "right", { row: 0, column: 1 }, null, "datagrid");
+			wisej.web.ToolContainer.install(this, tools, value, "left", { row: 0, column: 0 }, null, "datagrid");
 		},
 
 		/** 
@@ -1202,22 +1269,25 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		_applyToolsPosition: function (value, old) {
 
-			this.__updateToolsLayout(this.getChildControl("tools", true));
+			this.updateToolPanelLayout(this.getChildControl("tools", true));
 		},
 
 		/**
+		 * Implements: wisej.web.toolContainer.IToolPanelHost.updateToolPanelLayout
+		 * 
 		 * Changes the layout of the tools container according to the value
 		 * of the toolsPosition property.
 		 *
-		 * @param tools {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
 		 */
-		__updateToolsLayout: function (tools) {
+		updateToolPanelLayout: function (toolPanel) {
 
-			if (tools) {
+			if (toolPanel) {
 
 				var rowCol = {
 					row: 0, column: 1
 				};
+
 				var position = this.getToolsPosition();
 				var vertical = position == "left" || position == "right";
 
@@ -1245,13 +1315,13 @@ qx.Class.define("wisej.web.DataGrid", {
 						break;
 				}
 
-				tools.removeState("top");
-				tools.removeState("left");
-				tools.removeState("right");
-				tools.removeState("bottom");
-				tools.addState(position);
+				toolPanel.removeState("top");
+				toolPanel.removeState("left");
+				toolPanel.removeState("right");
+				toolPanel.removeState("bottom");
+				toolPanel.addState(position);
 
-				tools.setLayoutProperties(rowCol);
+				toolPanel.setLayoutProperties(rowCol);
 
 				// change the position of the tool containers.
 				if (this.__leftToolsContainer) {
@@ -1332,6 +1402,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				case "tools":
 					control = new wisej.web.toolContainer.ToolPanel();
+					control.addListener("resize", this.__onToolsResize, this);
 					break;
 
 				case "resize-line":
@@ -1362,7 +1433,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				}
 			}
 
-			// fire rowHeightChanged.
+			// fire rowHeightChanged for a single row.
 			if (e != null) {
 				var data = e.getData();
 				this.fireDataEvent("rowHeightChanged", { row: data.row, height: data.newHeight });
@@ -1428,6 +1499,14 @@ qx.Class.define("wisej.web.DataGrid", {
 		},
 
 		/**
+		 * Schedules a full update of the columns position.
+		 */
+		_scheduleUpdateColumnsPosition: function () {
+
+			qx.ui.core.queue.Widget.add(this, "updateColumnsPosition");
+		},
+
+		/**
 		 * This method is called during the flush of the
 		 * {@link qx.ui.core.queue.Widget widget queue}.
 		 *
@@ -1448,6 +1527,9 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			if (jobs["autoSizeRows"])
 				this.autoSizeRows();
+
+			if (jobs["updateColumnsPosition"])
+				this.updateColumnsPosition();
 		},
 
 		/**
@@ -1478,6 +1560,44 @@ qx.Class.define("wisej.web.DataGrid", {
 				return null;
 
 			return this.getPaneScroller(0).getTablePane().getFirstVisibleRow();
+		},
+
+		/**
+		 * VScroll property getter.
+		 *
+		 * Returns whether the vertical scrollbar is visible.
+		 * This is a read-only property used by the state properties list to update the server.
+		 */
+		getVScroll: function () {
+			var scroller = null;
+			var scrollers = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollers.length; i++) {
+				scroller = scrollers[i];
+				if (!scroller.isFrozenPane() && !scroller.isRowHeaderPane()) {
+					return scroller.getVerticalScrollBarVisible();
+				}
+			}
+
+			return false;
+		},
+
+		/**
+		 * HScroll property getter.
+		 * 
+		 * Returns whether the horizontal scrollbar is visible.
+		 * This is a read-only property used by the state properties list to update the server.
+		 */
+		getHScroll: function () {
+			var scroller = null;
+			var scrollers = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollers.length; i++) {
+				scroller = scrollers[i];
+				if (!scroller.isFrozenPane() && !scroller.isRowHeaderPane()) {
+					return scroller.getHorizontalScrollBarVisible();
+				}
+			}
+
+			return false;
 		},
 
 		/**
@@ -1657,6 +1777,16 @@ qx.Class.define("wisej.web.DataGrid", {
 							}
 							break;
 
+						case "PageUp":
+						case "PageDown":
+							var scroller = this.getPaneScroller(0);
+							var direction = (identifier === "PageUp") ? -1 : 1;
+							var visibleCount = this.getVisibleRowCount() - 1;
+							scroller.setScrollY(scroller.getScrollY() + direction * visibleCount);
+							this.moveFocusedCell(0, direction * visibleCount);
+							consumed = true;
+							break;
+
 						case "Tab":
 							this._handleTabKey(e);
 							break;
@@ -1775,7 +1905,7 @@ qx.Class.define("wisej.web.DataGrid", {
 						if (editMode === "editOnKeystroke" || editMode === "editOnKeystrokeOrF2" || editMode === "editOnEnter") {
 
 							// start editing on keystroke.
-							if (identifier.length === 1 && e.isPrintable()) {
+							if (identifier.length === 1 && e.isPrintable() && e.getModifiers() === 0 && !e.getDefaultPrevented()) {
 								consumed = true;
 
 								var keyCode = e.getKeyCode();
@@ -1964,7 +2094,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				if (this.getFocusedRow() == row && this.getFocusedColumn() == col) {
 
 					if (forward)
-						this.fireDataEvent("lastCellTab", this.getFocusedColumn());
+						this.fireDataEvent("lastCellTab", col);
 
 					// let the event bubble.
 					return;
@@ -1981,12 +2111,65 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (this.__internalChange || wisej.web.DesignMode)
 				return false;
 
-			// shouldn't fire a server when the change is coming
+			// shouldn't fire a server event when the change is coming
 			// from a server request unless we are processing a deferred call.
 			if (!this.__processingPendingCalls && this.core.processingActions)
 				return false;
 
 			return true;
+		},
+
+		// timer id for the delayed "selectionChanged" event.
+		__selectionDelayTimer: 0,
+
+		// timer id for the delayed "focusCellChanged" event.
+		__focusChangedDelayTimer: 0,
+
+		/**
+		 * Fires the "focusCellChanged" event to the server.
+		 * 
+		 * @param {Integer} col Column index.
+		 * @param {Integer} row Row index.
+		 */
+		notifyFocusCellChanged: function (col, row) {
+
+			var me = this;
+			var data = { col: col, row: row };
+
+			// use the selection delay only when the selection changed
+			// in a keyboard event, otherwise it changes the pointer, selection sequence.
+			if (this.getSelectionDelay() > 0 && window.event instanceof KeyboardEvent) {
+				clearTimeout(this.__focusChangedDelayTimer);
+				this.__focusChangedDelayTimer = setTimeout(function () {
+					me.fireDataEvent("focusCellChanged", data);
+				}, this.getSelectionDelay());
+			}
+			else {
+				me.fireDataEvent("focusCellChanged", data);
+			}
+		},
+
+		/**
+		 * Fires the "selectionChanged" event to the server.
+		 * 
+		 * @param {Integer} col Column index.
+		 * @param {Integer} row Row index.
+		 * @param {Array} ranges Selection ranges.
+		 */
+		notifySelectionChanged: function (col, row, ranges) {
+
+			var me = this;
+			var data = { ranges: ranges, focusCell: { col: col, row: row } };
+
+			if (this.getSelectionDelay() > 0 && window.event instanceof KeyboardEvent) {
+				clearTimeout(this.__selectionDelayTimer);
+				this.__selectionDelayTimer = setTimeout(function () {
+					me.fireDataEvent("selectionChanged", data);
+				}, this.getSelectionDelay());
+			}
+			else {
+				me.fireDataEvent("selectionChanged", data);
+			}
 		},
 
 		// overridden: fire the selectionChanged event with the new selected rows.
@@ -1995,12 +2178,10 @@ qx.Class.define("wisej.web.DataGrid", {
 			this.base(arguments, e);
 
 			if (this.__canFireServerEvent()) {
-				var selectionModel = this.getSelectionModel();
-				var selectionRanges = selectionModel.getSelectedRanges();
-				this.fireDataEvent("selectionChanged", {
-					ranges: selectionRanges,
-					focusCell: { col: this.getFocusedColumn(), row: this.getFocusedRow() }
-				});
+
+				this.notifySelectionChanged(
+					this.getFocusedColumn(), this.getFocusedRow(),
+					this.getSelectionModel().getSelectedRanges());
 			}
 		},
 
@@ -2139,6 +2320,37 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 		},
 
+		/**
+		 * Synchronizes the position of the columns in the column model with the
+		 * value of the position property of each ColumnHeader child.
+		 */
+		updateColumnsPosition: function () {
+
+			var columns = this.getColumns();
+			if (columns == null || columns.length === 0)
+				return;
+
+			var columnModel = this.getTableColumnModel();
+			if (!columnModel)
+				return;
+
+			this.__internalChange = true;
+			try {
+
+				var newPositions = new Array(columns.length);
+				for (var i = 0; i < columns.length; i++) {
+					newPositions[columns[i].getPosition()] = i;
+				}
+
+				// update all the positions.
+				columnModel.setColumnsOrder(newPositions);
+
+			} finally {
+				this.__internalChange = false;
+			}
+
+		},
+
 		// overridden to resize the columns when
 		// the scrollbar visibility changes.
 		_updateScrollBarVisibility: function () {
@@ -2162,61 +2374,77 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * Resize the columns width according to the specified parameters.
 		 *
 		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
-		 * @param autoSizeMode {String} Autosize mode: one of "columnHeader", "allCellsExceptHeader","allCells", "displayedCellsExceptHeader", "displayedCells".
+		 * @param autoSizeMode {String} Autosize mode: one of "columnHeader", "allCellsExceptHeader", "allCells", "displayedCellsExceptHeader", "displayedCells".
+		 * @param extraSpace {Integer} Extra space to add in pixels.
+		 * @param deferred {Boolean} Indicates that the call should be deferred until the next data update.
 		 */
-		autoResizeColumns: function (columnIndex, autoSizeMode) {
+		autoResizeColumns: function (columnIndex, autoSizeMode, extraSpace, deferred) {
 
 			var columns = this.getColumns();
 			if (columns == null || columns.length === 0)
 				return;
 
-			this.__internalChange++;
-			try {
-				var resizeData = [];
-
-				for (var i = this._rowHeaderColIndex + 1, l = columns.length; i < l; i++) {
-
-
-					var column = columns[i];
-					var sizeMode = autoSizeMode;
-
-					switch (sizeMode) {
-
-						case "allCells":
-						case "columnHeader":
-						case "displayedCells":
-						case "allCellsExceptHeader":
-						case "displayedCellsExceptHeader":
-
-							if (columnIndex > -1 && columnIndex !== i)
-								continue;
-
-							if (!column.isFrozen() && column.getSizeMode() === "fill")
-								continue;
-
-							resizeData.push({
-								column: column,
-								sizeMode: sizeMode,
-								colIndex: column.getIndex()
-							});
-
-							break;
-
-						default:
-							return;
-					}
-				}
-
-				if (resizeData.length > 0) {
-
-					this.__autoSizeColumns(resizeData);
-
-					this.autoSizeFillColumns();
-				}
-
+			if (deferred && !this.__processingPendingCalls) {
+				this.__postCall(arguments);
+				return;
 			}
-			finally {
-				this.__internalChange--;
+
+			extraSpace |= 0;
+
+			var resizeData = [];
+
+			for (var i = this._rowHeaderColIndex + 1, l = columns.length; i < l; i++) {
+
+
+				var column = columns[i];
+				var sizeMode = autoSizeMode;
+
+				switch (sizeMode) {
+
+					case "allCells":
+					case "columnHeader":
+					case "displayedCells":
+					case "allCellsExceptHeader":
+					case "displayedCellsExceptHeader":
+
+						if (columnIndex > -1 && columnIndex !== i)
+							continue;
+
+						if (!column.isVisible())
+							continue;
+
+						if (!column.isFrozen() && column.getSizeMode() === "fill")
+							continue;
+
+						if (column.getMinWidth() === column.getMaxWidth())
+							continue;
+
+						resizeData.push({
+							column: column,
+							sizeMode: sizeMode,
+							extraSpace: extraSpace,
+							colIndex: column.getIndex()
+						});
+
+						break;
+
+					default:
+						return;
+				}
+			}
+
+			if (resizeData.length > 0) {
+				this.__internalChange++;
+				qx.event.Timer.once(function () {
+					try {
+						this.__autoSizeColumns(resizeData);
+						this.autoSizeFillColumns();
+
+					} finally {
+						this.__internalChange--;
+					}
+
+				}, this, 0);
 			}
 		},
 
@@ -2225,14 +2453,23 @@ qx.Class.define("wisej.web.DataGrid", {
 		 *
 		 * @param rowIndex {Integer} Index of the row to resize. -1 for all rows.
 		 * @param autoSizeMode {String} Autosize mode: one of "rowHeader", "allCellsExceptHeader", "allCells".
+		 * @param extraSpace {Integer} Extra space to add in pixels.
+		 * @param deferred {Boolean} Indicates that the call should be deferred until the next data update.
 		 */
-		autoResizeRows: function (rowIndex, autoSizeMode) {
+		autoResizeRows: function (rowIndex, autoSizeMode, extraSpace, deferred) {
 
 			var columns = this.getColumns();
 			if (columns == null || columns.length === 0)
 				return;
 
-			var resizeData = {};
+			if (deferred && !this.__processingPendingCalls) {
+				this.__postCall(arguments);
+				return;
+			}
+
+			extraSpace |= 0;
+
+			var resizeData = null;
 			var sizeMode = autoSizeMode;
 			var rowHeaderColIndex = this._rowHeaderColIndex;
 
@@ -2242,6 +2479,7 @@ qx.Class.define("wisej.web.DataGrid", {
 					resizeData = {
 						sizeMode: sizeMode,
 						rowIndex: rowIndex,
+						extraSpace: extraSpace,
 						colIndex: rowHeaderColIndex
 					};
 					break;
@@ -2250,6 +2488,7 @@ qx.Class.define("wisej.web.DataGrid", {
 					resizeData = {
 						sizeMode: sizeMode,
 						rowIndex: rowIndex,
+						extraSpace: extraSpace,
 						colIndex: rowHeaderColIndex,
 						maxColumns: 1
 					};
@@ -2259,6 +2498,7 @@ qx.Class.define("wisej.web.DataGrid", {
 					resizeData = {
 						sizeMode: sizeMode,
 						rowIndex: rowIndex,
+						extraSpace: extraSpace,
 						colIndex: rowHeaderColIndex + 1
 					};
 					break;
@@ -2267,7 +2507,11 @@ qx.Class.define("wisej.web.DataGrid", {
 					return;
 			}
 
-			this.__autoSizeRows(resizeData);
+			if (resizeData) {
+				qx.event.Timer.once(function () {
+					this.__autoSizeRows(resizeData);
+				}, this, 0);
+			}
 		},
 
 		/**
@@ -2275,8 +2519,9 @@ qx.Class.define("wisej.web.DataGrid", {
 		 *
 		 * @param rowIndex {Integer} Index of the row to resize. -1 for all rows.
 		 * @param autoSizeMode {String} Autosize mode: one of "autoSizeToAllHeaders", "autoSizeToDisplayedHeaders", "autoSizeToFirstHeader".
+		 * @param deferred {Boolean} Indicates that the call should be deferred until the next data update.
 		 */
-		autoResizeRowHeaders: function (rowIndex, autoSizeMode) {
+		autoResizeRowHeaders: function (rowIndex, autoSizeMode, deferred) {
 
 			if (this._rowHeaderColIndex !== 0)
 				return;
@@ -2284,6 +2529,11 @@ qx.Class.define("wisej.web.DataGrid", {
 			var columns = this.getColumns();
 			if (columns == null || columns.length === 0)
 				return;
+
+			if (deferred && !this.__processingPendingCalls) {
+				this.__postCall(arguments);
+				return;
+			}
 
 			this.__internalChange++;
 			try {
@@ -2318,28 +2568,38 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * Resize the column headers's height according to the specified parameters.
 		 *
 		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
+		 * @param deferred {Boolean} Indicates that the call should be deferred until the next data update.
 		 */
-		autoResizeColumnHeaders: function (columnIndex) {
+		autoResizeColumnHeaders: function (columnIndex, deferred) {
 
 			var columns = this.getColumns();
 			if (columns == null || columns.length === 0)
 				return;
 
+			if (deferred && !this.__processingPendingCalls) {
+				this.__postCall(arguments);
+				return;
+			}
+
+
 			var me = this;
 			setTimeout(function () {
 
-				var newHeight = 0;
-				var oldHeight = this.getHeaderCellHeight();
+				me.syncAppearance();
+				var oldHeight = me.getHeaderCellHeight();
+				var newHeight = qx.util.PropertyUtil.getThemeValue(me, "headerCellHeight") || 0;
 
 				for (var i = 0; i < columns.length; i++) {
 
 					if (columnIndex > -1 && columnIndex !== i)
 						continue;
+					if (!columns[i].isVisible())
+						continue;
 
-					newHeight = Math.max(newHeight, me.__getColumnHeaderSizeHint(columns[columnIndex]).height);
+					newHeight = Math.max(newHeight, me.__getColumnHeaderSizeHint(columns[i]).height || 0);
 				}
 
-				if (newHeight !== oldHeight && newHeight > 0) {
+				if (newHeight > 0 && newHeight !== oldHeight) {
 					me.setHeaderCellHeight(newHeight);
 					me.fireDataEvent("rowHeightChanged", { row: -1, height: newHeight });
 				}
@@ -2491,46 +2751,55 @@ qx.Class.define("wisej.web.DataGrid", {
 				if (resizeItem.colIndex < 0)
 					continue;
 
-				var newWidth = 0;
+				var newWidth = 0, measuredWidth = 0, hintWidth = 0;
 				var oldWidth = columnModel.getColumnWidth(resizeItem.colIndex);
 
 				switch (resizeItem.sizeMode) {
 
 					case "columnHeader":
-						newWidth = this.__getColumnHeaderSizeHint(resizeItem.column).width;
+						measuredWidth = hintWidth = this.__getColumnHeaderSizeHint(resizeItem.column).width;
 						break;
 
 					case "allCells":
-						newWidth = Math.max(
-							this.__getMaxCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width,
-							this.__getColumnHeaderSizeHint(resizeItem.column).width);
+						measuredWidth = this.__getMaxCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
+						hintWidth = this.__getColumnHeaderSizeHint(resizeItem.column).width;
 						break;
 
 					case "displayedCells":
-						newWidth = Math.max(
-							this.__getMaxDisplayedCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width,
-							this.__getColumnHeaderSizeHint(resizeItem.column).width);
+						measuredWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
+						hintWidth = this.__getColumnHeaderSizeHint(resizeItem.column).width;
 						break;
 
 					case "allCellsExceptHeader":
-						newWidth = this.__getMaxCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
+						measuredWidth = this.__getMaxCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
 						break;
 
 					case "displayedCellsExceptHeader":
-						newWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
+						measuredWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, -1, columnModel, dataModel).width;
 						break;
 
 					case "autoSizeToAllHeaders":
-						newWidth = this.__getMaxCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel).width;
+						measuredWidth = this.__getMaxCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel).width;
 						break;
 
 					case "autoSizeToFirstHeader":
-						newWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel, 1).width;
+						measuredWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel, 1).width;
 						break;
 
 					case "autoSizeToDisplayedHeaders":
-						newWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel).width;
+						measuredWidth = this.__getMaxDisplayedCellSize(resizeItem.colIndex, resizeItem.rowIndex, columnModel, dataModel).width;
 						break;
+				}
+
+				newWidth = Math.max(measuredWidth, hintWidth);
+				if (newWidth) {
+
+					newWidth += resizeItem.extraSpace;
+
+					if (resizeItem.column.getMinWidth())
+						newWidth = Math.max(newWidth, resizeItem.column.getMinWidth());
+					if (resizeItem.column.getMaxWidth())
+						newWidth = Math.min(newWidth, resizeItem.column.getMaxWidth());
 				}
 
 				if (newWidth !== oldWidth && newWidth > 0) {
@@ -2554,6 +2823,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			var changed = false;
 			var dataModel = this.getTableModel();
+			var rowRenderer = this.getDataRowRenderer();
 			var columnModel = this.getTableColumnModel();
 
 			var colIndex = resizeData.colIndex;
@@ -2563,15 +2833,35 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				var newHeight = 0;
 				var oldHeight = dataModel.getRowHeight(rowIndex);
+				var minRowHeight = dataModel.getMinRowHeight(rowIndex);
+				var maxRowHeight = dataModel.getMaxRowHeight(rowIndex);
+
+				if (minRowHeight === maxRowHeight)
+					return;
 
 				var count = resizeData.maxColumns > 0
 					? resizeData.maxColumns
 					: columnModel.getOverallColumnCount();
 
+				var rowInsets = rowRenderer.getInsets({ table: this, row: rowIndex, rowData: dataModel.getRowData(rowIndex) });
+
 				for (var i = colIndex; count > 0; i++) {
+
+					if (!columnModel.isColumnVisible(i))
+						continue;
+
 					newHeight = Math.max(newHeight, this.__getMaxCellSize(i, rowIndex, columnModel, dataModel).height);
+					if (newHeight)
+						newHeight += rowInsets.top + rowInsets.bottom + resizeData.extraSpace;
+
 					count--;
 				}
+
+				if (minRowHeight)
+					newHeight = Math.max(newHeight, minRowHeight);
+				if (maxRowHeight)
+					newHeight = Math.min(newHeight, maxRowHeight);
+
 				if (newHeight > 0 && newHeight !== oldHeight) {
 					changed = true;
 					dataModel.setRowHeight(rowIndex, newHeight, false);
@@ -2584,15 +2874,35 @@ qx.Class.define("wisej.web.DataGrid", {
 
 						var newHeight = 0;
 						var oldHeight = dataModel.getRowHeight(rowIndex);
+						var minRowHeight = dataModel.getMinRowHeight(rowIndex);
+						var maxRowHeight = dataModel.getMaxRowHeight(rowIndex);
+
+						if (minRowHeight === maxRowHeight)
+							return;
 
 						var count = resizeData.maxColumns > 0
 							? resizeData.maxColumns
 							: columnModel.getOverallColumnCount();
 
+						var rowInsets = rowRenderer.getInsets({ table: this, row: rowIndex, rowData: rowData });
+
 						for (var i = colIndex; count > 0; i++) {
+
+							if (!columnModel.isColumnVisible(i))
+								continue;
+
 							newHeight = Math.max(newHeight, this.__getMaxCellSize(i, rowIndex, columnModel, dataModel).height);
+							if (newHeight)
+								newHeight += rowInsets.top + rowInsets.bottom + resizeData.extraSpace;
+
 							count--;
 						}
+
+						if (minRowHeight)
+							newHeight = Math.max(newHeight, minRowHeight);
+						if (maxRowHeight)
+							newHeight = Math.min(newHeight, maxRowHeight);
+
 						if (newHeight > 0 && newHeight !== oldHeight) {
 							changed = true;
 							dataModel.setRowHeight(rowIndex, newHeight, false);
@@ -2634,8 +2944,10 @@ qx.Class.define("wisej.web.DataGrid", {
 					};
 
 					var cellSize = renderer.getCellSize(cellInfo);
-					maxSize.width = Math.max(maxSize.width, cellSize.width);
-					maxSize.height = Math.max(maxSize.height, cellSize.height);
+					if (cellSize) {
+						maxSize.width = Math.max(maxSize.width, cellSize.width);
+						maxSize.height = Math.max(maxSize.height, cellSize.height);
+					}
 				}
 
 				count--;
@@ -2656,22 +2968,33 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			if (rowIndex > -1) {
 
+				// auto-resize a row.
+
 				var value = dataModel.getValue(colIndex, rowIndex);
 				if (value !== null && value !== undefined) {
+
+					var scroller = this.getPaneScroller(this._getMetaColumnAtColumnX(col));
 
 					var cellInfo = {
 						col: colIndex,
 						row: rowIndex,
 						table: this,
 						value: value,
+						scroller: scroller,
 						columnModel: columnModel,
-						rowData: dataModel.getRowData(rowIndex)
+						xPos: columnModel.getVisibleX(colIndex),
+						rowData: dataModel.getRowData(rowIndex),
+						columnWidth: columnModel.getColumnWidth(colIndex)
 					};
 
-					maxSize = renderer.getCellSize(cellInfo);
+					var cellSize = renderer.getCellSize(cellInfo);
+					if (cellSize)
+						maxSize = cellSize;
 				}
 			}
-			else {
+			else if (colIndex > -1) {
+
+				// auto-resize a column.
 
 				dataModel.iterateCachedRows(function (rowIndex, rowData) {
 
@@ -2688,8 +3011,10 @@ qx.Class.define("wisej.web.DataGrid", {
 						};
 
 						var cellSize = renderer.getCellSize(cellInfo);
-						maxSize.width = Math.max(maxSize.width, cellSize.width);
-						maxSize.height = Math.max(maxSize.height, cellSize.height);
+						if (cellSize) {
+							maxSize.width = Math.max(maxSize.width, cellSize.width);
+							maxSize.height = Math.max(maxSize.height, cellSize.height);
+						}
 					}
 
 				}, this);
@@ -2700,20 +3025,36 @@ qx.Class.define("wisej.web.DataGrid", {
 
 		// returns the recalculated size of the column header.
 		__getColumnHeaderSizeHint: function (column) {
-			var header = column.getHeaderWidget();
 
-			if (!this.__measuringHeader)
+			var header = column.getHeaderWidget();
+			header.syncAppearance();
+
+			if (!this.__measuringHeader) {
 				this.__measuringHeader = new wisej.web.datagrid.HeaderCell();
+				this.__measuringHeader.syncAppearance();
+			}
 
 			var widget = this.__measuringHeader;
-			widget.setLabel(header.getLabel());
-			widget.setFont(header.getFont());
-			widget.setWrap(header.getWrap());
-			widget.setAutoEllipsis(header.getAutoEllipsis());
-			widget.setPaddingTop(header.getPaddingTop());
-			widget.setPaddingLeft(header.getPaddingLeft());
-			widget.setPaddingRight(header.getPaddingRight());
-			widget.setPaddingBottom(header.getPaddingBottom());
+
+			var label = header ? header.getLabel() : column.getLabel();
+			var font = header ? header.getFont() : column.getFont();
+			var wrap = header ? header.getWrap() : column.getWrap();
+			var autoEllipsis = header ? header.getAutoEllipsis() : column.getAutoEllipsis();
+
+			var columnPadding = column.getPadding() || [];
+			var paddingTop = header ? header.getPaddingTop() : columnPadding[0] | 0;
+			var paddingRight = header ? header.getPaddingRight() : columnPadding[1] | 0;
+			var paddingBottom = header ? header.getPaddingBottom() : columnPadding[2] | 0;
+			var paddingLeft = header ? header.getPaddingLeft() : columnPadding[3] | 0;
+
+			widget.setLabel(label);
+			widget.setFont(font);
+			widget.setWrap(wrap);
+			widget.setAutoEllipsis(autoEllipsis);
+			widget.setPaddingTop(paddingTop);
+			widget.setPaddingLeft(paddingLeft);
+			widget.setPaddingRight(paddingRight);
+			widget.setPaddingBottom(paddingBottom);
 
 			widget.invalidateLayoutCache();
 			widget.invalidateLayoutChildren();
@@ -2741,6 +3082,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				return;
 
 			// resize the columns according to their weight and minimum size.
+			var usedWidth = 0;
 			for (var i = 0, length = columns.length; i < length; i++) {
 
 				var column = columns[i];
@@ -2752,6 +3094,12 @@ qx.Class.define("wisej.web.DataGrid", {
 				var weight = column.getFillWeight() / totalFillWeight;
 				var oldWidth = columnModel.getColumnWidth(colIndex);
 				var newWidth = (Math.max(availableWidth * weight, column.getMinWidth())) | 0;
+				usedWidth += newWidth;
+
+				// use the remainder.
+				if (usedWidth < availableWidth && i === length - 1)
+					newWidth += availableWidth - usedWidth;
+
 				if (newWidth !== oldWidth && newWidth > 0) {
 
 					columnModel.setColumnWidth(colIndex, newWidth, false);
@@ -2828,28 +3176,37 @@ qx.Class.define("wisej.web.DataGrid", {
 		  */
 		moveFocusedCell: function (deltaX, deltaY) {
 
+			if (!deltaX && !deltaY)
+				return;
+
 			var prevRow = this.getFocusedRow();
 			var prevCol = this.getFocusedColumn();
 			var tableModel = this.getTableModel();
 			var columnModel = this.getTableColumnModel();
+			var colCount = columnModel.getVisibleColumnCount();
 
 			// if tabbing in when there is no current cell, default to the first cell.
 			var row = prevRow;
-			if (row == null)
+			if (row == null) {
 				row = 0;
+				deltaX = 0;
+				deltaY = 0;
+			}
 			var col = prevCol;
-			if (col == null)
+			if (col == null) {
 				col = 0;
+			}
+
+			var x = columnModel.getVisibleX(col);
+			if (x < 0 || x >= colCount)
+				return;
 
 			// rtl?
 			if (this.isRtl())
 				deltaX = deltaX * -1;
 
-			var x = columnModel.getVisibleX(col);
-			var colCount = columnModel.getVisibleColumnCount();
 			x = Math.min(x + deltaX, colCount - 1);
 			col = columnModel.getVisibleColumnAtX(x);
-
 			row = Math.min(row + deltaY, tableModel.getRowCount() - 1);
 
 			// don't move to or past the row header column (0).
@@ -2874,10 +3231,18 @@ qx.Class.define("wisej.web.DataGrid", {
 		 *
 		 * @param col {Integer} the model index of the column the cell belongs to.
 		 * @param row {Integer} the model index of the row the cell belongs to.
+		 * @param alignX {String?null} Alignment of the item. Allowed values:
+		 *   <code>left</code> or <code>right</code>. Could also be null.
+		 *   Without a given alignment the method tries to scroll the widget
+		 *   with the minimum effort needed.
+		 * @param alignY {String?null} Alignment of the item. Allowed values:
+		 *   <code>top</code> or <code>bottom</code>. Could also be null.
+		 *   Without a given alignment the method tries to scroll the widget
+	     *   with the minimum effort needed.
 		 */
-		scrollCellVisible: function (col, row) {
+		scrollCellVisible: function (col, row, alignX, alignY) {
 
-			// store the for a deferred call, after the data count is loaded.
+			// store the call for a deferred call, after the data is loaded.
 			if (row != null && col != null && row >= this.getRowCount()) {
 				this.__postCall(arguments);
 				return;
@@ -2886,7 +3251,27 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (row < 0)
 				row = this.getFocusedRow();
 
-			this.base(arguments, col, row);
+			// get the dom element
+			var elem = this.getContentElement().getDomElement();
+			// if the dom element is not available, the table hasn't been rendered
+			if (!elem) {
+				// postpone the scroll until the table has appeared
+				this.addListenerOnce("appear", function () {
+					this.scrollCellVisible(col, row);
+				}, this);
+			}
+
+			// check whether we have a valid column index.
+			var columnModel = this.getTableColumnModel();
+			if (col === null || col < 0 || col >= columnModel.getOverallColumnCount())
+				return;
+
+			var x = columnModel.getVisibleX(col);
+			var metaColumn = this._getMetaColumnAtColumnX(x);
+
+			if (metaColumn != -1) {
+				this.getPaneScroller(metaColumn).scrollCellVisible(col, row, alignX, alignY);
+			}
 		},
 
 		/**
@@ -2952,7 +3337,8 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 
 			if (this.__canFireServerEvent() && notify) {
-				this.fireDataEvent("focusCellChanged", { col: col, row: row });
+
+				this.notifyFocusCellChanged(col, row);
 			}
 
 			// start editing on enter, when focused.
@@ -3207,8 +3593,182 @@ qx.Class.define("wisej.web.DataGrid", {
 			return {
 				scrollX: this.getScrollX()
 			};
-		}
+		},
 
+		/**
+		 * Updates the metrics on the server.
+		 */
+		__onToolsResize: function (e) {
+
+			if (!wisej.web.DesignMode) {
+
+				// need to get the exact bounds of the tools container
+				// in order to correctly apply the HitTest method.
+				var tools = this.getChildControl("tools", true);
+				if (tools) {
+					this.fireDataEvent("updateMetrics", {
+						toolsBounds: tools.getBounds()
+					});
+				}
+			}
+		},
+
+		// ----------------------------------------------------------------
+		// Binding of two related grids.
+		// ----------------------------------------------------------------
+
+		/**
+		 * Binds the grid to the mainGrids to keep the columns and scrolling in sync.
+		 */
+		bindToMainGrid: function (mainGrid) {
+
+			var updating = false;
+			var childGrid = this;
+
+			mainGrid = this._transformComponent(mainGrid);
+
+			// horizontal scrolling.
+			mainGrid.addListener("scroll", function (e) {
+
+				try {
+					var data = e.getData();
+					if (childGrid && !childGrid.isDisposed() && data.scrollX !== undefined) {
+						var scrollers = childGrid._getPaneScrollerArr();
+						for (var i = 0; i < scrollers.length; i++) {
+							scrollers[i].setScrollX(data.scrollX);
+						}
+					}
+				}
+				catch (err) { }
+
+			});
+
+			// moving columns.
+			mainGrid.addListener("columnPositionChanged", function (e) {
+
+				if (updating)
+					return;
+
+				updating = true;
+				try {
+					var data = e.getData();
+					if (childGrid && !childGrid.isDisposed()) {
+						childGrid.getTableColumnModel().moveColumn(data.oldPosition, data.position);
+					}
+				}
+				catch (err) { }
+				updating = false;
+			});
+			if (position === "Top") {
+				// moving columns.
+				childGrid.addListener("columnPositionChanged", function (e) {
+
+					if (updating)
+						return;
+
+					updating = true;
+					try {
+						var data = e.getData();
+						if (!mainGrid.isDisposed()) {
+							mainGrid.getTableColumnModel().moveColumn(data.oldPosition, data.position);
+						}
+					}
+					catch (err) { }
+					updating = false;
+				});
+			}
+
+			// resizing columns.
+			mainGrid.addListener("columnWidthChanged", function (e) {
+
+				try {
+					var data = e.getData();
+					if (childGrid && !childGrid.isDisposed()) {
+						childGrid.getTableColumnModel().setColumnWidth(data.col, data.width);
+					}
+				}
+				catch (err) { }
+
+			});
+			childGrid.addListener("columnWidthChanged", function (e) {
+
+				try {
+					var data = e.getData();
+					if (!mainGrid.isDisposed()) {
+						mainGrid.getTableColumnModel().setColumnWidth(data.col, data.width);
+					}
+				}
+				catch (err) { }
+
+			}, this);
+
+			// hiding/showing columns.
+			mainGrid.addListener("columnVisibilityChanged", function (e) {
+
+				if (updating)
+					return;
+
+				updating = true;
+				try {
+					var data = e.getData();
+					if (childGrid && !childGrid.isDisposed()) {
+						childGrid.getTableColumnModel().setColumnVisible(data.col, data.visible);
+					}
+				}
+				catch (err) { }
+				updating = false;
+			});
+			if (position === "Top") {
+				// moving columns.
+				childGrid.addListener("columnVisibilityChanged", function (e) {
+
+					if (updating)
+						return;
+
+					updating = true;
+					try {
+						var data = e.getData();
+						if (!mainGrid.isDisposed()) {
+							mainGrid.getTableColumnModel().setColumnVisible(data.col, data.visible);
+						}
+					}
+					catch (err) { }
+					updating = false;
+				});
+			}
+
+			// selection and current cell.
+			mainGrid.addListener("selectionChanged", function (e) {
+
+				if (updating)
+					return;
+
+				updating = true;
+				try {
+					if (childGrid && !childGrid.isDisposed()) {
+						childGrid.setFocusedCell(null, null);
+						childGrid.setSelectionRanges(null);
+					}
+				}
+				catch (err) { }
+				updating = false;
+			});
+			childGrid.addListener("selectionChanged", function (e) {
+
+				if (updating)
+					return;
+
+				updating = true;
+				try {
+					if (!mainGrid.isDisposed()) {
+						mainGrid.setFocusedCell(null, null);
+						mainGrid.setSelectionRanges(null);
+					}
+				}
+				catch (err) { }
+				updating = false;
+			});
+		},
 	},
 
 	destruct: function () {
@@ -3216,9 +3776,13 @@ qx.Class.define("wisej.web.DataGrid", {
 		// destroy the existing instances of ColumnHeader.
 		var headers = this.getColumns();
 		if (headers) {
-			for (var i = 0; i < headers.length; i++)
+			for (var i = 0; i < headers.length; i++) {
 				headers[i].dispose();
+			}
 		}
+
+		clearTimeout(this.__selectionDelayTimer);
+		clearTimeout(this.__focusChangedDelayTimer);
 
 		this._disposeObjects("__measuringHeader");
 	}

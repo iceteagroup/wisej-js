@@ -175,7 +175,6 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 		 */
 		_applyIconSize: function (value, old) {
 
-			var size = value;
 			var icon = this.getChildControl("icon", true);
 
 			if (icon) {
@@ -224,7 +223,7 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 				this.__widget = null;
 			}
 
-			if (widget) {
+			if (widget && !widget.isDisposed()) {
 
 				this.__widget = widget;
 

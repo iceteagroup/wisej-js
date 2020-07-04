@@ -33,13 +33,24 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 
 	extend: wisej.web.ComboBox,
 
-	implements: qx.ui.list.core.IListDelegate,
+	implement: qx.ui.list.core.IListDelegate,
 
 	construct: function () {
 
 		this.base(arguments);
 
 		this.getDropDownList().syncAppearance();
+	},
+
+	properties: {
+
+		/**
+		 * PrefetchItems property.
+		 * 
+		 * Indicates the number of items to prefetch outside of the visible range.
+		 */
+		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" }
+
 	},
 
 	members: {
@@ -55,25 +66,48 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 		 */
 		setItems: function (items) {
 
+			this.__hideLoader();
+
 			if (items == null)
 				return;
 
+			var list = this.getDropDownList();
 			var selectedIndex = this.getSelectedIndex();
 
-			this.__suspendEvents = true;
+			this._suspendEvents = true;
 			try {
 
 				this.setSelectedIndex(-1);
 
-				this.getDropDownList().setItems(items);
+				list.setItems(items);
 
 			} finally {
 
 				// update the displayed text in the textfield.
+				if (selectedIndex > -1) {
+					if (selectedIndex >= list.getModel().getLength()
+						|| !list.getModel().getItem(selectedIndex).isEnabled()) {
+
+						selectedIndex = -1;
+					}
+				}
+
 				this.setSelectedIndex(selectedIndex);
 
-				this.__suspendEvents = false;
+				this._suspendEvents = false;
 			}
+		},
+
+		/**
+		 * Applies the PrefetchItems property.
+		 * 
+		 * @param {Integer} value New value.
+		 * @param {Integer?} old Previous value.
+		 */
+		_applyPrefetchItems: function (value, old) {
+
+			this.getDropDownList().setPrefetchItems(value);
+
 		},
 
 		// overridden
@@ -82,7 +116,7 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 			if (value === old)
 				return;
 
-			this.__suspendEvents = true;
+			this._suspendEvents = true;
 			try {
 
 				var list = this.getDropDownList();
@@ -98,12 +132,17 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 				}
 			} finally {
 
-				this.__suspendEvents = false;
+				this._suspendEvents = false;
 			}
 		},
 
 		// overridden
 		_applyItemHeight: function (value, old) {
+
+			if (value === null || value < 0) {
+				this.resetItemHeight();
+				return;
+			}
 
 			this.getDropDownList().setItemHeight(value);
 		},
@@ -116,12 +155,32 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 			this.__filterText = null;
 		},
 
+		/** defers calls to _scrollSelectedItemsIntoView, need to run after _updateDimensionsAndSize. */
+		__deferredCall: null,
+
+		// overridden
+		_scrollSelectedItemsIntoView: function () {
+
+			if (this.__deferredCall == null) {
+				this.__deferredCall = new qx.util.DeferredCall(function () {
+
+					var list = this.getDropDownList();
+					var items = list.getSelection();
+					if (items && items.getLength() > 0) {
+						list.scrollItemIntoView(items.getItem(items.getLength() - 1));
+					}
+
+				}, this);
+			}
+			this.__deferredCall.schedule();
+		},
+
 		// overridden
 		_adjustListSize: function () {
 
 			this.base(arguments);
 
-			this.getDropDownList().getPane().fullUpdate();
+			this.getDropDownList()._updateDimensionsAndSize();
 		},
 
 		// overridden.
@@ -137,7 +196,7 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 		getListSelectedItem: function () {
 
 			var selection = this.getDropDownList().getSelection();
-			if (selection.getLength() > 0)
+			if (selection && selection.getLength() > 0)
 				return selection.getItem(0);
 
 			return null;
@@ -162,12 +221,10 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 		// overridden
 		// shows or hides the list items that match the text.
 		// should be used with the "filter" auto complete mode.
-		_filterListItems: function (list, text) {
+		_filterListItems: function (text) {
 
 			this.__filterText = text;
-
-			list.refresh();
-			this._adjustListSize();
+			this.getDropDownList().refresh();
 		},
 
 		// filter text used by the data model's filter.
@@ -194,8 +251,10 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 						keepFocus: true,
 						height: null,
 						width: null,
+						maxHeight: this.getMaxListWidth(),
 						maxHeight: this.getMaxListHeight(),
-						selectionMode: "one",
+						selectionMode: "single",
+						scrollbarX: "off",
 						quickSelection: false,
 						delegate: this
 					});
@@ -211,81 +270,11 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 		// overridden
 		_onListChangeSelection: function (e) {
 
-			if (wisej.web.DesignMode) {
-				return;
-			}
+			// replace the data with the selected items array
+			// from the virtual combobox to let wisej.web.ComboBox process this event.
+			e.setData(e.getData().added);
 
-			// don't change when read-only, unless it's processing
-			// a server request.
-			if (this.isReadOnly() && !this.core.processingActions) {
-				return;
-			}
-
-			// save the suspendEvents state.
-			var suspendEvents = this.__suspendEvents;
-
-			this.__suspendEvents = true;
-			try {
-				var current = e.getData().added;
-				var icon = this.getChildControl("icon");
-				var model = this.getDropDownList().getModel();
-				var labelfield = this.getChildControl("labelfield");
-
-				if (current && current.length > 0) {
-
-					var item = current[0];
-					var index = model.indexOf(item);
-
-					// update the textfield.
-					this.setValue(this._getItemText(item));
-					this.selectAllText();
-
-					// update the labelfield.
-					labelfield.resetTextColor();
-					labelfield.setValue(item.getLabel());
-
-					// update the icon.
-					icon.setSource(item.getIcon());
-					icon.setVisibility(icon.getSource() ? "visible" : "excluded");
-
-					if (!suspendEvents) {
-
-						// update the selectedIndex property.
-						this.setSelectedIndex(index);
-
-						// fire the event.
-						this.fireDataEvent("selectionChanged", index);
-
-						// prevent the state change from updating the control or
-						// we may get the SelectedIndexChanged event twice.
-						if (this.getDropDownStyle() !== "dropDownList") {
-							this.updateState("value");
-						}
-					}
-				}
-				else {
-
-					// update the textfield only if the combobox
-					// is not editable ("dropDownList") otherwise
-					// simply set the selected index to -1 and 
-					// keep the invalid text.
-					if (this.getDropDownStyle() !== "dropDownList")
-						this.setSelectedIndex(-1);
-					else
-						this.setValue("");
-
-					// update the labelfield.
-					labelfield.setValue(this.getPlaceholder());
-					labelfield.setTextColor("text-placeholder");
-
-					// update the icon.
-					icon.exclude();
-				}
-			}
-			finally {
-				// restore the suspendEvents state.
-				this.__suspendEvents = suspendEvents;
-			}
+			this.base(arguments, e);
 		},
 
 		//---------------------------------------------------------
@@ -333,6 +322,7 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 			controller.bindProperty("label", "label", null, item, index);
 			controller.bindProperty("index", "index", null, item, index);
 			controller.bindProperty("enabled", "enabled", null, item, index);
+			controller.bindProperty("toolTipText", "toolTipText", null, item, index);
 			controller.bindProperty("font", "font", this.__bindItemInheritedPropertyFilter, item, index);
 			controller.bindProperty("textColor", "textColor", this.__bindItemInheritedPropertyFilter, item, index);
 			controller.bindProperty("backgroundColor", "backgroundColor", this.__bindItemInheritedPropertyFilter, item, index);
@@ -365,6 +355,15 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 		//---------------------------------------------------------
 		// END: qx.ui.list.core.IListDelegate implementation.
 		//---------------------------------------------------------
+	},
+
+	destruct: function () {
+		if (this.__deferredCall != null) {
+			this.__deferredCall.cancel();
+			this.__deferredCall.dispose();
+		}
+
+		this.__deferredCall = null;
 	}
 });
 
@@ -384,13 +383,20 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 
 		this.setIconPath("icon");
 		this.setLabelPath("label");
+		this.setModel(new qx.data.Array());
 
 		// process the rendered cell widgets.
 		this._layer.addListener("updated", this._onUpdated, this);
+
+		// initialize the search string
+		this.__pressedString = "";
 	},
 
 	properties:
 	{
+		// overridden
+		appearance: { init: "list", refine: true },
+
 		/** 
 		 *  EnableInlineFind property.
 		 *  
@@ -404,7 +410,15 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 		 * Sets the default height for the items in the list. When set to null or -1 it uses the
 		 * value in the theme or calculates it from the widest item. The default is null.
 		 */
-		itemHeight: { init: null, refine: true }
+		itemHeight: { init: 24, refine: true },
+
+		/**
+		 * PrefetchItems property.
+		 * 
+		 * Indicates the number of items to prefetch outside of the visible range.
+		 */
+		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" }
+
 	},
 
 	members: {
@@ -414,6 +428,9 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 
 		// keeps the largest width calculated.
 		__maxItemWidth: 0,
+
+		// prefetch manager.
+		__prefetchManager: null,
 
 		/**
 		 * Adds, removes, updates the items in the data model.
@@ -431,12 +448,13 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 
 			try {
 
-				var model = this.getModel() || new qx.data.Array();
+				var index;
+				var model = this.getModel();
+				this.setModel(null);
 
 				// clear?
 				if (items.clear && model.getLength() > 0) {
 					selectedIndex = -1;
-					this.setModel(null);
 					model.setAutoDisposeItems(true);
 					model.dispose();
 					model = new qx.data.Array();
@@ -446,7 +464,7 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 				if (items.added && items.added.length > 0) {
 					var added = items.added;
 					for (var i = 0; i < added.length; i++) {
-						model.setItem(added[i].index, this._createDataItem(added[i]));
+						model.insertAt(added[i].index, this._createDataItem(added[i]));
 					}
 				}
 
@@ -454,7 +472,7 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 				if (items.modified && items.modified.length > 0) {
 					var modified = items.modified;
 					for (var i = 0; i < modified.length; i++) {
-						var index = modified[i].index;
+						index = modified[i].index;
 
 						if (index < 0 || index >= model.getLength())
 							throw new Error("index out of bounds: " + index + " (0.." + model.getLength() + ")");
@@ -470,16 +488,16 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 					var start = -1;
 					var amount = 0;
 
-					var deleted = items.deleted;
+					var deleted = items.deleted, removed;
 					for (var i = deleted.length - 1; i >= 0; i--) {
 
-						var index = deleted[i];
+						index = deleted[i];
 						if (index < 0 || index >= model.getLength())
 							throw new Error("index out of bounds: " + index + " (0.." + model.getLength() + ")");
 
 						// remove the "accumulated" section.
 						if (amount > 0 && start > -1 && index !== start - 1) {
-							var removed = model.splice(start, amount);
+							removed = model.splice(start, amount);
 							removed.setAutoDisposeItems(true);
 							removed.dispose();
 
@@ -500,6 +518,13 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 					}
 				}
 
+				// align the indexes of the items if items have been added or deleted.
+				if (!items.clear && (items.added || items.deleted)) {
+					for (var i = 0, l = model.getLength(); i < l; i++) {
+						model.getItem(i).setIndex(i);
+					}
+				}
+
 				// invalidate the max width, will be recalculated in syncWidget.
 				this.__maxItemWidth = -1;
 
@@ -508,7 +533,43 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 
 			} finally {
 
-				this.__suspendEvents = false;
+				this._suspendEvents = false;
+			}
+		},
+
+		/**
+		 * Applies the PrefetchItems property.
+		 * 
+		 * @param {Integer} value New value.
+		 * @param {Integer?} old Previous value.
+		 */
+		_applyPrefetchItems: function (value, old) {
+
+			if (value > 0) {
+
+				if (!this.__prefetchManager) {
+					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
+						minLeft: 0,
+						maxLeft: 0,
+						minRight: 0,
+						maxRight: 0,
+						minAbove: 0,
+						maxAbove: 0,
+						minBelow: 0,
+						maxBelow: 0
+					});
+				}
+
+				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
+				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
+
+				var pixels = this.getItemHeight() * value;
+				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
+
+			}
+			else if (this.__prefetchManager) {
+				this.__prefetchManager.dispose();
+				this.__prefetchManager = null;
 			}
 		},
 
@@ -549,16 +610,17 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 			var maxTextLength = 0;
 			var currentText = "";
 			var currentTextLength = 0;
-			var itemToMeasure = null;
+			var itemToMeasure = null, item;
 
 			for (var i = 0, l = model.getLength(); i < l; i++) {
 
-				currentText = this._getItemText(model.getItem(i));
+				item = model.getItem(i);
+				currentText = this._getItemText(item);
 				currentTextLength = currentText.length;
 
 				if (currentTextLength > maxTextLength) {
 					maxTextLength = currentTextLength;
-					itemToMeasure = model.getItem(i);
+					itemToMeasure = item;
 				}
 			}
 
@@ -593,7 +655,7 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 		 */
 		scrollItemIntoView: function (item) {
 
-			this.getPane().scrollRowIntoView(item.getIndex());
+			this.getPane().scrollRowIntoView(item ? item.getIndex() : 0, null);
 		},
 
 		/**
@@ -635,10 +697,9 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 
 			// use the currently selected item to start the search.
 			var startIndex = -1;
-			var model = this.getModel();
 			var selection = this.getSelection();
 			if (selection && selection.getLength() > 0)
-				startIndex = model.indexOf(selection.getItem(0));
+				startIndex = selection.getItem(0).getIndex();
 
 			// find matching item.
 			var matchedItem = this.findItemByLabelFuzzy(this.__pressedString, startIndex);
@@ -814,27 +875,10 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 		},
 
 		/**
-		 * Event handler for the update event.
-		 *
-		 * @param event {qx.event.type.Event} The event.
+		 * Calculates the best size for the drop down list
+		 * and updates the size of the cells and the inner virtual panel.
 		 */
-		_onUpdated: function (event) {
-
-			if (this.__deferredCall == null) {
-				this.__deferredCall = new qx.util.DeferredCall(function () {
-					qx.ui.core.queue.Widget.add(this, "updateItemSize");
-				}, this);
-			}
-			this.__deferredCall.schedule();
-		},
-
-		// overridden
-		syncWidget: function (jobs) {
-
-			this.base(arguments, jobs);
-
-			if (!jobs || !jobs["updateItemSize"])
-				return;
+		_updateDimensionsAndSize: function () {
 
 			if (this.__maxItemWidth === -1)
 				this.__maxItemWidth = this._calcMaxWidth(this.getModel());
@@ -860,26 +904,44 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 
 			this.__maxItemWidth = maxWidth;
 
-			if (maxHeight && rowConfig.getDefaultItemSize() !== maxHeight)
-				rowConfig.setDefaultItemSize(maxHeight);
-
-			if (maxWidth && colConfig.getItemSize(0) !== maxWidth)
-				colConfig.setItemSize(0, maxWidth);
-
-
 			// update the dropdown width.
 			var comboBox = this.getDelegate();
-			var dropDownWidth = Math.max(comboBox.getSizeHint().width, maxWidth);
-			dropDownWidth = Math.min(dropDownWidth, this.getMaxWidth());
-			pane.setWidth(dropDownWidth);
+			var dropDownWidth = Math.max(comboBox.getBounds().width, maxWidth);
+			pane.setWidth(dropDownWidth + insets.left + insets.right);
 
 			// update the dropdown height.
 			var dropDownHeight = rowConfig.getTotalSize();
 			dropDownHeight = Math.max(rowConfig.getDefaultItemSize(), dropDownHeight);
 			dropDownHeight = Math.min(dropDownHeight, this.getMaxHeight());
 			this.setHeight(dropDownHeight + insets.top + insets.bottom);
-		}
 
+			// update the cell sizes.
+			if (maxHeight && rowConfig.getDefaultItemSize() !== maxHeight) {
+				rowConfig.setDefaultItemSize(maxHeight);
+				pane.fullUpdate();
+			}
+
+			maxWidth = Math.max(maxWidth, pane.getWidth());
+			if (maxWidth && colConfig.getItemSize(0) !== maxWidth) {
+				colConfig.setItemSize(0, maxWidth);
+				pane.fullUpdate();
+			}
+		},
+
+		/**
+		 * Event handler for the update event.
+		 *
+		 * @param event {qx.event.type.Event} The event.
+		 */
+		_onUpdated: function (event) {
+
+			if (this.__deferredCall == null) {
+				this.__deferredCall = new qx.util.DeferredCall(function () {
+					this._updateDimensionsAndSize();
+				}, this);
+			}
+			this.__deferredCall.schedule();
+		}
 	},
 
 	destruct: function () {
@@ -890,6 +952,8 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 			model.setAutoDisposeItems(true);
 			model.dispose();
 		}
+
+		this._disposeObjects("__prefetchManager");
 
 		this._layer.removeListener("updated", this._onUpdated, this);
 
@@ -938,10 +1002,13 @@ qx.Class.define("wisej.web.combobox.DataItem", {
 		// text color.
 		textColor: { init: null, check: "Color", event: "changeTextColor" },
 
+		// tooltip.
+		toolTipText: { init: null, check: "String", event: "changeToolTipText" },
+
 		// font.
 		font: { init: null, check: "Font", event: "changeFont", dereference: true },
 
 		// enabled.
-		enabled: { init: true, check: "Boolean", event: "changeEnabled", dereference: true }
+		enabled: { init: true, check: "Boolean", event: "changeEnabled" }
 	}
 });

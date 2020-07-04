@@ -46,8 +46,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			textfield.addListener("keyinput", this.processKeyInput, this);
 
 			// attach clipboard handlers.
-			textfield.getContentElement().addListener("cut", this.processClipboard, this);
-			textfield.getContentElement().addListener("paste", this.processClipboard, this);
+			textfield.addListener("input", this.processClipboard, this);
 
 			// detect when the field becomes read-only.
 			textfield.addListener("changeReadOnly", this._onChangeReadOnly, this);
@@ -228,18 +227,15 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			if (this.__maskChars.length === 0 || this.__isReadOnly)
 				return;
 
-			var type = e.getType();
-			var value = this._getValue();
-			switch (type) {
+			var value = e.getData();
+			qx.event.Timer.once(function () {
 
-				case "cut":
-				case "paste":
-					this._setValue(this.mask(value));
-					break;
+				var pos = this.__textfield.getTextSelectionEnd();
+				this._setValue(this.mask(value));
+				pos = this.__getNextInsertPosition(pos);
+				this.__textfield.setTextSelection(pos, pos);
 
-				default:
-					return;
-			}
+			}, this, 0);
 		},
 
 		/**
@@ -271,9 +267,9 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 			// mask the char before applying the mask to the full text to
 			// validate the single char.
-			var mask = this.__maskChars;
+			var mask = this.__maskChars.filter(function(item) { return item !== "\\"; });
 			var prompt = this.getPrompt();
-			var mchar = this.__transformChar(char, this.__maskChars[pos], prompt);
+			var mchar = this.__transformChar(char, mask[pos], prompt);
 			if (!mchar) {
 
 				// compare if the typed char matches the literal in the mask, advance one position.
@@ -524,14 +520,17 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				return;
 
 			this.__textfield.setValue(value);
+			this.__textfield.__oldInputValue = value;
 		},
 
 		// returns the next valid insert position in the mask.
 		__getNextInsertPosition: function (pos) {
 
-			for (var mask = this.__maskChars[pos];
+			// don't count escaped characters when looking for the next insert position.
+			var filteredMask = this.__maskChars.filter(function(item) { return item !== "\\"; });
+			for (var mask = filteredMask[pos];
 					mask != null && !this.__isMaskChar(mask);
-						mask = this.__maskChars[++pos]);
+						mask = filteredMask[++pos]);
 
 			return pos;
 		},
@@ -618,6 +617,9 @@ qx.Class.define("wisej.utils.MaskProvider", {
 							? this.getLocalization().currency
 							: qx.locale.Number.getCurrencySymbol();
 				}
+			} else {
+				// reset the escape character.
+				this.__escape = false;
 			}
 
 			return mask;

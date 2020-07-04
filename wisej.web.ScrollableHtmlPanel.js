@@ -162,6 +162,16 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 			this.__processHtml();
 		},
 
+		// overridden to delay the "render" event to give a chance
+		// to the designer to pick the correct rendered control.
+		_onDesignRender: function () {
+
+			var me = this;
+			setTimeout(function () {
+				me.fireEvent("render");
+			}, 150);
+		},
+
 		/**
 		 * Applies the HTML text.
 		 */

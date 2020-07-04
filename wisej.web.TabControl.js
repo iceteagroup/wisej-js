@@ -42,26 +42,33 @@ qx.Class.define("wisej.web.TabControl", {
 
 		this.initBorderStyle();
 
-		if (wisej.web.DesignMode)
-			this.addListenerOnce("controlsChanged", this.__initSelectedIndex);
-		else
-			this.addListenerOnce("appear", this.__initSelectedIndex);
-
 		// handle key presses to change the active tab using the keyboard.
 		this.addListener("keypress", this._onKeyPress);
 
 		// handle focus events to update the "focused" state.
 		this.addListener("focus", this._updateFocusedButton);
 		this.addListener("blur", this._updateFocusedButton);
+
+		// enable null selection for when all tabs are hidden.
+		this.__radioGroup.setAllowEmptySelection(true);
 	},
 
 	events: {
 
 		/** 
-		 * Fired when the selected index changes.
+		 * Fired when the selected tab changes.
 		 */
-		changeSelectedIndex: "qx.event.type.Data",
+		changeSelectedTab: "qx.event.type.Data",
 
+		/** 
+		 * Fired when the user shows a tab using the visibility menu.
+		 */
+		showTab: "qx.event.type.Data",
+
+		/** 
+		 * Fired when the user hides a tab using the visibility menu.
+		 */
+		hideTab: "qx.event.type.Data",
 	},
 
 	properties: {
@@ -72,11 +79,11 @@ qx.Class.define("wisej.web.TabControl", {
 		alignment: { init: "top", check: "String", apply: "_applyAlignment", themeable: true },
 
 		/**
-		 * SelectedIndex property.
+		 * SelectedTab property.
 		 *
 		 * Property defined with the setter/getter methods.
 		 */
-		// selectedIndex: { init: -1, check: "Integer", apply: "_applySelectedIndex", event: "changeSelectedIndex" },
+		// selectedTab: { init: null, check: "wisej.web.tabcontrol.TabPage", apply: "_applySelectedTab", event: "changeSelectedTab" },
 
 		/**
 		 * Orientation property.
@@ -113,7 +120,17 @@ qx.Class.define("wisej.web.TabControl", {
 		/**
 		 * Allows the use to change the position of the tab buttons by dragging them (chrome style).
 		 */
-		movableTabs: { init: false, check: "Boolean", apply: "_applyMovableTabs" }
+		movableTabs: { init: false, check: "Boolean", apply: "_applyMovableTabs" },
+
+		/**
+		 * Shows a the tab pages visibility menu.
+		 */
+		showVisibilityMenu: { init: false, check: "Boolean", apply: "_applyShowVisibilityMenu" },
+
+		/**
+		 * Determines the number of pixels to scroll the tab buttons.
+		 */
+		scrollStep: { init: 15, check: "PositiveInteger", apply: "_applyScrollStep" }
 
 	},
 
@@ -125,7 +142,9 @@ qx.Class.define("wisej.web.TabControl", {
 			borderSolid: true,
 			borderDashed: true,
 			borderDotted: true,
-			borderDouble: true
+			borderDouble: true,
+			vertical: true,
+			horizontal: true
 		},
 
 		// suspends sending some events back to the server.
@@ -372,29 +391,26 @@ qx.Class.define("wisej.web.TabControl", {
 		 * Gets/Sets the selectedIndex property indicating
 		 * the index of the currently selected tab page.
 		 */
-		getSelectedIndex: function () {
+		getSelectedTab: function () {
 
-			return this.__selectedIndex;
+			return this.__selectedTab;
 		},
-		setSelectedIndex: function (value) {
+		setSelectedTab: function (value) {
 
-			this.__selectedIndex = value;
+			var tab = this._transformComponent(value);
+			this.__selectedTab = tab;
 
-			if (value == -1) {
+			if (tab == null) {
 				this.resetSelection();
 			}
 			else {
-
-				var index = value;
-				var pages = this.getChildren();
-				if (index < pages.length) {
-					this.setSelection([pages[index]]);
-					this.fireDataEvent("changeSelectedIndex", index);
-				}
+				this.setSelection([tab]);
+				this.fireDataEvent("changeSelectedTab", tab);
 			}
 		},
-		/** keeps the currently selected index. */
-		__selectedIndex: -1,
+
+		/** Reference to the currently selected tab. */
+		__selectedTab: null,
 
 		/**
 		 * Applies the alignment property.
@@ -507,6 +523,23 @@ qx.Class.define("wisej.web.TabControl", {
 				pages[i].getButton().setBlockToolTip(block);
 		},
 
+		/**
+		 * Applies the showVisibilityMenu property.
+		 */
+		_applyShowVisibilityMenu: function (value, old) {
+
+			this.getChildControl("bar").setShowVisibilityMenu(value);
+		},
+
+		/**
+		 * Applies the scrollStep property.
+		 */
+		_applyScrollStep: function (value, old) {
+
+			this.getChildControl("bar").setScrollStep(value);
+
+		},
+
 		syncWidget: function (jobs) {
 
 			if (!jobs)
@@ -536,12 +569,23 @@ qx.Class.define("wisej.web.TabControl", {
 
 			this.base(arguments, page);
 
+			var pane = this.getChildControl("pane");
+			pane.isSelected(page) ? page.show() : page.hide();
+
 			this.__applyDisplayToPage(page, this.getDisplay());
 			page._setChildAppearance(this);
 			page._updateIconSize(this.getIconSize());
 			page._setOrientation(this._getEffectiveOrientation());
 			page.getButton().setBlockToolTip(!this.getShowToolTips());
 			this._updateTabButtonSize(page.getButton());
+
+			this.getChildControl("bar").resetVisibilityMenu();
+
+			if (this.getChildren().length == 1) {
+				this.__suspendEvents = true;
+				this.setSelection([page]);
+				this.__suspendEvents = false;
+			}
 		},
 
 		// overridden to propagate the orientation.
@@ -549,12 +593,23 @@ qx.Class.define("wisej.web.TabControl", {
 
 			this.base(arguments, page, index);
 
+			var pane = this.getChildControl("pane");
+			pane.isSelected(page) ? page.show() : page.hide();
+
 			this.__applyDisplayToPage(page, this.getDisplay());
 			page._setChildAppearance(this);
 			page._updateIconSize(this.getIconSize());
 			page._setOrientation(this._getEffectiveOrientation());
 			page.getButton().setBlockToolTip(!this.getShowToolTips());
 			this._updateTabButtonSize(page.getButton());
+
+			this.getChildControl("bar").resetVisibilityMenu();
+
+			if (this.getChildren().length == 1) {
+				this.__suspendEvents = true;
+				this.setSelection([page]);
+				this.__suspendEvents = false;
+			}
 		},
 
 		// overridden to suppress "beforeChange".
@@ -564,6 +619,7 @@ qx.Class.define("wisej.web.TabControl", {
 			this.base(arguments, page);
 			this.__suspendEvents = false;
 
+			this.getChildControl("bar").resetVisibilityMenu();
 		},
 
 		/**
@@ -590,6 +646,20 @@ qx.Class.define("wisej.web.TabControl", {
 			}
 		},
 
+		/**
+		 * Event listener for the "changeTabVisibility" event.
+		 * Triggered when the user uses the visibility menu to hide or show a tab page.
+		 */
+		_onChangeTabVisibility: function (e) {
+
+			var data = e.getData();
+			var page = this.getChildren()[data.index];
+			if (page) {
+				page.setHidden(!data.visible);
+				this.fireDataEvent(data.visible ? "showTab" : "hideTab", data.index);
+			}
+		},
+
 		// overridden to prevent the automatic
 		// change of the active tab.
 		//
@@ -606,9 +676,9 @@ qx.Class.define("wisej.web.TabControl", {
 			}
 
 			// find the new active page.
-			var button = e.getData()[0];
-			if (button) {
-				var newPage = button.getUserData("page");
+			var newButton = e.getData()[0];
+			if (newButton) {
+				var newPage = newButton.getUserData("page");
 				if (newPage) {
 
 					// if the selected page is different from the selected index, we restore the
@@ -619,9 +689,8 @@ qx.Class.define("wisej.web.TabControl", {
 					// go through and complete the selection. when the server selects the page index this
 					// selection occurs at what is effectively a second pass.
 
-					var newIndex = this.indexOf(newPage);
-					var oldIndex = this.getSelectedIndex();
-					if (newIndex != oldIndex) {
+					var oldPage = this.getSelectedTab();
+					if (newPage != oldPage) {
 
 						// if we have a "beforeChange", void the selection
 						// and fire the event, the listener is responsible for changing the
@@ -630,21 +699,22 @@ qx.Class.define("wisej.web.TabControl", {
 
 							// restore the previously selected page to let the
 							// server control whether the page should change.
-							var pages = this.getChildren();
-							if (oldIndex > -1 && oldIndex < pages.length) {
-
-								var oldPage = pages[oldIndex];
+							if (oldPage) {
+								this.__suspendEvents = true;
 								this.setSelection([oldPage]);
-
-								// fire the beforeChange event
-								this.fireDataEvent("beforeChange", newPage);
-								return;
+								this.__suspendEvents = false;
 							}
+
+							// fire the beforeChange event
+							this.fireDataEvent("beforeChange", newPage);
+							return;
 						}
 					}
 				}
 
 				this._updateFocusedButton();
+				if (oldPage) oldPage._updateButtonLayout();
+				if (newPage) newPage._updateButtonLayout();
 			}
 
 			this.base(arguments, e);
@@ -656,10 +726,10 @@ qx.Class.define("wisej.web.TabControl", {
 			this.__suspendEvents = true;
 			try {
 
-				var selected = this.getSelectedIndex() === oldIndex;
-
 				var pages = this.getChildren();
 				var pageToMove = pages[oldIndex];
+				var selected = this.isSelected(pageToMove);
+
 				this.addAt(pageToMove, newIndex);
 
 				qx.ui.core.queue.Layout.flush();
@@ -680,32 +750,18 @@ qx.Class.define("wisej.web.TabControl", {
 				this.__suspendEvents = false;
 			}
 
+			this.getChildControl("bar").resetVisibilityMenu();
 		},
 
 		// overridden
 		_onPageClose: function (e) {
 
 			// don't call the base, the tabPage
-			// will be close only if the server code doesn't cancel the event.
+			// will be closed only if the server code doesn't cancel the event.
 			// this.base(arguments, e);
 
 			var page = e.getTarget();
 			this.fireDataEvent("close", page);
-		},
-
-		// change the selected tab after the initial child controls (pages) have been added.
-		__initSelectedIndex: function (e) {
-
-			var pages = this.getChildren();
-			var index = this.getSelectedIndex();
-			if (index > -1 && index < pages.length) {
-
-				var current = this.getSelection()[0];
-				if (current != pages[index]) {
-					current = pages[index];
-					this.setSelection([current]);
-				}
-			}
 		},
 
 		// overridden to update the page metrics on the server.
@@ -723,8 +779,12 @@ qx.Class.define("wisej.web.TabControl", {
 
 			switch (id) {
 				case "bar":
-					control = this.base(arguments, id, hash);
+					control = new wisej.web.tabcontrol.SlideBar();
+					control.setZIndex(10);
+					control.setRtlLayout(true);
 					control.setKeepActive(true);
+					control.addListener("changeTabVisibility", this._onChangeTabVisibility, this);
+					this._add(control);
 					break;
 			}
 
@@ -810,10 +870,6 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		// hook the resize event to inform the server of the tab button size. 
 		tabButton.addListenerOnce("resize", this.__onButtonResize, this);
 
-		// detect changes to the childIndex property to rearrange the
-		// tabs in the tab strip.
-		this.addListener("changeChildIndex", this.__onChangeChildIndex);
-
 		// update the scroll position properties.
 		this.__scroller = this.getChildControl("pane");
 	},
@@ -882,6 +938,13 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 * Hidden property.
 		 */
 		hidden: { init: false, check: "Boolean", apply: "_applyHidden" },
+
+		/**
+		 * ShowInVisibilityMenu property.
+		 *
+		 * Determines whether the tab is listed in the visibility drop down menu.
+		 */
+		showInVisibilityMenu: { init: true, check: "Boolean", apply: "_applyShowInVisibilityMenu" },
 
 		/**
 		 * ToolTipText property.
@@ -999,6 +1062,18 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 				this.getButton().show();
 			}
+		},
+
+		/**
+		 * Applies the ShowInVisibilityMenu property.
+		 */
+		_applyShowInVisibilityMenu: function (value, old) {
+
+			var tabControl = this.getTabControl();
+			if (!tabControl)
+				return;
+
+			tabControl.getChildControl("bar").resetVisibilityMenu();
 		},
 
 		// overridden
@@ -1161,26 +1236,6 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 			this._updateButtonLayout();
 		},
 
-		// update the tab position when the child index changes.
-		__onChangeChildIndex: function (e) {
-
-			var tabControl = this.getTabControl();
-			if (!tabControl)
-				return;
-
-			var newIndex = e.getData();
-			var oldIndex = e.getOldData();
-
-			// moving a selected tab?
-			var selected = tabControl.getSelectedIndex() === oldIndex;
-
-			// preserve the selection.
-			if (selected) {
-				this.setVisible(true);
-				tabControl.setSelectedIndex(newIndex);
-			}
-		},
-
 		// rotates the tab button and updates the layout
 		// according to the bar position and the orientation.
 		_updateButtonLayout: function () {
@@ -1197,6 +1252,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			var icon = button.getChildControl("icon");
 			var label = button.getChildControl("label");
+			var menu = button.getChildControl("menu", true);
 			var close = button.getChildControl("close-button");
 
 			// rearrange the close button or the icon.
@@ -1206,59 +1262,77 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 				case "vertical":
 
+					var labelRow = 1;
+
 					layout.setColumnFlex(0, 1);
 					layout.setColumnFlex(1, 0);
 					layout.setColumnFlex(2, 0);
 					layout.setRowFlex(0, 0);
 					layout.setRowFlex(1, 0);
 					layout.setRowFlex(2, 0);
+					layout.setRowFlex(3, 0);
 
 					if (barPosition === "right" || barPosition === "bottom") {
 
-						icon.setLayoutProperties({ row: 0, column: 0 });
-						label.setLayoutProperties({ row: 1, column: 0 });
-						close.setLayoutProperties({ row: 2, column: 0 });
+						icon.setLayoutProperties({ row: labelRow - 1, column: 0 });
+						label.setLayoutProperties({ row: labelRow, column: 0 });
+						close.setLayoutProperties({ row: labelRow + 1, column: 0 });
+						if (menu) menu.setLayoutProperties({ row: labelRow - 2, column: 0 });
 
 						// flex either the label or the icon.
-						layout.setRowFlex(label.isVisible() ? 1 : 0, 1);
+						layout.setRowFlex(label.isVisible() ? labelRow : labelRow - 1, 1);
 					}
 					else {
 
-						close.setLayoutProperties({ row: 0, column: 0 });
-						label.setLayoutProperties({ row: 1, column: 0 });
-						icon.setLayoutProperties({ row: 2, column: 0 });
+						close.setLayoutProperties({ row: labelRow - 1, column: 0 });
+						label.setLayoutProperties({ row: labelRow, column: 0 });
+						icon.setLayoutProperties({ row: labelRow + 1, column: 0 });
+						if (menu) menu.setLayoutProperties({ row: labelRow + 2, column: 0 });
 
 						// flex either the label or the icon.
-						layout.setRowFlex(label.isVisible() ? 1 : 2, 1);
+						layout.setRowFlex(label.isVisible() ? labelRow : labelRow + 1, 1);
 					}
+
+					button.addState("vertical");
+					button.removeState("horizontal");
 
 					break;
 
 				case "horizontal":
 
+					var labelCol = 2;
+
 					layout.setColumnFlex(0, 0);
 					layout.setColumnFlex(1, 0);
 					layout.setColumnFlex(2, 0);
+					layout.setColumnFlex(3, 0);
 					layout.setRowFlex(0, 1);
 					layout.setRowFlex(1, 0);
 					layout.setRowFlex(2, 0);
 
-					icon.setLayoutProperties({ row: 0, column: 0 });
-					label.setLayoutProperties({ row: 0, column: 1 });
-					close.setLayoutProperties({ row: 0, column: 2 });
+					icon.setLayoutProperties({ row: 0, column: labelCol - 1 });
+					label.setLayoutProperties({ row: 0, column: labelCol });
+					close.setLayoutProperties({ row: 0, column: labelCol + 1 });
+					if (menu) menu.setLayoutProperties({ row: 0, column: labelCol - 2 });
 
 					// flex either the label or the icon.
-					layout.setColumnFlex(label.isVisible() ? 1 : 0, 1);
+					layout.setColumnFlex(label.isVisible() ? labelCol : labelCol - 1, 1);
+
+					button.addState("horizontal");
+					button.removeState("vertical");
 
 					break;
 			}
 
+			button.syncAppearance();
+			label.syncAppearance();
 			label.resetWidth();
 			label.resetHeight();
 
 			this.__rotateWidget(icon, barPosition, orientation);
 			this.__rotateWidget(label, barPosition, orientation);
 			this.__rotateWidget(close, barPosition, orientation);
+			if (menu) this.__rotateWidget(menu, barPosition, orientation);
 		},
 
 		// rotates the inner tab-button widget 90deg 
@@ -1630,11 +1704,36 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 
 		},
 
+		/**
+		  * Event listener for the "execute" event.
+		  *
+		  * Sets the property "checked" to true.
+		  *
+		  * @param e {qx.event.type.Event} execute event
+		  */
+		_onExecute: function (e) {
+			this.setValue(true);
+		},
+
 		// overridden
 		_createChildControlImpl: function (id, hash) {
 			var control;
 
 			switch (id) {
+
+				case "menu":
+					control = new qx.ui.basic.Image().set({
+						focusable: false,
+						keepActive: true,
+						alignY: "middle",
+						alignX: "center",
+						visibility: "excluded",
+						source: "menu-overflow",
+					});
+					this._add(control, { row: 0, column: 0 });
+					control.addListener("pointerdown", this._onMenuPointerDown, this);
+					break;
+
 				case "label":
 					control = this.base(arguments, id, hash);
 					control.set({
@@ -1645,6 +1744,19 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 			}
 
 			return control || this.base(arguments, id);
+		},
+
+		// Handle clicks on the menu button in the tab page.
+		_onMenuPointerDown: function (e) {
+
+			var page = this.getUserData("page");
+			if (page) {
+				var tabControl = page.getTabControl();
+
+				if (tabControl) {
+					tabControl.fireDataEvent("showPageMenu", page);
+				}
+			}
 		},
 
 		// ======================================================
@@ -1823,3 +1935,167 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 		// ======================================================
 	}
 });
+
+
+/**
+ * wisej.web.tabcontrol.SlideBar
+ *
+ * Extends the standard qx.ui.container.SlideBar to add the visibility menu
+ * button after the button-forward widget used to scroll the tabs that are outside the
+ * viewport.
+ */
+qx.Class.define("wisej.web.tabcontrol.SlideBar", {
+
+	extend: qx.ui.container.SlideBar,
+
+	construct: function (orientation) {
+
+		this.base(arguments, orientation);
+
+	},
+
+	events: {
+
+		/** 
+		 * Fired when the user checks or unchecks a tab in the visibility menu.
+		 *
+		 * The data is a map: {index, visible}.
+		 */
+		"changeTabVisibility": "qx.event.type.Data"
+	},
+
+	properties: {
+
+		/**
+		 * Determines whether the viability menu button is visible.
+		 */
+		showVisibilityMenu: { init: false, check: "Boolean", apply: "_applyShowVisibilityMenu" },
+
+	},
+
+	members: {
+
+		/**
+		 * Removes the visibility menu items. They will be recreated on first use.
+		 */
+		resetVisibilityMenu: function () {
+
+			var visibility = this.getChildControl("visibility", true);
+			if (visibility)
+			{
+				var menu = visibility.getMenu();
+				if (menu) {
+					var entries = menu.getChildren();
+					for (var i = 0, l = entries.length; i < l; i++) {
+						entries[0].destroy();
+					}
+				}
+			}
+		},
+
+		/**
+		 * Applies the showVisibilityMenu property
+		 */
+		_applyShowVisibilityMenu: function (value, old) {
+
+			value
+				? this._showChildControl("visibility")
+				: this._excludeChildControl("visibility");
+		},
+
+		// Handles the "beforOpen" event from the visibility menu button
+		// to populate the drop down menu on first use.
+		_onBeforeOpenVisibilityMenu: function (e) {
+
+			var menu = this.getChildControl("visibility").getMenu();
+			var children = menu.getChildren();
+			if (!children.length) {
+
+				var buttons = this.getChildren(), button, page;
+				for (var i = 0; i < buttons.length; i++) {
+
+					button = buttons[i];
+
+					page = button.getUserData("page");
+					if (!page || !page.getShowInVisibilityMenu())
+						continue;
+
+					var menuItem = new qx.ui.menu.CheckBox().set({
+						label: button.getLabel(),
+						value: button.isVisible()
+					});
+					menuItem.setUserData("index", i);
+					menuItem.addState("unchecked")
+					menuItem.setAppearance("menu/item");
+					menuItem.getChildControl("label").setRich(true);
+					menuItem.addListener("changeValue", this._onVisibilityMenuItemChangeValue, this);
+					menu.add(menuItem);
+				}
+			}
+		},
+
+		// Shows or hides the corresponding TabPage.
+		_onVisibilityMenuItemChangeValue: function (e) {
+
+			var index = e.getTarget().getUserData("index");
+			this.fireDataEvent("changeTabVisibility", { index: index, visible: e.getData() });
+		},
+
+		// overridden
+		_createChildControlImpl: function (id, hash) {
+			var control;
+
+			switch (id) {
+
+				case "visibility":
+					control = new wisej.web.tabcontrol.VisibilityButton();
+					control.setShow("icon");
+					control.setIcon(control.getIcon() || "icon-down");
+					control.setFocusable(false);
+					control.addListener("beforeOpen", this._onBeforeOpenVisibilityMenu, this);
+					this._addAt(control, 3);
+					break;
+			}
+
+			return control || this.base(arguments, id);
+		},
+	}
+});
+
+
+/**
+ * wisej.web.tabcontrol.VisibilityButton
+ *
+ * The visibility menu button to the right of the slide bar.
+ */
+qx.Class.define("wisej.web.tabcontrol.VisibilityButton", {
+
+	extend: qx.ui.form.MenuButton,
+
+	construct: function () {
+		this.base(arguments);
+		this.setMenu(new qx.ui.menu.Menu());
+	},
+
+	events: {
+
+		/** Fired before showing the drop down menu. */
+		"beforeOpen": "qx.event.type.Event"
+	},
+
+	members: {
+
+		// overridden
+		open: function (selectFirst) {
+
+			// let listeners build the menu.
+			this.fireEvent("beforeOpen");
+
+			if (this.getMenu().getChildren().length === 0)
+				return;
+
+			this.base(arguments, selectFirst);
+		}
+	}
+});
+

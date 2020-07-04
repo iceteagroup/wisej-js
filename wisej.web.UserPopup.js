@@ -44,7 +44,24 @@ qx.Class.define("wisej.web.UserPopup", {
 
 			// listen to changes to the allowMove property to shift the property to the container popup.
 			this.addListener("changeAllowMove", this._onChangeAllowMove);
+
+			// fires the "enter" and "leave" events when a child of the popup gains or loses the focus.
+			this.addListener("focusin", this._onFocusIn);
+			this.addListener("focusout", this._onFocusOut);
 		}
+	},
+
+	events: {
+
+		/**
+		 * Fired when a child widget gains the focus from a widget outside of this panel.
+		 */
+		"enter": "qx.event.type.Event",
+
+		/**
+		 * Fired when a child widget loses the focus to a widget outside of this panel.
+		 */
+		"leave": "qx.event.type.Event"
 	},
 
 	properties: {
@@ -144,6 +161,13 @@ qx.Class.define("wisej.web.UserPopup", {
 		},
 
 		/**
+		 * Returns the widget to animate for the wisej.web.extender.Animation component.
+		 */
+		getAnimationTarget: function () {
+			this.__popup;
+		},
+
+		/**
 		 * Process changes to the resizableEdges to apply the
 		 * same value to the wrapper popup.
 		 */
@@ -166,6 +190,36 @@ qx.Class.define("wisej.web.UserPopup", {
 		},
 
 		/**
+		 * Handles the "focusin" event to fire the "enter" event when the
+		 * focus is gained from an widget outside of this panel.
+		 */
+		_onFocusIn: function (e) {
+
+			var related = e.getRelatedTarget();
+			if (!qx.ui.core.Widget.contains(this, related)) {
+				if (!this.hasState("active")) {
+					this.addState("active");
+					this.fireEvent("enter");
+				}
+			}
+		},
+
+		/**
+		* Handles the "focusot" event to fire the "leave" event when the
+		* focus is lost to an widget outside of this panel.
+		*/
+		_onFocusOut: function (e) {
+
+			var related = e.getRelatedTarget();
+			if (!qx.ui.core.Widget.contains(this, related)) {
+				if (this.hasState("active")) {
+					this.removeState("active");
+					this.fireEvent("leave");
+				}
+			}
+		},
+
+		/**
 		 * Process changes to the allowMove property to apply the
 		 * same value to the wrapper popup.
 		 */
@@ -180,7 +234,7 @@ qx.Class.define("wisej.web.UserPopup", {
 		__updatePopupAllowMove: function (popup) {
 
 			popup.setAllowMove(this.getAllowMove());
-			popup.setKeepOnScreen(this.getKeepOnScreen());
+			popup.setKeepInBounds(this.getKeepInBounds());
 		},
 
 		/**
@@ -225,7 +279,7 @@ qx.Class.define("wisej.web.UserPopup", {
 		// remove from the focus handler.
 		qx.ui.core.FocusHandler.getInstance().removeRoot(this);
 
-	},
+	}
 
 });
 
@@ -266,9 +320,12 @@ qx.Class.define("wisej.web.userPopup.Popup", {
 		// overridden.
 		canAutoHide: function (target) {
 
-			// don't auto hide when the target of the pointer event is the opener.
+			// don't auto hide when the target of the pointer event is the opener
+			// or a widget inside the user popup.
 			var opener = this.getUserData("opener");
-			if (opener && (opener == target || qx.ui.core.Widget.contains(opener, target))) {
+			if (opener && opener == target
+				|| wisej.utils.Widget.contains(this, target)) {
+
 				return false;
 			}
 
@@ -287,11 +344,6 @@ qx.Class.define("wisej.web.userPopup.Popup", {
 
 			if (value && this.__moveHandle == null)
 				this._activateMoveHandle(this);
-
-			// allow the child widget to be dragged on android touch devices.
-			var el = this.getContentElement();
-			if (value)
-				el.setStyles({ "touch-action": "none", "-ms-touch-action": "none" });
-		},
+		}
 	}
 });

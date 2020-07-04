@@ -53,6 +53,20 @@ qx.Class.define("wisej.web.GroupBox", {
 		label: { init: "", check: "String", apply: "_applyLabel" },
 
 		/**
+		 * labelBackgroundColor property.
+		 * 
+		 * Sets the background color of the label.
+		 */
+		labelBackgroundColor: { init: null, check: "Color", apply: "_applylabelBackgroundColor", themeable: true },
+
+		/**
+		 * labelTextColor property.
+		 * 
+		 * Sets the text color of the label.
+		 */
+		labelTextColor: { init: null, check: "Color", apply: "_applylabelTextColor", themeable: true },
+
+		/**
 		 * Collapsed property.
 		 *
 		 * Collapses or expands the groupbox. When the groupbox is collapsed only the label is visible.
@@ -76,9 +90,6 @@ qx.Class.define("wisej.web.GroupBox", {
 		this.setPadding(0, 0, 0, 0);
 		this.setBackgroundColor(null);
 		this.setLayout(new qx.ui.layout.Canvas());
-
-		this.addListenerOnce("changeParent", this.syncWidget);
-		this.addListener("changeParent", this.__onParentChanged);
 	},
 
 	members: {
@@ -95,6 +106,12 @@ qx.Class.define("wisej.web.GroupBox", {
 		executeMnemonic: function () {
 
 			if (!this.isEnabled() || !this.isVisible())
+				return false;
+
+			// skip if it already contains the focus.
+			var handler = qx.ui.core.FocusHandler.getInstance();
+			var focused = handler.getFocusedWidget();
+			if (focused && qx.ui.core.Widget.contains(this, focused))
 				return false;
 
 			// find the first focusable child.
@@ -203,16 +220,10 @@ qx.Class.define("wisej.web.GroupBox", {
 
 			this.base(arguments, value, old);
 
-			// don't override the legend's theme background color in case the
-			// theme's maker  decided to force a color on the legend.
-			var legend = this.getChildControl("legend");
-			if (!legend.$$theme_backgroundColor)
-				legend.setBackgroundColor(value);
+			if (value && value.toLowerCase() === "transparent")
+				value = null;
 
-			// if the background color is being reset (null), schedule
-			// the update of the background of the legend to inherit from the parent lineage.
-			if (value == null)
-				qx.ui.core.queue.Widget.add(this);
+			this.getChildControl("legend").setBackgroundColor(value);
 		},
 
 		/**
@@ -222,6 +233,40 @@ qx.Class.define("wisej.web.GroupBox", {
 
 			this.setLegend(value);
 
+		},
+
+		/**
+		 * Applies the labelBackgroundColor property.
+		 */
+		_applylabelBackgroundColor: function (value, old) {
+
+			this.getChildControl("legend").setBackgroundColor(value);
+		},
+
+		/**
+		 * Applies the labelTextColor property.
+		 */
+		_applylabelTextColor: function (value, old) {
+
+			this.getChildControl("legend").setTextColor(value);
+		},
+
+		/**
+		  * Sets the label of the legend sub widget if the given string is
+		  * valid. Otherwise the legend sub widget get not displayed.
+		  *
+		  * @param legend {String} new label of the legend sub widget
+		  */
+		setLegend: function (legend) {
+			var control = this.getChildControl("legend");
+
+			if (legend) {
+				control.setLabel(legend);
+				control.show();
+			}
+			else {
+				control.exclude();
+			}
 		},
 
 		/**
@@ -296,7 +341,8 @@ qx.Class.define("wisej.web.GroupBox", {
 			var frame = this.getChildControl("frame");
 
 			// get the current height of the legend.
-			var height = legend.getBounds().height;
+			var bounds = legend.getBounds();
+			var height = bounds ? bounds.height : 0;
 
 			// position the frame to overlap the legend in the middle.
 			frame.setLayoutProperties({ "top": Math.round((height / 2)) });
@@ -337,8 +383,9 @@ qx.Class.define("wisej.web.GroupBox", {
 						value: true,
 						focusable: false,
 						show: this.getShowCheckBox() ? "both" : "label"
-					})
-					control.addListenerOnce("resize", this._repositionFrame, this);
+					});
+					control.addListener("resize", this._repositionFrame, this);
+					control.addListener("changeVisibility", this._repositionFrame, this);
 					this._add(control);
 					break;
 
@@ -355,81 +402,6 @@ qx.Class.define("wisej.web.GroupBox", {
 			}
 
 			return control || this.base(arguments, id);
-		},
-
-		/**
-		 * Listen to all the parents for a background color change.
-		 * It's used to detect when the to set the background color of the legend
-		 * to interrupt the border line.
-		 */
-		__onParentChanged: function (e) {
-
-			var data = e.getData();
-
-			// detach from the old parent lineage.
-			if (data.oldParent) {
-				for (var parent = data.oldParent; parent != null; parent = parent.getLayoutParent()) {
-					parent.removeListener("changeBackgroundColor", this.__onParentBackgroundColorChanged, this);
-				}
-			}
-
-			// attach from the new parent lineage.
-			if (data.newParent) {
-				for (var parent = data.newParent; parent != null; parent = parent.getLayoutParent()) {
-					parent.addListener("changeBackgroundColor", this.__onParentBackgroundColorChanged, this);
-				}
-			}
-
-			// trigger the background color update.
-			qx.ui.core.queue.Widget.add(this);
-		},
-
-		__onParentBackgroundColorChanged: function (e) {
-
-			// we update the color only once, otherwise in the case of
-			// multiple parents we get several notifications.
-			qx.ui.core.queue.Widget.add(this);
-		},
-
-		syncWidget: function () {
-
-			// update the background color only if the groupbox doesn't have its own.
-			if (this.getBackgroundColor() != null)
-				return;
-
-			var color = null;
-			var legend = this.getChildControl("legend");
-
-			// don't override the legend's theme background color in case the
-			// theme's maker  decided to force a color on the legend.
-			if (legend.$$theme_backgroundColor)
-				return;
-
-			// crawl up the parent lineage to the first parent that specifies a background color.
-			for (var parent = this.getLayoutParent(); parent != null; parent = parent.getLayoutParent()) {
-
-				color = parent.getBackgroundColor();
-				if (color != null)
-					break;
-			}
-
-			if (color == null) {
-
-				// if none of the parents specify a background color, try with the pane of 
-				// the container or fallback to "window".
-
-				color = "window";
-				var container = this.getTopLevelContainer();
-				if (container) {
-
-					var pane = container.getChildControl("pane", true);
-					if (pane)
-						color = pane.getBackgroundColor();
-				}
-			}
-
-			if (color)
-				legend.setBackgroundColor(color);
 		}
 
 	}

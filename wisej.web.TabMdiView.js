@@ -35,6 +35,9 @@ qx.Class.define("wisej.web.TabMdiView", {
 		this.base(arguments);
 
 		this.initShowThumbnails();
+
+		// listen to clicks on the page button menu when the child mdi shows its menu in the tab.
+		this.addListener("showPageMenu", this._onShowPageMenu, this);
 	},
 
 	properties: {
@@ -47,6 +50,13 @@ qx.Class.define("wisej.web.TabMdiView", {
 		 * Shows or hides the thumbnail preview.
 		 */
 		showThumbnails: { init: true, check: "Boolean", apply: "_applyShowThumbnails" },
+
+		/**
+		 * ShowMdiChildMenu.
+		 *
+		 * Shows the active mdi child's menu on the tab button.
+		 */
+		showMdiChildMenu: { init: false, check: "Boolean", apply: "_applyShowMdiChildMenu" },
 	},
 
 	members: {
@@ -125,7 +135,7 @@ qx.Class.define("wisej.web.TabMdiView", {
 		},
 
 		/**
-		 * Applies the showThumbnails property.
+		 * Applies the ShowThumbnails property.
 		 */
 		_applyShowThumbnails: function (value, old) {
 
@@ -135,6 +145,69 @@ qx.Class.define("wisej.web.TabMdiView", {
 			}
 			else if (this.getChildren().length > 0) {
 				this.getChildControl("bar").setShowPreviewButton(value);
+			}
+		},
+
+		/**
+		 * Applies the ShowMdiChildMenu property.
+		 */
+		_applyShowMdiChildMenu: function (value, old) {
+
+			if (wisej.web.DesignMode)
+				return;
+
+			if (old && value != old) {
+				this.__updateTabMenuButton();
+				this.removeListener("changeSelectedTab", this.__updateTabMenuButton);
+			}
+
+			if (value && value != old) {
+				this.__updateTabMenuButton();
+				this.addListener("changeSelectedTab", this.__updateTabMenuButton);
+			}
+		},
+
+		// Handles the changeSelectiom event to show/hide the
+		// new menu button using the MdiChild menu items.
+		__updateTabMenuButton: function () {
+
+			var pages = this.getChildren();
+			var current = this.getSelection()[0];
+			for (var i = 0; i < pages.length; i++) {
+				var form = pages[i].getChildren()[0];
+				if (form instanceof qx.ui.window.Window) {
+
+					var menu = form.getMainMenu();
+					var button = pages[i].getButton();
+					var menuButton = button.getChildControl("menu");
+
+					if (menu) {
+						menu.exclude();
+						menu.setOpener(button);
+						menu.setUserData("container", form);
+					}
+
+					if (current === pages[i] && menu && menu.hasChildren()){
+						menuButton.show();
+					}
+					else {
+						menuButton.exclude();
+					}
+				}
+			}
+		},
+
+		// Handles clicks on the tab button menu icon.
+		_onShowPageMenu: function (e) {
+
+			var page = e.getData();
+			var form = page.getChildren()[0];
+			if (form instanceof qx.ui.window.Window)
+			{
+				var menu = form.getMainMenu();
+				if (menu) {
+					menu.open();
+				}
 			}
 		},
 
@@ -252,7 +325,7 @@ qx.Class.define("wisej.web.TabMdiView", {
  */
 qx.Class.define("wisej.web.tabmdiview.SlideBar", {
 
-	extend: qx.ui.container.SlideBar,
+	extend: wisej.web.tabcontrol.SlideBar,
 
 	construct: function (orientation) {
 

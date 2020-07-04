@@ -74,6 +74,20 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 		blinkAnimation: { init: "blink", check: "String" },
 
 		/**
+		 * Alignment property.
+		 *
+		 * Gets or sets the default alignment of the error icon.
+		 */
+		alignment: { init: "middleRight", check: ["topLeft", "topRight", "middleLeft", "middleRight", "bottomLeft", "bottomRight"] },
+
+		/**
+		 * Distance property.
+		 *
+		 * Gets or sets the default distance between the error icon and the widget.
+		 */
+		distance: { init: 0, check: "Integer" },
+
+		/**
 		 * Errors collection.
 		 *
 		 * List of component IDs with the corresponding error data.
@@ -91,7 +105,7 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 		 */
 		_applyBlinkStyle: function (value, old) {
 
-			if (value == "alwaysBlink")
+			if (value === "alwaysBlink")
 				this.__startAnimation();
 		},
 
@@ -133,7 +147,7 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 			}
 
 			// start the blinker procedure, if blinkStyle is set to "blinkIfDifferentError"
-			// the animation will kick only if error._errorChanged is true.
+			// the animation will kick in only if error._errorChanged is true.
 			this.__startAnimation();
 		},
 
@@ -164,11 +178,16 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 				this.__errorWidgets[data.id] = error;
 			}
 
+			if (data.distance == null)
+				data.distance = this.getDistance();
+			if (data.alignment == null)
+				data.alignment = this.getAlignment();
+
 			// update the error widget.
 			error.set({
 				error: data.error,
 				distance: data.distance,
-				alignment: qx.lang.String.firstLow(data.alignment)
+				alignment: data.alignment
 			});
 		},
 
@@ -181,10 +200,13 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 			if (!wisej.web.Animation.isDefined(this.getBlinkAnimation()))
 				return;
 
+			if (this.getBlinkStyle() === "neverBlink")
+				return;
+
 			var errors = this.__errorWidgets;
 			if (errors != null) {
 
-				var blinkIfDifferent = this.getBlinkStyle() == "blinkIfDifferentError";
+				var blinkIfDifferent = (this.getBlinkStyle() === "blinkIfDifferentError");
 
 				for (var id in this.__errorWidgets) {
 
@@ -275,10 +297,10 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 		error: { init: null, check: "String", apply: "_applyError" },
 
 		// the icon alignment in relation to the component.
-		alignment: { init: "topRight", check: "String", apply: "_applyAlignment" },
+		alignment: { init: "middleRight", check: ["topLeft", "topRight", "middleLeft", "middleRight", "bottomLeft", "bottomRight"], apply: "_applyAlignment" },
 
 		// the distance between the icon and the component.
-		distance: { init: 0, check: "PositiveInteger", apply: "_applyDistance" },
+		distance: { init: 0, check: "Integer", apply: "_applyDistance" },
 
 		// invalidMessage implementation from IForm.
 		valid: { check: "Boolean", init: false },

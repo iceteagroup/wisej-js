@@ -123,9 +123,7 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 					// the row is not loaded yet.
 					return;
 
-				var rowRenderer = table.getDataRowRenderer();
 				var columnModel = table.getTableColumnModel();
-				var selectionModel = table.getSelectionModel();
 				var cellRenderer = columnModel.getDataCellRenderer(col);
 
 				// use the row and cell renderer to calculate the inset (borders) of the cell and the row
@@ -136,11 +134,8 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 					col: col,
 					table: table,
 					focusedCol: true,
-					columnModel: columnModel,
-					selected: selectionModel.isSelectedIndex(row),
-					focusedRow: this.__scroller.getFocusedRow() == row
+					columnModel: columnModel
 				};
-				var rowInsets = rowRenderer.getInsets(cellInfo);
 				var cellInsets = cellRenderer.getInsets(cellInfo);
 
 				// place the focus indicator widget.
@@ -163,9 +158,9 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 				// apply the insets to offset the rect. we need to consider that the rectangle to include
 				// is also affected by the row above and the cell to the left.
 				x += cellInsets.left;
-				y += cellInsets.top + rowInsets.top;
+				y += cellInsets.top;
 				w -= cellInsets.left + cellInsets.right;
-				h -= cellInsets.top + cellInsets.bottom + rowInsets.top + rowInsets.bottom;
+				h -= cellInsets.top + cellInsets.bottom;
 
 				this.setRow(row);
 				this.setColumn(col);

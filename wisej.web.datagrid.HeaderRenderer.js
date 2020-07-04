@@ -36,7 +36,6 @@ qx.Class.define("wisej.web.datagrid.HeaderRenderer", {
 			var columnHeader = cellInfo.table.getColumns()[cellInfo.col];
 			columnHeader.setIndex(cellInfo.col);
 			columnHeader.setHeaderWidget(widget);
-			widget.setUserData("columnHeader", columnHeader);
 
 			return widget;
 		},

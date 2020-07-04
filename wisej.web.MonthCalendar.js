@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -30,6 +32,8 @@ qx.Class.define("wisej.web.MonthCalendar", {
 		wisej.mixin.MWisejControl,
 		wisej.mixin.MBorderStyle
 	],
+
+	implement: [wisej.web.toolContainer.IToolPanelHost],
 
 	/**
 	 * Constructor.
@@ -507,9 +511,7 @@ qx.Class.define("wisej.web.MonthCalendar", {
 			this.getChildControl("today").setLayoutProperties({ row: r, column: 1, colSpan: size.width });
 
 			// layout the tools widget.
-			var tools = this.getChildControl("tools", true);
-			if (tools != null)
-				this.__updateToolsLayout(tools);
+			this.updateToolPanelLayout(this.getChildControl("tools", true));
 		},
 
 		__hideAllNavigation: function (calendar) {
@@ -621,29 +623,22 @@ qx.Class.define("wisej.web.MonthCalendar", {
 		 */
 		_applyTools: function (value, old) {
 
-			if (value == null)
-				return;
+			var tools = this.getChildControl("tools", true);
 
-			var toolsContainer = this.getChildControl("tools", true);
-
-			if (value.length == 0) {
-				if (toolsContainer)
-					toolsContainer.exclude();
-
+			if (value == null || value.length == 0) {
+				if (tools)
+					tools.exclude();
 				return;
 			}
 
-			if (!toolsContainer) {
-				toolsContainer = this.getChildControl("tools");
-				this._add(toolsContainer, { row: 0, column: 1 });
-			}
-
-			toolsContainer.show();
+			tools = this.getChildControl("tools");
+			tools.show();
 
 			var position = this.getToolsPosition();
+			wisej.web.ToolContainer.add(this, tools);
 			var vertical = position == "left" || position == "right";
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, position, "calendar");
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position, "calendar");
+			wisej.web.ToolContainer.install(this, tools, value, "left", { row: 0, column: 0 }, position, "calendar");
+			wisej.web.ToolContainer.install(this, tools, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position, "calendar");
 		},
 
 		/** 
@@ -651,18 +646,20 @@ qx.Class.define("wisej.web.MonthCalendar", {
 		 */
 		_applyToolsPosition: function (value, old) {
 
-			this.__updateToolsLayout(this.getChildControl("tools", true));
+			this.updateToolPanelLayout(this.getChildControl("tools", true));
 		},
 
 		/**
+		 * Implements: wisej.web.toolContainer.IToolPanelHost.updateToolPanelLayout
+		 *
 		 * Changes the layout of the tools container according to the value
 		 * of the toolsPosition property.
 		 *
-		 * @param tools {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
 		 */
-		__updateToolsLayout: function (tools) {
+		updateToolPanelLayout: function (toolPanel) {
 
-			if (tools) {
+			if (toolPanel) {
 
 				var rowCol = { row: 0, column: 1 };
 				var position = this.getToolsPosition();
@@ -676,17 +673,20 @@ qx.Class.define("wisej.web.MonthCalendar", {
 					case "top":
 						rowCol.row = 0;
 						rowCol.column = 1;
+						rowCol.rowSpan = 1;
 						rowCol.colSpan = calendarSize.width;
 						break;
 
 					case "left":
 						rowCol.row = 1;
 						rowCol.column = 0;
+						rowCol.colSpan = 1;
 						rowCol.rowSpan = calendarSize.height + 2;
 						break;
 
 					case "right":
 						rowCol.row = 1;
+						rowCol.colSpan = 1;
 						rowCol.column = calendarSize.width + 1;
 						rowCol.rowSpan = calendarSize.height + 2;
 						break;
@@ -694,17 +694,18 @@ qx.Class.define("wisej.web.MonthCalendar", {
 					case "bottom":
 						rowCol.row = calendarSize.height + 2;
 						rowCol.column = 1;
+						rowCol.rowSpan = 1;
 						rowCol.colSpan = calendarSize.width;
 						break;
 				}
 
-				tools.removeState("top");
-				tools.removeState("left");
-				tools.removeState("right");
-				tools.removeState("bottom");
-				tools.addState(position);
+				toolPanel.removeState("top");
+				toolPanel.removeState("left");
+				toolPanel.removeState("right");
+				toolPanel.removeState("bottom");
+				toolPanel.addState(position);
 
-				tools.setLayoutProperties(rowCol);
+				toolPanel.setLayoutProperties(rowCol);
 
 				// change the position of the tool containers.
 				if (this.__leftToolsContainer) {
@@ -1003,8 +1004,10 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		 */
 		_applyFirstDayOfWeek: function (value, old) {
 
-			if (value != old)
+			if (value != old) {
+				this.setWeekStart(value);
 				this._updateDatePane();
+			}
 		},
 
 		/**
@@ -1021,68 +1024,53 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		 */
 		_updateDatePane: function () {
 
-			// this is kind of a hack: we temporarily override the qx.locale.Date.getWeekStart to
-			// return the firstDayOfWeek set for this control.
-			var firstDayOfWeek = this.getFirstDayOfWeek();
-			var getWeekStartOriginal = qx.locale.Date.getWeekStart;
-			if (firstDayOfWeek > -1)
-				qx.locale.Date.getWeekStart = function () { return firstDayOfWeek; };
+			// let the base implementation update the date panel.
+			this.base(arguments);
 
-			try {
+			if (this.calendar == null)
+				return;
 
-				// let the base implementation update the date panel.
-				this.base(arguments);
+			// go through the day labels and:
+			//
+			// - add/remove the bolded state 
+			// - hide/show other-month days.
 
-				if (this.calendar == null)
-					return;
+			var showOtherMonth = this.getShowOtherMonth();
+			var showNextMonth = (showOtherMonth == "next" || showOtherMonth == "both");
+			var showPreviousMonth = (showOtherMonth == "previous" || showOtherMonth == "both");
 
-				// go through the day labels and:
-				//
-				// - add/remove the bolded state 
-				// - hide/show other-month days.
+			for (var w = 0; w < 6; w++) {
 
-				var showOtherMonth = this.getShowOtherMonth();
-				var showNextMonth = (showOtherMonth == "next" || showOtherMonth == "both");
-				var showPreviousMonth = (showOtherMonth == "previous" || showOtherMonth == "both");
+				for (var i = 0; i < 7; i++) {
 
-				for (var w = 0; w < 6; w++) {
+					var dayIndex = w * 7 + i;
+					var dayLabel = this.__dayLabelArr[dayIndex];
+					var date = new Date(dayLabel.dateTime);
 
-					for (var i = 0; i < 7; i++) {
+					if (this.calendar.isBoldedDate(date))
+						dayLabel.addState("bolded");
+					else
+						dayLabel.removeState("bolded");
 
-						var dayIndex = w * 7 + i;
-						var dayLabel = this.__dayLabelArr[dayIndex];
-						var date = new Date(dayLabel.dateTime);
+					// go to the next day.
+					date.setDate(date.getDate() + 1);
 
-						if (this.calendar.isBoldedDate(date))
-							dayLabel.addState("bolded");
-						else
-							dayLabel.removeState("bolded");
+					// hide show previous/next month.
+					if (dayLabel.hasState("otherMonth")) {
 
-						// go to the next day.
-						date.setDate(date.getDate() + 1);
-
-						// hide show previous/next month.
-						if (dayLabel.hasState("otherMonth")) {
-
-							if (this._checkLimits(date) != 0) {
-								dayLabel.hide();
-							}
-							else {
-								if (dayIndex > 25)
-									dayLabel.setVisibility(showNextMonth ? "visible" : "hidden");
-								else
-									dayLabel.setVisibility(showPreviousMonth ? "visible" : "hidden");
-							}
+						if (this._checkLimits(date) != 0) {
+							dayLabel.hide();
+						}
+						else {
+							if (dayIndex > 25)
+								dayLabel.setVisibility(showNextMonth ? "visible" : "hidden");
+							else
+								dayLabel.setVisibility(showPreviousMonth ? "visible" : "hidden");
 						}
 					}
 				}
 			}
-			finally {
-
-				if (firstDayOfWeek > -1)
-					qx.locale.Date.getWeekStart = getWeekStartOriginal;
-			}
-		},
+		}
 
 	}
 

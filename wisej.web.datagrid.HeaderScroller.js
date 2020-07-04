@@ -22,6 +22,27 @@
  */
 qx.Class.define("wisej.web.datagrid.HeaderScroller", {
 
-	extend: qx.ui.table.pane.Header
+	extend: qx.ui.table.pane.Header,
+
+	members: {
+
+		/**
+		 * Cleans up all header cells.
+		 *
+		 */
+		_cleanUpCells: function () {
+			var children = this._getChildren();
+
+			for (var x = children.length - 1; x >= 0; x--) {
+
+				var cellWidget = children[x];
+
+				// detach the custom widget in the header
+				// or it will be disposed.
+				cellWidget.setCellWidget(null);
+				cellWidget.destroy();
+			}
+		}
+	}
 
 });

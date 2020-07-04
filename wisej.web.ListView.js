@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -34,6 +36,8 @@ qx.Class.define("wisej.web.ListView", {
 		wisej.mixin.MBorderStyle
 	],
 
+	implement: [wisej.web.toolContainer.IToolPanelHost],
+
 	/**
 	 * Constructor.
 	 */
@@ -53,6 +57,9 @@ qx.Class.define("wisej.web.ListView", {
 		this.addListener("focusin", this.__onFocusIn, this);
 		this.addListener("focusout", this.__onFocusOut, this);
 
+		// activate the current view for keyboard input.
+		this.addListener("activate", this.__onActivate, this);
+
 		// adds the inner target to the drop & drop event object.
 		this.addListener("drop", this._onDragEvent, this);
 		this.addListener("dragover", this._onDragEvent, this);
@@ -62,6 +69,9 @@ qx.Class.define("wisej.web.ListView", {
 
 		// handle the keyboard to implement the progressive item finder on the server side.
 		this.addListener("keyinput", this._onKeyInput, this);
+
+		// initialize the search string
+		this.__pressedString = "";
 	},
 
 	properties: {
@@ -185,6 +195,13 @@ qx.Class.define("wisej.web.ListView", {
 		itemPadding: { init: null, check: "Array", apply: "_applyItemPadding" },
 
 		/**
+		 * PrefetchItems property.
+		 * 
+		 * Indicates the number of items to prefetch outside of the visible range.
+		 */
+		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" },
+
+		/**
 		 * Tools property.
 		 *
 		 * Collection of tool definitions to display on top, left, bottom, right of the list view.
@@ -239,6 +256,10 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyView: function (value, old) {
 
+			var ranges = this.itemView.isVisible()
+				? this.itemView.getSelectionRanges()
+				: this.gridView.getSelectionRanges();
+
 			switch (value) {
 
 				default:
@@ -251,6 +272,10 @@ qx.Class.define("wisej.web.ListView", {
 					this.itemView.show();
 					this.gridView.exclude();
 					this.itemView.scrollToY(0);
+
+					this.reloadData();
+					this.itemView.setSelectionRanges(ranges);
+
 					break;
 
 				case "details":
@@ -259,6 +284,9 @@ qx.Class.define("wisej.web.ListView", {
 					this.itemView.exclude();
 					this.gridView.scrollCellVisible(0, 0);
 					this.gridView.setColumns(this.getColumns());
+
+					this.reloadData();
+					this.gridView.setSelectionRanges(ranges);
 
 					break;
 			}
@@ -375,6 +403,14 @@ qx.Class.define("wisej.web.ListView", {
 		},
 
 		/**
+		 * Applies the prefetchItems property.
+		 */
+		_applyPrefetchItems: function (value, old) {
+
+			this.itemView.setPrefetchItems(value);
+		},
+
+		/**
 		 * Applies the headerStyle property.
 		 */
 		_applyHeaderStyle: function (value, old) {
@@ -395,7 +431,7 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyGridLines: function (value, old) {
 
-			this.gridView.setGridLines(value ? this.getGridLineStyle() : "none");
+			this.gridView.setCellBorder(value ? this.getGridLineStyle() : "none");
 		},
 
 		/**
@@ -403,7 +439,7 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyGridLineStyle: function (value, old) {
 
-			this.gridView.setGridLines(value);
+			this.gridView.setCellBorder(value);
 		},
 
 		/**
@@ -422,29 +458,22 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyTools: function (value, old) {
 
-			if (value == null)
-				return;
+			var tools = this.getChildControl("tools", true);
 
-			var toolsContainer = this.getChildControl("tools", true);
-
-			if (value.length == 0) {
-				if (toolsContainer)
-					toolsContainer.exclude();
-
+			if (value == null || value.length == 0) {
+				if (tools)
+					tools.exclude();
 				return;
 			}
 
-			if (!toolsContainer) {
-				toolsContainer = this.getChildControl("tools");
-				this._add(toolsContainer, { row: 0, column: 1 });
-			}
-
-			toolsContainer.show();
+			tools = this.getChildControl("tools");
+			tools.show();
 
 			var position = this.getToolsPosition();
+			wisej.web.ToolContainer.add(this, tools);
 			var vertical = position == "left" || position == "right";
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, position, "listview");
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position, "listview");
+			wisej.web.ToolContainer.install(this, tools, value, "left", { row: 0, column: 0 }, position, "listview");
+			wisej.web.ToolContainer.install(this, tools, value, "right", vertical ? { row: 1, column: 0 } : { row: 0, column: 1 }, position, "listview");
 		},
 
 		/** 
@@ -452,18 +481,20 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyToolsPosition: function (value, old) {
 
-			this.__updateToolsLayout(this.getChildControl("tools", true));
+			this.updateToolPanelLayout(this.getChildControl("tools", true));
 		},
 
 		/**
+		 * Implements: wisej.web.toolContainer.IToolPanelHost.updateToolPanelLayout
+		 * 
 		 * Changes the layout of the tools container according to the value
 		 * of the toolsPosition property.
 		 *
-		 * @param tools {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
 		 */
-		__updateToolsLayout: function (tools) {
+		updateToolPanelLayout: function (toolPanel) {
 
-			if (tools) {
+			if (toolPanel) {
 
 				var rowCol = { row: 0, column: 1 };
 				var position = this.getToolsPosition();
@@ -493,13 +524,13 @@ qx.Class.define("wisej.web.ListView", {
 						break;
 				}
 
-				tools.removeState("top");
-				tools.removeState("left");
-				tools.removeState("right");
-				tools.removeState("bottom");
-				tools.addState(position);
+				toolPanel.removeState("top");
+				toolPanel.removeState("left");
+				toolPanel.removeState("right");
+				toolPanel.removeState("bottom");
+				toolPanel.addState(position);
 
-				tools.setLayoutProperties(rowCol);
+				toolPanel.setLayoutProperties(rowCol);
 
 				// change the position of the tool containers.
 				if (this.__leftToolsContainer) {
@@ -620,19 +651,20 @@ qx.Class.define("wisej.web.ListView", {
 		 *
 		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
 		 * @param autoSizeMode {String} Autosize mode: one of "none", "headerSize", "columnContent".
+		 * @param deferred {Boolean} Indicates that the call should be deferred until the next data update.
 		 */
-		autoResizeColumns: function (columnIndex, autoSizeMode) {
+		autoResizeColumns: function (columnIndex, autoSizeMode, deferred) {
 
 			if (this.gridView.isVisible()) {
 
 				switch (autoSizeMode) {
 
 					case "headerSize":
-						this.gridView.autoResizeColumns(columnIndex, "columnHeader");
+						this.gridView.autoResizeColumns(columnIndex, "columnHeader", 0, deferred);
 						break;
 
 					case "columnContent":
-						this.gridView.autoResizeColumns(columnIndex, "allCellsExceptHeader");
+						this.gridView.autoResizeColumns(columnIndex, "allCellsExceptHeader", 0, deferred);
 						break;
 				}
 			}
@@ -669,6 +701,18 @@ qx.Class.define("wisej.web.ListView", {
 			}
 
 			return control || this.base(arguments, id);
+		},
+
+		__onActivate: function (e) {
+
+			var currentView =
+				this.itemView.isVisible()
+					? this.itemView
+					: this.gridView;
+
+			if (currentView != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
+				currentView.activate();
+			}
 		},
 
 		// focus the inner view when gaining the focus.
@@ -721,6 +765,9 @@ qx.Class.define("wisej.web.ListView", {
 		// collect the keys typed by the user and
 		// fire a search event to the server.
 		_onKeyInput: function (e) {
+
+			if (e.isCtrlPressed() || e.isAltPressed())
+				return;
 
 			// reset string after a second of non pressed key
 			if (((new Date).valueOf() - this.__lastKeyPress) > 1000) {

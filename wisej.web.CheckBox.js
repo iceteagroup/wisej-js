@@ -110,26 +110,17 @@ qx.Class.define("wisej.web.CheckBox", {
 		 *
 		 * Gets or sets the text color to use when the checkbox is checked.
 		 */
-		checkedTextColor: { init: null, check: "Color", nullable: true, themeable: true }
+		checkedTextColor: { init: null, check: "Color", nullable: true, themeable: true, apply:"_applyCheckedTextColor" }
 	},
 
 	members: {
 
 		/**
 		 * Focuses and check/unchecks the radiobutton when the mnemonic is pressed.
-		 *
-		 * @param list {Array} List of widgets that qualified for the same mnemonic.
-		 * @param index {Integer} Index of this widget in the mnemonic list.
 		 */
-		executeMnemonic: function (list, index) {
+		executeMnemonic: function () {
 
 			if (!this.isEnabled() || !this.isVisible())
-				return false;
-
-			// ignore if this checkbox is already focused
-			// and there are other checkboxes with the same mnemonic.
-			var handler = qx.ui.core.FocusHandler.getInstance();
-			if (handler && handler.isFocused(this) && list.length > 1)
 				return false;
 
 			// execute.
@@ -187,6 +178,14 @@ qx.Class.define("wisej.web.CheckBox", {
 
 			this.setValue(value);
 
+		},
+
+		/**
+		 * Applies the checkedTextColor property.
+		 */
+		_applyCheckedTextColor: function (value, old) {
+
+			this._applyValue(this.getValue());
 		},
 
 		// overridden to apply the checkedTextColor when set.

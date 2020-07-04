@@ -45,10 +45,10 @@ qx.Class.define("wisej.web.WebBrowser", {
 		appearance: { refine: true, init: "panel" },
 
 		/**
-         * Url property.
-         *
-         * Assigns the URL to navigate to..
-         */
+		 * Url property.
+		 *
+		 * Assigns the URL to navigate to..
+		 */
 		url: { init: null, nullable: true, check: "String", apply: "_applyUrl" },
 
 		/**
@@ -66,6 +66,32 @@ qx.Class.define("wisej.web.WebBrowser", {
 	},
 
 	members: {
+
+		/**
+		 * Navigates to the previous page in the navigation history, if one is available.
+		 */
+		goBack: function () {
+
+			try {
+				this.getChildControl("iframe").getWindow().history.back();
+			}
+			catch (ex) {
+				// ignore
+			}
+		},
+
+		/**
+		 * Navigates to the next page in the navigation history, if one is available.
+		 */
+		goForward: function () {
+
+			try {
+				this.getChildControl("iframe").getWindow().history.forward();
+			}
+			catch (ex) {
+				// ignore
+			}
+		},
 
 		/**
 		 * Applies the URL property.
@@ -122,6 +148,6 @@ qx.Class.define("wisej.web.WebBrowser", {
 			else {
 				this.fireEvent("render");
 			}
-		},
-	},
+		}
+	}
 });

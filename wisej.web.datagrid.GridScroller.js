@@ -118,26 +118,28 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 				var editor = this._cellEditor;
 				if (editor) {
-					var table = this.getTable();
-
 					// update the client data right away - the server may
 					// change the cell after processing. but by updating now
 					// we can avoid the cell temporarily returning to the original value.
-					var dataModel = table.getTableModel();
 					var value = this.__cellEditorFactory.getCellEditorValue(editor);
-					var oldValue = dataModel.getValue(this.__focusedCol, this.__focusedRow);
-					if (value !== oldValue) {
-						dataModel.setValue(this.__focusedCol, this.__focusedRow, value);
+					if (value !== undefined) {
+						var table = this.getTable();
+						var dataModel = table.getTableModel();
+						var oldValue = dataModel.getValue(this.__focusedCol, this.__focusedRow);
+						if (value !== oldValue) {
 
-						editor.setDirty(true);
+							dataModel.setValue(this.__focusedCol, this.__focusedRow, value);
 
-						// fire an event containing the value change.
-						table.fireDataEvent("dataEdited", {
-							row: this.__focusedRow,
-							col: this.__focusedCol,
-							oldValue: oldValue,
-							value: value
-						});
+							editor.setDirty(true);
+
+							// fire an event containing the value change.
+							table.fireDataEvent("dataEdited", {
+								row: this.__focusedRow,
+								col: this.__focusedCol,
+								oldValue: oldValue,
+								value: value
+							});
+						}
 					}
 				}
 			}
@@ -673,7 +675,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			// the column headers are hidden, try to detect
 			// a column resize position.
 			if (!cursor && !table.getHeaderCellsVisible()) {
-
 				this._onPointermoveHeader(e);
 			}
 		},
@@ -773,7 +774,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			var table = this.getTable();
 			var dataModel = table.getTableModel();
-			var columnModel = table.getTableColumnModel();
 			var rowHeight = dataModel.getRowHeight(resizeRow);
 
 			// The pointer is over a resize region -> Start resizing
@@ -804,12 +804,19 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				pageY += (minRowHeight - newHeight);
 				newHeight = minRowHeight;
 			}
+			var maxRowHeight = dataModel.getMaxRowHeight(rowIndex) || 32000;
+			if (newHeight > maxRowHeight) {
+				pageY += (maxRowHeight - newHeight);
+				newHeight = maxRowHeight;
+			}
 
 			if (this.isLiveResize()) {
 
 				// resize all rows?
 				if (table.isKeepSameRowHeight()) {
+
 					table.setRowHeight(newHeight);
+					table.fireDataEvent("rowHeightChanged", { height: table.getRowHeight() });
 				}
 				else {
 					dataModel.setRowHeight(rowIndex, newHeight, true);
@@ -839,6 +846,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				// resize all rows?
 				if (table.isKeepSameRowHeight()) {
 					table.setRowHeight(this.__lastResizeRowHeight);
+					table.fireDataEvent("rowHeightChanged", { height: table.getRowHeight() });
 				}
 				else {
 					var rowIndex = this.__resizeRow;
@@ -863,13 +871,13 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		_showResizeRowLine: function (y) {
 
 			var table = this.getTable();
-			var tableBounds = table.getBounds();
+			var bounds = table.getBounds();
 			var resizeLine = table._showChildControl("resize-line");
 
 			var height = resizeLine.getHeight();
 
 			resizeLine.setUserBounds(
-				0, y - Math.round(height / 2), tableBounds.width, height);
+				0, y - Math.round(height / 2), bounds.width, height);
 		},
 
 		/**
@@ -1012,7 +1020,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				this.__lastMovePointerPageX = pageX;
 			}
 		},
-
+			
 		/**
 		  * Updates the content. Sets the right section the table pane should show and
 		  * does the scrolling.
@@ -1188,8 +1196,16 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		 *
 		 * @param col {Integer} the model index of the column the cell belongs to.
 		 * @param row {Integer} the model index of the row the cell belongs to.
+		 * @param alignX {String?null} Alignment of the item. Allowed values:
+		 *   <code>left</code> or <code>right</code>. Could also be null.
+		 *   Without a given alignment the method tries to scroll the widget
+		 *   with the minimum effort needed.
+		 * @param alignY {String?null} Alignment of the item. Allowed values:
+		 *   <code>top</code> or <code>bottom</code>. Could also be null.
+		 *   Without a given alignment the method tries to scroll the widget
+	     *   with the minimum effort needed.
 		 */
-		scrollCellVisible: function (col, row) {
+		scrollCellVisible: function (col, row, alignX, alignY) {
 
 			var paneModel = this.getTablePaneModel();
 			var xPos = paneModel.getX(col);
@@ -1209,27 +1225,53 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				var colLeft = (!this.isRtl())
 					? paneModel.getColumnLeft(col)
 					: paneModel.getTotalWidth() - paneModel.getColumnLeft(col) - colWidth;
-				var minScrollX = Math.min(colLeft, colLeft + colWidth - clipperSize.width);
-				var newScrollX = Math.max(minScrollX, Math.min(colLeft, scrollX));
+
+				var newScrollX = scrollX;
+				switch (alignX) {
+
+					case "left":
+						newScrollX = colLeft;
+						break;
+
+					case "right":
+						newScrollX = colLeft - clipperSize.width + colWidth;
+						break;
+
+					default:
+						var minScrollX = Math.min(colLeft, colLeft + colWidth - clipperSize.width);
+						var newScrollX = Math.max(minScrollX, Math.min(colLeft, scrollX));
+						break;
+				}
 				if (newScrollX != scrollX)
 					this.setScrollX(newScrollX);
 
 				// determine the Y scroll. the vertical scrollbar uses the number of rows instead of the pixels.
 				var scrollY = this.getScrollY();
 				var topRow = this.__getFirstVisibleRow();
-				if (topRow != null && topRow >= 0) {
-					if (row < topRow) {
-						// scroll down.
-						scrollY -= (topRow - row);
-						this.setScrollY(scrollY, true);
+				var visibleRows = this.__getVisibleRowCount();
+				var bottomRow = topRow + visibleRows - 1;
+
+				if (topRow != null && topRow >= 0 && bottomRow != null && bottomRow >= 0) {
+
+					var newScrollY = scrollY;
+					switch (alignY) {
+						case "top":
+							newScrollY = row;
+							break;
+
+						case "bottom":
+							newScrollY = Math.max(0, row - visibleRows + 1);
+							break;
+
+						default:
+							if (row < topRow)
+								newScrollY = row;
+							else if (row > bottomRow)
+								newScrollY = Math.max(0, row - visibleRows + 1);
+							break;
 					}
-					else {
-						var bottomRow = this.__getRowAt(clipperSize.height + 1);
-						if (bottomRow && bottomRow <= row) {
-							// scroll up.
-							this.setScrollY(scrollY + (row - bottomRow) + 1, true);
-						}
-					}
+					if (newScrollY != scrollY)
+						this.setScrollY(newScrollY, true);
 				}
 			}
 		},
@@ -1466,6 +1508,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			if (paneSize) {
 
+				var rowHeight = 0;
 				var height = paneSize.height;
 				var table = this.getTable();
 				var tableModel = table.getTableModel();
@@ -1474,10 +1517,14 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 				for (var row = firstRow; height > 0 && row < rowCount; row++) {
 
-					height -= tableModel.getRowHeight(row);
+					rowHeight = tableModel.getRowHeight(row);
 
-					if (height > -1 || partial)
+					if (height >= rowHeight)
 						count++;
+					else if (height > 0 && partial)
+						count++;
+
+					height -= rowHeight;
 				}
 
 				// if there are not enough rows to fill the table, count the rows
@@ -1485,11 +1532,14 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				if (height > 0) {
 					for (var row = firstRow - 1; height > 0 && row >= 0; row--) {
 
-						height -= tableModel.getRowHeight(row);
+						rowHeight = tableModel.getRowHeight(row);
 
-						// count only whole rows.
-						if (height > -1 || partial)
+						if (height >= rowHeight)
 							count++;
+						else if (height > 0 && partial)
+							count++;
+
+						height -= rowHeight;
 					}
 				}
 			}
@@ -1506,10 +1556,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 		__handleCellEvent: function (e) {
 
+			var table = this.getTable();
+
 			// let embedded widgets handle their own events.
 			var target = e.getTarget();
 			if (!(target instanceof qx.ui.root.Inline) &&
-				!qx.ui.core.Widget.contains(this, target)) {
+				!qx.ui.core.Widget.contains(table, target)) {
 				return;
 			}
 
@@ -1525,7 +1577,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 					// avoid processing pointer movements unless the server component
 					// subscribed to the relevant events.
-					var table = this.getTable();
 					if (!table.isWired("gridCellMouseEnter")
 						&& !table.isWired("gridCellMouseLeave")
 						&& !table.isWired("gridCellMouseMove"))
@@ -1536,13 +1587,31 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				case "tap":
 				case "dbltap":
 				case "click":
-				case "dblclick":
 				case "pointerup":
 				case "pointerdown":
 					var pageX = e.getDocumentLeft();
 					var pageY = e.getDocumentTop();
-					if (this._getResizeRowForPageX(pageX, pageY) > -1 || this._getResizeColumnForPageX(pageX) > -1)
+					var col = this._getResizeColumnForPageX(pageX);
+					var row = this._getResizeRowForPageX(pageX, pageY);
+					if (row > -1 || col > -1) {
 						role = "resize";
+
+						// detect double clicks right on the resize line
+						// to trigger the automatic column or row resize.
+						this.__autoSizeRowOnResizerDoubleClick(e, row);
+						this.__autoSizeColumnOnResizerDoubleClick(e, col);
+					}
+
+					break;
+
+				case "dblclick":
+					var pageX = e.getDocumentLeft();
+					var pageY = e.getDocumentTop();
+					var col = this._getResizeColumnForPageX(pageX);
+					var row = this._getResizeRowForPageX(pageX, pageY);
+					if (row > -1 || col > -1) {
+						role = "resize";
+					}
 
 					break;
 			}
@@ -1550,9 +1619,9 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			if (this.__resizeRow == null && this.__resizeColumn == null) {
 				var pageX = e.getDocumentLeft();
 				var pageY = e.getDocumentTop();
-				var column = this._getColumnForPageX(pageX);
+				var col = this._getColumnForPageX(pageX);
 				var row = this._getRowForPagePos(pageX, pageY);
-				this.__handleEvent(e, column, row, role);
+				this.__handleEvent(e, col, row, role);
 
 			}
 		},
@@ -1591,22 +1660,98 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				case "tap":
 				case "dbltap":
 				case "click":
-				case "dblclick":
 				case "pointerup":
 				case "pointerdown":
 					var pageX = e.getDocumentLeft();
-					if (this._getResizeColumnForPageX(pageX) > -1)
+					var col = this._getResizeColumnForPageX(pageX);
+					if (col > -1) {
 						role = "resize";
+
+						// detect double clicks right on the resize line
+						// to trigger the automatic column resize.
+						this.__autoSizeColumnOnResizerDoubleClick(e, col);
+					}
+
+					break;
+
+				case "dblclick":
+					var pageX = e.getDocumentLeft();
+					var col = this._getResizeColumnForPageX(pageX);
+					if (col > -1) {
+						role = "resize";
+					}
 
 					break;
 			}
 
 			if (this.__resizeRow == null && this.__resizeColumn == null) {
 				var pageX = e.getDocumentLeft();
-				var column = this._getColumnForPageX(pageX);
-				this.__handleEvent(e, column, -1, role);
+				var col = this._getColumnForPageX(pageX);
+				this.__handleEvent(e, col, -1, role);
 			}
 		},
+
+		__autoSizeColumnOnResizerDoubleClick: function (e, col) {
+
+			if (col < 0)
+				return;
+
+			if (e.getType() !== "pointerup")
+				return;
+
+			var time = Date.now();
+			if (time - this.__resizerPointerDownTime < 500 /* standard double-click time */
+				&& this.__resizerPointerLastPageX - e.getDocumentLeft() === 0) {
+
+				this.__resizerPointerDownTime = 0;
+				this.__resizerPointerLastPageX = -1;
+
+				var table = this.getTable();
+				var column = table.getColumns()[col];
+				if (!column || column.getSizeMode() !== "doubleClick")
+					return;
+
+				table.autoResizeColumns(col, "displayedCells");
+
+			}
+			else {
+				this.__resizerPointerDownTime = time;
+				this.__resizerPointerLastPageX = e.getDocumentLeft();
+			}
+		},
+
+		__autoSizeRowOnResizerDoubleClick: function (e, row) {
+			if (row < 0)
+				return;
+
+			if (e.getType() !== "pointerup")
+				return;
+
+			var time = Date.now();
+			if (time - this.__resizerPointerDownTime < 500 /* standard double-click time */
+				&& this.__resizerPointerLastPageY - e.getDocumentTop() === 0) {
+
+				this.__resizerPointerDownTime = 0;
+				this.__resizerPointerLastPageY = -1;
+
+				var table = this.getTable();
+				if (table.getAutoSizeRowsMode() !== "doubleClick")
+					return;
+
+				table.autoResizeRows(row, "allCells");
+
+			}
+			else {
+				this.__resizerPointerDownTime = time;
+				this.__resizerPointerLastPageY = e.getDocumentTop();
+			}
+		},
+
+		// keeps the last resizer pointer time and position
+		// to detect double clicks.
+		__resizerPointerDownTime: 0,
+		__resizerPointerLastPageX: 0,
+		__resizerPointerLastPageY: 0,
 
 		__handleEvent: function (e, column, row, role) {
 
@@ -1729,7 +1874,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			if (this.__resizeColumn != null) {
 				this._stopResizePane();
-				this.__ignoreTap = true;
 				e.stop();
 			}
 
@@ -1778,7 +1922,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					control.addListener("pointerup", this._onPointerupFocusIndicator, this);
 					control.addListener("pointerdown", this._onPointerdownFocusIndicator, this);
 					this._paneClipper.add(control);
-					control.show();
 					break;
 
 				case "filler":
@@ -1792,6 +1935,11 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 					if (!this.getHorizontalScrollBarVisible())
 						control.exclude();
 
+					break;
+
+				case "header-container":
+					control = this.base(arguments, id, hash);
+					control.addState(this.getTable()._colHeadersBorderStyle);
 					break;
 			}
 

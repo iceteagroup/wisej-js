@@ -61,6 +61,9 @@ qx.Class.define("wisej.web.Widget", {
 
 		this.base(arguments);
 
+		// may contain selectable widgets.
+		this.setSelectable(true);
+
 		this.addListenerOnce("appear", this.__onAppear);
 	},
 
@@ -142,6 +145,8 @@ qx.Class.define("wisej.web.Widget", {
 			if (this.container) {
 				if (this.update)
 					this.update(value || {}, old);
+				else if (this.init)
+					this.init(value || {}, old);
 			}
 		},
 		_transformOptions: function (value) {
@@ -165,6 +170,15 @@ qx.Class.define("wisej.web.Widget", {
 				this.__renderWidget();
 			});
 
+		},
+
+		// overridden
+		destroy: function () {
+
+			this.base(arguments);
+
+			if (this._onDestroyed)
+				this._onDestroyed();
 		},
 
 		// overridden
@@ -266,14 +280,5 @@ qx.Class.define("wisej.web.Widget", {
 			return el;
 		},
 
-	},
-
-	// let implementations handle the destruction of the widget
-	// to clean up resources.
-	destruct: function () {
-
-		if (this._onDestroyed)
-			this._onDestroyed();
 	}
-
 });

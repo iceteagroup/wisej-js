@@ -80,6 +80,21 @@ qx.Class.define("wisej.web.Upload", {
 		allowedFileTypes: { init: "", check: "String", apply: "_applyAllowedFileTypes" },
 
 		/**
+		 * Capture property.
+		 * 
+		 * The capture attribute value is a string that specifies which camera to use for capture 
+		 * of image or video data, if the accept attribute indicates that the input should be of 
+		 * one of those types.
+		 * 
+		 * A value of "user" indicates that the user-facing camera and/or microphone should be used. 
+		 * A value of "environment" specifies that the outward-facing camera and/or microphone should be used.
+		 * 
+		 * If this attribute is missing, the user agent is free to decide on its own what to do.
+		 * If the requested facing mode isn't available, the user agent may fall back to its preferred default mode.
+		 */
+		capture: { init: "default", check: ["default", "user", "environment"], apply: "_applyCapture" },
+
+		/**
 		 * MaxSize property in bytes.
 		 *
 		 * Limits the size of the files that can be uploaded.
@@ -529,6 +544,19 @@ qx.Class.define("wisej.web.Upload", {
 
 			if (this.__upload)
 				qx.bom.element.Attribute.set(this.__upload, "accept", value);
+		},
+
+		/**
+		 * Applies the capture property.
+		 */
+		_applyCapture: function (value, old) {
+
+			if (this.__upload) {
+				if (!value || value === "default")
+					qx.bom.element.Attribute.reset(this.__upload, "capture");
+				else
+					qx.bom.element.Attribute.set(this.__upload, "capture", value);
+			}
 		},
 
 		// creates the inner invisible upload html.

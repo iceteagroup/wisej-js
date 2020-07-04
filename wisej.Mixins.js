@@ -531,19 +531,18 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 					switch (type) {
 						case "tap":
 						case "click":
+						case "tagClick":
 						case "gridCellTap":
 							{
 								if (lastEvent.name === type
-									&& lastEvent.top === e.getDocumentTop()
-									&& lastEvent.left === e.getDocumentLeft()
+									&& lastEvent.target === e.getTarget().$$hash
 									&& Date.now() - lastEvent.timestamp < wisej.mixin.MWisejComponent.DBLCLICK_INTERVAL) {
 									return true;
 								}
 
 								lastEvent.name = type;
 								lastEvent.timestamp = Date.now();
-								lastEvent.top = e.getDocumentTop();
-								lastEvent.left = e.getDocumentLeft();
+								lastEvent.target = e.getTarget().$$hash;
 							}
 							break;
 					}
@@ -554,8 +553,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 				// keeps track of the last click event to filter out duplicate clicks on dblclicks.
 				var lastEvent = {
 					name: "",
-					top: -1,
-					left: -1,
+					target: null,
 					timestamp: 0
 				};
 
@@ -592,11 +590,15 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 								// or an inner widget (i.e. a cell editor, a component of a larger widget), let it be processed by the current target.
 								if (!originalTarget.isEnabled() || originalTarget.hasState("inner")) {
 
-									e.stopPropagation();
+									if (type !== "keypress" && type !== "keydown" && type !== "keyup") {
+										e.stopPropagation();
+									}
+
+									// route the bubbled event.
 									break;
 								}
 
-								// block the event.
+								// don't route the event.
 								return;
 
 							case "tap":
@@ -615,10 +617,12 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 								if (!originalTarget.isEnabled() || originalTarget.isAnonymous() || originalTarget.hasState("inner")) {
 
 									e.stopPropagation();
+
+									// route the bubbled event.
 									break;
 								}
 
-								// block the event.
+								// don't route the event.
 								return;
 						}
 					}
@@ -658,9 +662,10 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 						args.lockState = e.getKeyLockState();
 					}
 					else if (window.event) {
-						if (window.event.button !== undefined) {
+						var event = window.event;
+						if (event.button !== undefined) {
 							args = args || {};
-							args.button = window.event.button | 0;
+							args.button = event.button | 0;
 						}
 					}
 
@@ -670,10 +675,11 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 						args.x = e.getDocumentLeft() | 0;
 					}
 					else if (window.event) {
-						if (window.event.pageX !== undefined) {
+						var event = window.event;
+						if (event.pageX !== undefined) {
 							args = args || {};
-							args.y = window.event.pageY | 0;
-							args.x = window.event.pageX | 0;
+							args.y = event.pageY | 0;
+							args.x = event.pageX | 0;
 						}
 					}
 
@@ -685,26 +691,19 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 						args.modifiers = e.getModifiers();
 						args.lockState = e.getKeyLockState();
 					}
-					else if (window.event instanceof KeyboardEvent) {
-						if (window.event) {
-							args = args || {};
-							args.key = window.event.keyIdentifier;
-							args.keyCode = window.event.keyCode || window.event.charCode;
-							args.modifiers =
-								window.event.shiftKey ? 1 : 0
-									| window.event.ctrlKey ? 2 : 0
-										| window.event.altKey ? 4 : 0
-											| window.event.metaKey ? 8 : 0;
-						}
-					}
 					else if (window.event) {
-						if (window.event.shiftKey !== undefined) {
+						var event = window.event;
+						if (event.shiftKey !== undefined) {
 							args = args || {};
+							if (event.key !== undefined)
+								args.key = event.key.toUpperCase();
+							if (event.keyCode !== undefined || event.charCode !== undefined)
+								args.keyCode = event.keyCode || event.charCode;
 							args.modifiers =
-								window.event.shiftKey ? 1 : 0
-									| window.event.ctrlKey ? 2 : 0
-										| window.event.altKey ? 4 : 0
-											| window.event.metaKey ? 8 : 0;
+								event.shiftKey ? 1 : 0
+								| event.ctrlKey ? 2 : 0
+									| event.altKey ? 4 : 0
+										| event.metaKey ? 8 : 0;
 						}
 					}
 
@@ -836,11 +835,11 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 				// create the QX component.
 				var comp = new widgetClass();
 
-				comp.set(config);
-
 				// store in the design-time map.
 				wisej.web.DesignComponents = wisej.web.DesignComponents || {};
-				wisej.web.DesignComponents[comp.getId()] = comp;
+				wisej.web.DesignComponents[config.id] = comp;
+
+				comp.set(config);
 			}
 			catch (e) {
 
@@ -1044,20 +1043,23 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 			var target = this.__getTarget();
 			var styles = this.__buildCssStyles(images);
-			var cssRuleAfter = this.__getCssRule(target, "::after").style;
+			var cssRuleAfter = this.__getCssRule(target, "::after");
+			if (cssRuleAfter && cssRuleAfter.style) {
+				var ruleStyle = cssRuleAfter.style;
 
-			for (var name in styles) {
-				cssRuleAfter[name] = styles[name];
+				for (var name in styles) {
+					ruleStyle[name] = styles[name];
+				}
+
+				// update the padding.
+				var padding =
+					target.getPaddingTop() + "px " +
+					target.getPaddingRight() + "px " +
+					target.getPaddingBottom() + "px " +
+					target.getPaddingLeft() + "px";
+
+				ruleStyle.padding = padding;
 			}
-
-			// update the padding.
-			var padding =
-				target.getPaddingTop() + "px " +
-				target.getPaddingRight() + "px " +
-				target.getPaddingBottom() + "px " +
-				target.getPaddingLeft() + "px";
-
-			cssRuleAfter.padding = padding;
 		},
 
 		__removeBackgroundCssRule: function () {
@@ -1279,8 +1281,10 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 			// background image overlay :after element.
 			this.addListener("changePadding", function (e) {
 
-				var cssRuleAfter = this.__getCssRule(target, "::after").style;
-				if (cssRuleAfter) {
+				var cssRuleAfter = this.__getCssRule(target, "::after");
+				if (cssRuleAfter && cssRuleAfter.style) {
+
+					var ruleStyle = cssRuleAfter.style;
 
 					// update the padding.
 					var padding =
@@ -1289,7 +1293,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 						target.getPaddingBottom() + "px " +
 						target.getPaddingLeft() + "px";
 
-					cssRuleAfter.padding = padding;
+					ruleStyle.padding = padding;
 				}
 			});
 
@@ -1340,26 +1344,19 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		this.setAllowShrinkX(true);
 		this.setAllowShrinkY(true);
 
-		// when in design mode, invoke this.__onDesignRender to let
-		// the widget being designed fire the "render" event in order
-		// to notify the designer that it's ready to be rendered.
-		//
-		// otherwise, register this widget with the html5 drag-drop manager.
-		//
-		this.addListenerOnce("appear", function (e) {
+		this.addListener("changeDroppable", this._onChangeDroppable);
 
-			if (wisej.web.DesignMode) {
+		if (wisej.web.DesignMode) {
 
+			// when in design mode, invoke this.__onDesignRender to let
+			// the widget being designed fire the "render" event in order
+			// to notify the designer that it's ready to be rendered.
+			this.addListenerOnce("appear", function (e) {
 				this.__onDesignRender(e);
-			}
-			else {
+			});
+		}
 
-				// register this widget for the native html5 file drag-drop handling.
-				var dragDrop = wisej.web.DragDrop.getInstance();
-				if (dragDrop)
-					dragDrop.registerComponent(this);
-			}
-		});
+		this.initTopLevel();
 	},
 
 	/**
@@ -1494,7 +1491,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		 *
 		 * Determines whether the control can be focused in the tab order.
 		 */
-		tabStop: { init: false, check: "Boolean", apply: "_applyTabStop" },
+		tabStop: { init: false, check: "Boolean" },
 
 		/**
 		 * The parent widget.
@@ -1583,11 +1580,11 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		 * Updates the state of the component and returns the difference
 		 * with the previous state.
 		 * 
-		 * @param propertyName {String?null}	Name of the single state property to update.
-		 *										The default is to update all state properties.
+		 * @param propertyNames {String | Array | null} 
+		 *		Name of the state property or array of properties to update. The default is to update all state properties.
 		 * 
 		 */
-		updateState: function (propertyName) {
+		updateState: function (propertyNames) {
 
 			if (wisej.web.DesignMode)
 				return;
@@ -1605,6 +1602,15 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				}
 			}
 
+			// normalize the property names to filter the properties to update.
+			var propArray = null;
+			if (propertyNames) {
+				if (propertyNames instanceof Array)
+					propArray = propertyNames;
+				else
+					propArray = [propertyNames];
+			}
+
 			var value, name;
 			for (var i = 0, l = properties.length; i < l; i++) {
 
@@ -1613,8 +1619,8 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 					name = properties[i];
 					value = this.get(name);
 
-					// update a single property?
-					if (propertyName && propertyName !== name)
+					// update only the specified property?
+					if (propArray && propArray.indexOf(name) === -1)
 						continue;
 
 					// convert widget references to their id.
@@ -1679,7 +1685,10 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 			try {
 
 				this.set(state);
-				this.updateState();
+
+				// safeguard to prevent the widget to update the full state
+				// if it's still dirty, or the server may lose the current state.
+				this.updateState(this.getDirty() ? Object.keys(state) : null);
 
 			} catch (error) {
 
@@ -1703,7 +1712,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 			if (!dom || dom.offsetWidth == 0)
 				return false;
 
-			// not tabable if an UserControl widget in the parent path has tabStop = false.
+			// not tabable if a UserControl widget in the parent path has tabStop = false.
 			for (var parent = this.getParent(); parent != null; parent = parent.getParent()) {
 				if (parent instanceof wisej.web.UserControl && !parent.isTabStop())
 					return false;
@@ -1807,7 +1816,8 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		 * Hides the ajax loader over the widget.
 		 */
 		hideLoader: function () {
-			this.getBlocker().forceUnblock();
+			if (this.__blocker)
+				this.__blocker.forceUnblock();
 		},
 
 		/**
@@ -1829,20 +1839,6 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		},
 
 		/**
-		 * Applies the TabStop property.
-		 */
-		_applyTabStop: function (value, old) {
-
-			if (this.isWisejContainer)
-				return;
-
-			if (value)
-				this.getFocusElement().setAttribute("tabIndex", this.getTabIndex());
-			else
-				this.getFocusElement().removeAttribute("tabIndex");
-		},
-
-		/**
 		 * Applies the TabIndex property.
 		 */
 		_applyTabIndex: function (value, old) {
@@ -1850,7 +1846,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 			if (this.isWisejContainer)
 				return;
 
-			if (this.isTabStop() && value > 0)
+			if (this.getFocusable() && value > 0)
 				this.getFocusElement().setAttribute("tabIndex", value);
 			else
 				this.getFocusElement().removeAttribute("tabIndex");
@@ -1905,17 +1901,6 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 
 			if (value && this.__moveHandle == null)
 				this._activateMoveHandle(this);
-
-			// allow the child widget to be dragged on android touch devices.
-			if (!this.isTopLevel()) {
-
-				var el = this.getContentElement();
-				if (value)
-					el.setStyles({ "touch-action": "none", "-ms-touch-action": "none" });
-				else if (!this.getEnableTouchEvents())
-					el.setStyles({ "touch-action": "none", "-ms-touch-action": "none" });
-			}
-
 		},
 
 		/**
@@ -1934,18 +1919,14 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 			// unregister, if previously registered as a child control
 			if (old) {
 				this.core.unregisterComponent(this, window.App);
-
-				// unregister as root for the focus handler
 				qx.ui.core.FocusHandler.getInstance().removeRoot(this);
 			}
 
 			// re-register as a top-level control.
 			if (value) {
 				this.core.registerComponent(this, window.App);
-
-				// register as root for the focus handler
 				qx.ui.core.FocusHandler.getInstance().addRoot(this);
-			}
+			}	
 		},
 
 		/**
@@ -2010,10 +1991,6 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				this.addListener("pinch", this.__onTouchEvent);
 				this.addListener("track", this.__onTouchEvent);
 				this.addListener("rotate", this.__onTouchEvent);
-
-				if (!this.isMovable())
-					el.setStyles({ "touch-action": "none", "-ms-touch-action": "none" });
-
 			}
 			else {
 				this.removeListener("touchstart", this.__onTouchEvent);
@@ -2024,8 +2001,6 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				this.removeListener("pinch", this.__onTouchEvent);
 				this.removeListener("track", this.__onTouchEvent);
 				this.removeListener("rotate", this.__onTouchEvent);
-
-				el.setStyles({ "touch-action": null, "-ms-touch-action": null });
 			}
 		},
 
@@ -2467,6 +2442,22 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		},
 
 		/**
+		* Register with the global drag manager when Droppable changes.
+		*/
+		_onChangeDroppable: function (e) {
+
+			// register this widget for the native html5 file drag-drop handling.
+			var dragDrop = wisej.web.DragDrop.getInstance();
+			if (dragDrop) {
+
+				if (e.getData())
+					dragDrop.registerComponent(this);
+				else if (e.getOldData())
+					dragDrop.unregisterComponent(this);
+			}
+		},
+
+		/**
 		 * If the widget is in design mode, this handler
 		 * fires the "render" event, which is used by the designer
 		 * to know that the widget is ready to be scraped.
@@ -2502,12 +2493,6 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 	include: [wisej.mixin.MWisejComponent],
 
-	/**
-	 * construct
-	 */
-	construct: function () {
-	},
-
 	properties: {
 
 		/**
@@ -2536,14 +2521,14 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		 * Registers the mnemonic character as a shortcut to the execute function on this widget.
 		 * The character is register as a Alt+[character] command.
 		 */
-		mnemonic: { check: "String", apply: "_applyMnemonic", event: "changeMnemonic" },
+		mnemonic: { init: null, check: "String", apply: "_applyMnemonic", event: "changeMnemonic" },
 
 		/**
 		 * Shortcut property.
 		 *
 		 * Enables the shortcut for the menu item.
 		 */
-		shortcut: { check: "String", apply: "_applyShortcut", event: "changeShortcut" },
+		shortcut: { init: null, check: "String", apply: "_applyShortcut", transform:"_transformShortcut", event: "changeShortcut" },
 
 		/**
 		 * AutoShowLoader property.
@@ -2566,28 +2551,12 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		accessibility: { init: null, check: "Map", apply: "_applyAccessibility" }
 	},
 
-	statics: {
-
-		// the delayed targets for shortcut handling.
-		__shortcutTargets: null,
-
-		// the delayed targets for mnemonic handling.
-		__mnemonicTargets: null
-
-	},
-
 	members: {
 
 		/**
 		 * Wisej marker.
 		 */
 		isWisejMenu: true,
-
-		// reference to the mnemonic accelerator handler.
-		__mnemonicAccel: null,
-
-		// reference to the shortcut accelerator handler.
-		__shortcutAccel: null,
 
 		/**
 		 * Transforms the incoming collection of child widgets
@@ -2721,16 +2690,45 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		_applyShortcut: function (value, old) {
 
 			if (!value && old) {
-				this._disposeObjects("__shortcutAccel");
+				wisej.web.manager.Accelerators.getInstance().unregister(old, this.__onShortcut, this);
 			}
 
-			if (value) {
-				if (!this.__shortcutAccel) {
-					this.__shortcutAccel = new qx.bom.Shortcut(null, true, true, document.body);
-					this.__shortcutAccel.addListener("execute", this.__onShortcut, this);
-				}
+			if (value && !old) {
+				wisej.web.manager.Accelerators.getInstance().register(value, this.__onShortcut, this);
+			}
 
-				this.__shortcutAccel.setShortcut(value);
+		},
+
+		_transformShortcut: function (value) {
+
+			return wisej.utils.Widget.translateAcceleratorKey(value);
+		},
+
+		__onShortcut: function (e) {
+
+			// ignore Del and Backspace when in an input field.
+			var target = e.getTarget();
+			if (target.tagName) {
+				switch (e.getKeyIdentifier()) {
+					case "Delete":
+					case "Backspace":
+						var tagName = target.tagName.toLowerCase();
+						if (tagName === "input" || tagName === "textarea")
+							return;
+				}
+			}
+
+			// ignore shortcuts on menu items on menu bars that are hidden or not
+			// in an active top-level container: page, form, or desktop.
+			var container = this.findContainer();
+			if (container && !container.isVisible())
+				return;
+			if (!wisej.utils.Widget.canExecute(container))
+				return;
+
+			if (this.executeShortcut && this.executeShortcut()) {
+				e.preventDefault();
+				return true; // stop dispatching
 			}
 		},
 
@@ -2743,43 +2741,13 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 
 			if (!value && old) {
 				this.removeState("mnemonic");
-				this._disposeObjects("__mnemonicAccel");
+				wisej.web.manager.Accelerators.getInstance().unregister("Alt" + old, this.__onMnemonic, this);
 			}
 
-			if (value) {
-				if (!this.__mnemonicAccel) {
-					this.addState("mnemonic");
-					this.__mnemonicAccel = new qx.bom.Shortcut(null, true, false, document.body);
-					this.__mnemonicAccel.addListener("execute", this.__onMnemonic, this);
-				}
-
-				this.__mnemonicAccel.setShortcut("Alt+" + value);
-
+			if (value && !old) {
+				this.addState("mnemonic");
+				wisej.web.manager.Accelerators.getInstance().register("Alt+" + value.toUpperCase(), this.__onMnemonic, this);
 			}
-		},
-
-		__onShortcut: function (e) {
-
-			// ignore shortcuts on menu items on menu bars that are hidden or not
-			// in an active top-level container: page, form, or desktop.
-			var container = this.findContainer();
-			if (container && !container.isVisible())
-				return;
-			if (!wisej.utils.Widget.canExecute(container))
-				return;
-
-			// since we can have multiple shortcuts we need to process all of them to determine
-			// the target control on which to call execute.
-			var list = wisej.mixin.MWisejMenu.__shortcutTargets;
-			if (list == null) {
-				list = wisej.mixin.MWisejMenu.__shortcutTargets = [];
-
-				var me = this;
-				setTimeout(function () {
-					me.__executeShortcut(e);
-				}, 1);
-			}
-			list.push(this);
 		},
 
 		__onMnemonic: function (e) {
@@ -2792,59 +2760,8 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 			if (!wisej.utils.Widget.canExecute(container))
 				return;
 
-			// since we can have multiple mnemonics we need to process all of them to determine
-			// the target menu item on which to call execute only once.
-			var list = wisej.mixin.MWisejMenu.__mnemonicTargets;
-			if (list == null) {
-				list = wisej.mixin.MWisejMenu.__mnemonicTargets = [];
-
-				var me = this;
-				setTimeout(function () {
-					me.__executeMnemonic(e);
-				}, 1);
-			}
-			list.push(this);
-		},
-
-		__executeShortcut: function (e) {
-
-			var list = wisej.mixin.MWisejMenu.__shortcutTargets;
-			if (list != null && list.length > 0) {
-
-				// iterate all the targets and stop executing as soon as a target
-				// returns true.
-				for (var i = 0; i < list.length; i++) {
-					var target = list[i];
-					if (target.executeShortcut) {
-						if (target.executeShortcut(list, i)) {
-							e.stop();
-							break;
-						}
-					}
-				}
-			}
-			wisej.mixin.MWisejMenu.__shortcutTargets = null;
-		},
-
-		__executeMnemonic: function (e) {
-
-			var list = wisej.mixin.MWisejMenu.__mnemonicTargets;
-			if (list != null && list.length > 0) {
-
-				// iterate all the targets and stop executing as soon as a target
-				// returns true.
-				for (var i = 0; i < list.length; i++) {
-					var target = list[i];
-					if (target.executeMnemonic) {
-						if (target.executeMnemonic(list, i)) {
-							e.stop();
-							break;
-						}
-					}
-				}
-			}
-
-			wisej.mixin.MWisejMenu.__mnemonicTargets = null;
+			// stop dispatching when a widget processes the mnemonic.
+			return this.executeMnemonic && this.executeMnemonic();
 		},
 
 		/**
@@ -2879,12 +2796,7 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		},
 
 		/**
-		 * Finds the top container. It is either:
-		 * 
-		 *	- MenuBar,
-		 *	- MainMenu,
-		 *	- ContextMenu
-		 *	
+		 * Finds the top container of the menu item triggered by the accelerator or mnemonic.
 		 */
 		findContainer: function () {
 
@@ -2893,6 +2805,10 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 				parent != null;
 				parent = parent.getParent()) {
 
+				if (parent.getUserData("container")) {
+					container = parent.getUserData("container");
+					break;
+				}
 				if (parent.getParent() == null) {
 					container = parent;
 					break;
@@ -2928,9 +2844,12 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		}
 	},
 
+	/**
+	 * destruct
+	 */
 	destruct: function () {
-
-		this._disposeObjects("__shortcutAccel", "__mnemonicAccel");
+		wisej.web.manager.Accelerators.getInstance().unregister(this.getShortcut(), this.__onShortcut, this);
+		wisej.web.manager.Accelerators.getInstance().unregister("Alt+" + this.getMnemonic(), this.__onMnemonic, this);
 	}
 
 });
@@ -2951,34 +2870,18 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 		 * Registers the mnemonic character as a shortcut to the execute function on this widget.
 		 * The character is register as a Alt+[character] command.
 		 */
-		mnemonic: { check: "String", apply: "_applyMnemonic", event: "changeMnemonic" },
+		mnemonic: { init: null, check: "String", apply: "_applyMnemonic", event: "changeMnemonic" },
 
 		/**
 		 * Shortcut property.
 		 *
 		 * Registers the shortcut to the execute function on this widget.
 		 */
-		shortcut: { check: "String", apply: "_applyShortcut", event: "changeShortcut" }
-
-	},
-
-	statics: {
-
-		// the delayed target for shortcut handling.
-		__shortcutTargets: null,
-
-		// the delayed target for mnemonic handling.
-		__mnemonicTargets: null,
+		shortcut: { init: null, check: "String", apply: "_applyShortcut", transform:"_transformShortcut", event: "changeShortcut" }
 
 	},
 
 	members: {
-
-		// reference to the shortcut.
-		__shortcutAccel: null,
-
-		// reference to the mnemonic.
-		__mnemonicAccel: null,
 
 		/**
 		 * Applies the shortcut property.
@@ -2988,17 +2891,30 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 		_applyShortcut: function (value, old) {
 
 			if (!value && old) {
-				this._disposeObjects("__shortcutAccel");
+				wisej.web.manager.Accelerators.getInstance().unregister(old, this.__onAccelerator, this);
 			}
 
-			if (value) {
+			if (value && !old) {
+				wisej.web.manager.Accelerators.getInstance().register(value, this.__onAccelerator, this);
+			}
 
-				if (!this.__shortcutAccel) {
-					this.__shortcutAccel = new qx.bom.Shortcut(null, true, true, document.body);
-					this.__shortcutAccel.addListener("execute", this.__onShortcut, this);
-				}
+		},
 
-				this.__shortcutAccel.setShortcut(value);
+		_transformShortcut: function (value) {
+
+			return wisej.utils.Widget.translateAcceleratorKey(value);
+		},
+
+		__onAccelerator: function (e) {
+
+			// ignore shortcuts on widgets that are not
+			// in an active top-level container: page, form, or desktop.
+			if (!wisej.utils.Widget.canExecute(this))
+				return;
+
+			if (this.executeShortcut && this.executeShortcut()) {
+				e.preventDefault();
+				return true; // stop dispatching
 			}
 		},
 
@@ -3011,40 +2927,13 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 
 			if (!value && old) {
 				this.removeState("mnemonic");
-				this._disposeObjects("__mnemonicAccel");
+				wisej.web.manager.Accelerators.getInstance().unregister("Alt+" + old, this.__onMnemonic, this);
 			}
 
-			if (value) {
-
-				if (!this.__mnemonicAccel) {
-					this.addState("mnemonic");
-					this.__mnemonicAccel = new qx.bom.Shortcut(null, true, false, document.body);
-					this.__mnemonicAccel.addListener("execute", this.__onMnemonic, this);
-				}
-
-				this.__mnemonicAccel.setShortcut("Alt+" + value);
+			if (value && !old) {
+				this.addState("mnemonic");
+				wisej.web.manager.Accelerators.getInstance().register("Alt+" + value.toUpperCase(), this.__onMnemonic, this);
 			}
-		},
-
-		__onShortcut: function (e) {
-
-			// ignore shortcuts on widgets that are not
-			// in an active top-level container: page, form, or desktop.
-			if (!wisej.utils.Widget.canExecute(this))
-				return;
-
-			// since we can have multiple shortcuts we need to process all of them to determine
-			// the target control on which to call execute.
-			var list = wisej.mixin.MShortcutTarget.__shortcutTargets;
-			if (list == null) {
-				list = wisej.mixin.MShortcutTarget.__shortcutTargets = [];
-
-				var me = this;
-				setTimeout(function () {
-					me.__executeShortcut(e);
-				}, 1);
-			}
-			list.unshift(this);
 		},
 
 		__onMnemonic: function (e) {
@@ -3054,64 +2943,16 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 			if (!wisej.utils.Widget.canExecute(this))
 				return;
 
-			// since we can have multiple shortcuts we need to process all of them to determine
-			// the target control on which to call execute.
-			var list = wisej.mixin.MShortcutTarget.__mnemonicTargets;
-			if (list == null) {
-				list = wisej.mixin.MShortcutTarget.__mnemonicTargets = [];
-
-				var me = this;
-				setTimeout(function () {
-					me.__executeMnemonic(e);
-				}, 1);
-			}
-			list.unshift(this);
-		},
-
-		__executeShortcut: function (e) {
-
-			var list = wisej.mixin.MShortcutTarget.__shortcutTargets;
-			if (list != null && list.length > 0) {
-
-				// iterate all the targets and stop executing as soon as a target
-				// returns true.
-				for (var i = 0; i < list.length; i++) {
-					var target = list[i];
-					if (target.executeShortcut) {
-						if (target.executeShortcut(list, i)) {
-							e.stop();
-							break;
-						}
-					}
-				}
-			}
-			wisej.mixin.MShortcutTarget.__shortcutTargets = null;
-		},
-
-		__executeMnemonic: function (e) {
-
-			var list = wisej.mixin.MShortcutTarget.__mnemonicTargets;
-			if (list != null && list.length > 0) {
-
-				// iterate all the targets and stop executing as soon as a target
-				// returns true.
-				for (var i = 0; i < list.length; i++) {
-					var target = list[i];
-					if (target.executeMnemonic) {
-						if (target.executeMnemonic(list, i)) {
-							e.stop();
-							break;
-						}
-					}
-				}
-			}
-			wisej.mixin.MShortcutTarget.__mnemonicTargets = null;
+			return this.executeMnemonic && this.executeMnemonic();
 		}
 	},
 
+	/**
+	 * destruct
+	 */
 	destruct: function () {
-
-		this._disposeObjects("__shortcutAccel", "__mnemonicAccel");
+		wisej.web.manager.Accelerators.getInstance().unregister(this.getShortcut(), this.__onAccelerator, this);
+		wisej.web.manager.Accelerators.getInstance().unregister("Alt+" + this.getMnemonic(), this.__onMnemonic, this);
 	}
 
 });
@@ -3165,23 +3006,6 @@ qx.Mixin.define("wisej.mixin.MBorderStyle", {
  */
 qx.Mixin.define("wisej.mixin.MAccelerators", {
 
-	/**
-	 * destruct
-	 * 
-	 * - Removes the widget from our global registry.
-	 * - Unregisters the widget from its container.
-	 */
-	destruct: function () {
-
-		if (wisej.web.DesignMode)
-			return;
-
-		// unregister the accelerator listener.
-		if (this.__accelerators) {
-			qx.event.Registration.removeListener(document.body, "keydown", this.__onAccelerator, this);
-		}
-	},
-
 	properties: {
 
 		/**
@@ -3189,14 +3013,7 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 		 *
 		 * Defines a list of keys that fire the "accelerator" event when pressed regardless of the focus.
 		 */
-		accelerators: { check: "Array", apply: "_applyAccelerators" },
-
-	},
-
-	statics: {
-
-		/** List of keys that should not go to the browser when they are used as accelerator. */
-		__preventDefaultKeys: ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14"]
+		accelerators: { init: null, check: "Array", apply: "_applyAccelerators", transform: "_transformAccelerators" },
 
 	},
 
@@ -3220,12 +3037,11 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 
 					var key = qx.lang.String.firstUp(old[i]);
 					delete this.__accelerators[key];
-					delete this.__accelerators[this.__translateAcceleratorKey(key)];
 				}
 
 				if (qx.lang.Object.isEmpty(this.__accelerators) && (value == null || value.length == 0)) {
 					this.__accelerators = null;
-					qx.event.Registration.removeListener(document.body, "keydown", this.__onAccelerator, this, true);
+					wisej.web.manager.Accelerators.getInstance().unregister(null, this.__onAccelerator, this);
 				}
 			}
 
@@ -3235,28 +3051,25 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 				// register to receive global keydown events the fist time we have an accelerator.
 				if (this.__accelerators == null) {
 					this.__accelerators = {};
-					qx.event.Registration.addListener(document.body, "keydown", this.__onAccelerator, this, true);
+					wisej.web.manager.Accelerators.getInstance().register(null, this.__onAccelerator, this);
 				}
 
 				for (var i = 0; i < value.length; i++) {
 					var key = qx.lang.String.firstUp(value[i]);
 					this.__accelerators[key] = true;
-					this.__accelerators[this.__translateAcceleratorKey(key)] = true;
 				}
 			}
 		},
 
-		__translateAcceleratorKey: function (code) {
+		_transformAccelerators: function (value) {
 
-			switch (code) {
-				case "Esc": code = "Escape"; break;
-				case "Return": code = "Enter"; break;
-				case "PageUp": code = "PgUp"; break;
-				case "PageDown": code = "PgDn"; break;
-				case "PrintScreen": code = "Print"; break;
+			if (value && value.length) {
+				for (var i = 0; i < value.length; i++) {
+					value[i] = wisej.utils.Widget.translateAcceleratorKey(value[i]);
+				}
 			}
 
-			return code;
+			return value;
 		},
 
 		__onAccelerator: function (e) {
@@ -3281,16 +3094,18 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 				var code = (e.getModifiers() << 16) | e.getKeyCode();
 				if (this.__accelerators[code]) {
 
+					e.stopPropagation();
 					this.fireDataEvent("accelerator", { code: code, target: id });
 
 					// prevent default for Ctrl accelerators to prevent the browser's default actions.
-					if (e.getModifiers() === qx.event.type.Dom.CTRL_MASK)
+					if (e.isCtrlPressed())
 						e.preventDefault();
 				}
 				else {
 					var key = e.getKeyIdentifier();
 					if (this.__accelerators[key]) {
 
+						e.stopPropagation();
 						this.fireDataEvent("accelerator", { code: code, target: id });
 
 						// prevent default for browser keys or we get the search box on F3
@@ -3301,5 +3116,18 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 				}
 			}
 		}
-	}
+	},
+
+	/**
+	 * destruct
+	 */
+	destruct: function () {
+
+		if (wisej.web.DesignMode)
+			return;
+
+		// unregister the accelerator listener.
+		wisej.web.manager.Accelerators.getInstance().unregister(null, this.__onAccelerator, this);
+	},
+
 });

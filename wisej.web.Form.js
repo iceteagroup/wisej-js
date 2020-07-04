@@ -43,6 +43,7 @@ qx.Class.define("wisej.web.Form", {
 		this.addListener("beforeClose", this.__onBeforeClose);
 
 		// listen to change of window states.
+		this.addListener("resize", this._onResize);
 		this.addListener("restore", this._onRestore);
 		this.addListener("minimize", this._onMinimize);
 		this.addListener("maximize", this._onMaximize);
@@ -98,7 +99,7 @@ qx.Class.define("wisej.web.Form", {
 		  * The alternative large icon to the caption icon.
 		  * It's mainly used by the taskbar items.
 		  */
-		largeIcon: { init: null, check: "String", nullable: true, themeable: true },
+		largeIcon: { init: null, check: "String", nullable: true, event: "changeLargeIcon", themeable: true },
 
 		/**
 		 * Sets the margin for the autoscroll area.
@@ -149,13 +150,6 @@ qx.Class.define("wisej.web.Form", {
 		startLocation: { init: null, check: ["manual", "defaultLocation", "centerScreen", "centerParent"], apply: "_applyStartLocation" },
 
 		/**
-		 * Animation style.
-		 *
-		 * Values: "None", "Jelly", "Splat", "Swoosh", "Smack", "Fold", "RoadRunner", "Bounce".
-		 */
-		animation: { init: null, check: "String", themeable: true, nullable: true, apply: "_applyAnimation" },
-
-		/**
 		 * MainMenu property.
 		 *
 		 * Assigns the main menu bar.
@@ -172,7 +166,7 @@ qx.Class.define("wisej.web.Form", {
 		/**
 		 * CancelButton property.
 		 *
-		 * The button that is clicked when the user presses Esc.
+		 * The button that is clicked when the user presses Escape.
 		 */
 		cancelButton: { init: null, nullable: true, apply: "_applyCancelButton", transform: "_transformComponent" },
 
@@ -206,6 +200,20 @@ qx.Class.define("wisej.web.Form", {
 		contentEnabled: { init: true, check: "Boolean", apply: "_applyContentEnabled" },
 
 		/**
+		 * KeepCentered property.
+		 * 
+		 * When true, the form is always kept centered in the browser.
+		 */
+		keepCentered: {init: false, check:"Boolean", apply:"_applyKeepCentered"},
+
+		/**
+		 * AutoClose property.
+		 * 
+		 * When true, clicking or tapping outside of the form automatically closes it.
+		 */
+		autoClose: { init: false, check: "Boolean", apply: "_applyAutoClose" },
+
+		/**
 		 * mdiChild property.
 		 *
 		 * Indicates whether the form is an mdi child.
@@ -217,7 +225,15 @@ qx.Class.define("wisej.web.Form", {
 		 *
 		 * Represents the internal container for the mdi children.
 		 */
-		mdiClient: { init: null, nullable: true, check: "wisej.web.MdiClient", transform: "_transformComponent" }
+		mdiClient: { init: null, nullable: true, check: "wisej.web.MdiClient", transform: "_transformComponent" },
+
+		/**
+		 * Owner property.
+		 * 
+		 * References a form that is related to this form. When the other form is modal, this form
+		 * will receive a z-index above the owner by the wisej.web.WindowManager component.
+		 */
+		owner: { init: null, nullable: true, check: "wisej.web.Form", transform: "_transformComponent" }
 	},
 
 	members: {
@@ -255,10 +271,11 @@ qx.Class.define("wisej.web.Form", {
 		 */
 		destroy: function () {
 
-			if (this.fireEvent("close")) {
-				this.base(arguments);
+			if (this.isTopLevel()) {
+				this.fireEvent("close");
 			}
 
+			this.base(arguments);
 		},
 
 		/**
@@ -304,21 +321,6 @@ qx.Class.define("wisej.web.Form", {
 				title.resetTextColor();
 				captionBar.resetTextColor();
 			}
-		},
-
-		/**
-		 * Applies the animation property.
-		 */
-		_applyAnimation: function (value, old) {
-
-			if (wisej.web.DesignMode)
-				return;
-
-			if (value != null && value.toLowerCase() != "none")
-				wisej.web.Animations.register(this);
-			else
-				wisej.web.Animations.unregister(this);
-
 		},
 
 		/** 
@@ -384,6 +386,7 @@ qx.Class.define("wisej.web.Form", {
 				switch (value) {
 					case "normal":
 						this.show();
+						this.restore();
 						break;
 
 					case "minimized":
@@ -400,6 +403,14 @@ qx.Class.define("wisej.web.Form", {
 		__windowState: "normal",
 		__restoreWindowState: "normal",
 
+		_onResize: function (e) {
+			var data = e.getData();
+			this.fireDataEvent("sizeChanged", {
+				width: data.width,
+				height: data.height,
+				maximized: this.isMaximized()
+			});
+		},
 		_onRestore: function (e) {
 			this.__windowState = "normal";
 			this.__restoreWindowState = null;
@@ -447,27 +458,14 @@ qx.Class.define("wisej.web.Form", {
 
 				case "defaultLocation":
 
-					if (this.getContentElement().getDomElement() == null) {
-						// update the default location when the window is
-						// actually shown, otherwise we can't get the correct
-						// caption height since the theme has not been applied yet.
-						this.addListenerOnce("appear", function (e) {
-
-							this._applyStartLocation(this.getStartLocation());
-
-						}, this);
+					var defaultLoc = this._getDefaultLocation();
+					if (this.isMaximized()) {
+						this.__restoredLeft = defaultLoc.x;
+						this.__restoredTop = defaultLoc.y;
 					}
 					else {
-
-						var defaultLoc = this._getDefaultLocation();
-						if (this.isMaximized()) {
-							this.__restoredLeft = defaultLoc.x;
-							this.__restoredTop = defaultLoc.y;
-						}
-						else {
-							this.setX(defaultLoc.x);
-							this.setY(defaultLoc.y);
-						}
+						this.setX(defaultLoc.x);
+						this.setY(defaultLoc.y);
 					}
 					break;
 
@@ -635,6 +633,51 @@ qx.Class.define("wisej.web.Form", {
 		},
 
 		/**
+		 * Applies the KeepCentered property.
+		 */
+		_applyKeepCentered: function (value, old) {
+
+			var root = qx.core.Init.getApplication().getRoot();
+			if (old) {
+				this.removeListener("resize", this._onPerformKeepCentered, this);
+				root.removeListener("resize", this._onPerformKeepCentered, this);
+			}
+
+			if (value) {
+				this.addListener("resize", this._onPerformKeepCentered, this);
+				root.addListener("resize", this._onPerformKeepCentered, this);
+
+				if (this.isTopLevel())
+					this.center();
+			}
+		},
+
+		_onPerformKeepCentered: function (e) {
+
+			if (this.isTopLevel() && !this.isMaximized())
+				this.center();
+		},
+
+		/**
+		 * Applies the AutoClose property.
+		 */
+		_applyAutoClose: function(value, old) {
+
+			var root = qx.core.Init.getApplication().getRoot();
+			if (old)
+				root.removeListener("click", this._onRootClick, this, true);
+			if (value)
+				root.addListener("click", this._onRootClick, this, true);
+		},
+
+		_onRootClick: function (e) {
+			if (this.isTopLevel()) {
+				if (e.getTarget() === qx.core.Init.getApplication().getRoot())
+					this.close();
+			}
+		},
+
+		/**
 		 * Fires the scroll event when scrolling.
 		 */
 		_onScrollBarX: function (e) {
@@ -680,29 +723,30 @@ qx.Class.define("wisej.web.Form", {
 		 */
 		_applyAcceptButton: function (value, old) {
 
-			if (!value && old)
-				this._disposeObjects("__acceptButtonAccel");
+			if (!value && old) {
+				wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
+			}
 
-			if (value && !this.__acceptButtonAccel) {
-				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter", false, false, document.body);
-				this.__acceptButtonAccel.addListener("execute", function (e) {
-
-					var acceptButton = this.getAcceptButton();
-					if (acceptButton != null && acceptButton.isSeeable()) {
-
-						// ignore accelerators on widgets that are not
-						// in an active top-level container: page, form, or desktop.
-						if (!wisej.utils.Widget.canExecute(acceptButton))
-							return;
-
-						e.stop();
-						acceptButton.execute();
-					}
-
-				}, this);
+			if (value && !old) {
+				wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onAcceptButton, this);
 			}
 		},
-		__acceptButtonAccel: null,
+
+		__onAcceptButton: function (e) {
+
+			var acceptButton = this.getAcceptButton();
+			if (acceptButton != null && acceptButton.isEnabled()) {
+
+				// ignore accelerators on widgets that are not
+				// in an active top-level container: page, form, or desktop.
+				if (!wisej.utils.Widget.canExecute(acceptButton))
+					return;
+
+				e.stop();
+				acceptButton.execute();
+				return true;
+			}
+		},
 
 		/**
 		 * Applies the cancelButton property.
@@ -713,29 +757,29 @@ qx.Class.define("wisej.web.Form", {
 		_applyCancelButton: function (value, old) {
 
 			if (!value && old) {
-				this._disposeObjects("__cancelButtonAccel");
+				wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
 			}
 
-			if (value && !this.__cancelButtonAccel) {
-				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape", false, false, document.body);
-				this.__cancelButtonAccel.addListener("execute", function (e) {
-
-					var cancelButton = this.getCancelButton();
-					if (cancelButton != null && cancelButton.isSeeable()) {
-
-						// ignore accelerators on widgets that are not
-						// in an active top-level container: page, form, or desktop.
-						if (!wisej.utils.Widget.canExecute(cancelButton))
-							return;
-
-						e.stop();
-						cancelButton.execute();
-					}
-
-				}, this);
+			if (value && !old) {
+				wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onCancelButton, this);
 			}
 		},
-		__cancelButtonAccel: null,
+
+		__onCancelButton: function (e) {
+
+			var cancelButton = this.getCancelButton();
+			if (cancelButton != null && cancelButton.isEnabled()) {
+
+				// ignore accelerators on widgets that are not
+				// in an active top-level container: page, form, or desktop.
+				if (!wisej.utils.Widget.canExecute(cancelButton))
+					return;
+
+				e.stop();
+				cancelButton.execute();
+				return true;
+			}
+		},
 
 		/**
 		 * Applies the borderStyle property.
@@ -787,12 +831,6 @@ qx.Class.define("wisej.web.Form", {
 			var control;
 
 			switch (id) {
-
-				case "captionbar":
-					control = this.base(arguments, id, hash);
-					// allow the captionbar to be used from dragging on android touch devices.
-					control.getContentElement().setStyles({ "touch-action": "none", "-ms-touch-action": "none" });
-					break;
 
 				case "pane":
 					control = new wisej.web.container.Scroll();
@@ -865,6 +903,8 @@ qx.Class.define("wisej.web.Form", {
 		_getDefaultLocation: function () {
 
 			var captionBar = this.getChildControl("captionbar");
+			captionBar.syncAppearance();
+			captionBar.invalidateLayoutCache();
 			var captionHeight = captionBar.getSizeHint().height || 32;
 
 			var location = wisej.web.Form.$$defaultLocation;
@@ -894,18 +934,22 @@ qx.Class.define("wisej.web.Form", {
 			if (old != null && this._indexOf(old) > -1)
 				this._remove(old);
 
-			if (value) {
+			if (value && value instanceof wisej.web.menu.MainMenu) {
+
 				// insert the main menu before the content pane.
 				var pane = this.__scroller;
 				var index = this._indexOf(pane);
 				this._addAt(value, index);
 			}
-		},
+		}
 	},
 
+	/**
+	 * destruct
+	 */
 	destruct: function () {
-
-		this._disposeObjects("__acceptButtonAccel", "__cancelButtonAccel");
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
 	}
 });
 

@@ -352,10 +352,11 @@ qx.Class.define("wisej.utils.Widget", {
 		 * @param html {String} html text to measure.
 		 * @param className {String} name of the css class to use.
 		 * @param style {String} css style definition of the element to measure.
-		 * 
+		 * @param width {Integer?} optional width constraint.
+		 *
 		 * @returns {Map} the size of the element: {width, height}.
 		 */
-		measure: function (html, className, style) {
+		measure: function (html, className, style, width) {
 
 			var el = this.__measureElement;
 
@@ -363,27 +364,48 @@ qx.Class.define("wisej.utils.Widget", {
 			if (el == null) {
 				el = this.__measureElement = qx.dom.Element.create("div");
 				document.body.appendChild(el);
+
+				el.$$style = el.style = style;
+
+				var elStyle = el.style;
+				elStyle.height = "auto";
+				elStyle.left = elStyle.top = "-10000px";
+				elStyle.visibility = "hidden";
+				elStyle.position = "absolute";
+				elStyle.overflow = "hidden";
+				elStyle.display = "block";
+				elStyle.whiteSpace = "normal";
+
 			}
 
-			el.style = style;
+			el.innerHTML = "";
 
-			var elStyle = el.style;
-			elStyle.width = elStyle.height = "auto";
-			elStyle.left = elStyle.top = "-1000px";
-			elStyle.visibility = "hidden";
-			elStyle.position = "absolute";
-			elStyle.overflow = "hidden";
-			elStyle.display = "block";
-			elStyle.whiteSpace = "normal";
+			if (el.$$style !== style) {
+				el.$$style = el.style = style;
 
-			el.innerHTML = html;
+				var elStyle = el.style;
+				elStyle.height = "auto";
+				elStyle.left = elStyle.top = "-10000px";
+				elStyle.visibility = "hidden";
+				elStyle.position = "absolute";
+				elStyle.overflow = "hidden";
+				elStyle.display = "block";
+				elStyle.whiteSpace = "normal";
+			}
+
 			el.className = className || "";
+			el.style.width = width === undefined ? "auto" : (width + "px");
+			el.innerHTML = html;
 
 			// detect size
 			var firstChild = el.firstChild;
 			firstChild.style.width = "auto";
 			firstChild.style.height = "auto";
-			var size = qx.bom.element.Dimension.getSize(firstChild);
+			firstChild.style.position = "relative";
+			var size = {
+				width: el.offsetWidth,
+				height: el.offsetHeight
+			};
 
 			// all modern browser are needing one more pixel for width
 			size.width++;
@@ -430,14 +452,14 @@ qx.Class.define("wisej.utils.Widget", {
 			}
 
 			if (target instanceof qx.ui.menu.Menu)
-				target = target.getOpener();
+				target = this.findWisejComponent(target.getOpener());
 
 			// the top level container must be active:
 			//   - current main page, or
 			//   - current desktop, or
 			//   - active floating form, or
 			//   - active mdi child form.
-			var topLevel = target.getTopLevelContainer();
+			var topLevel = target ? target.getTopLevelContainer() : null;
 			if (topLevel && topLevel.isActive()) {
 
 				var focusHandler = qx.ui.core.FocusHandler.getInstance();
@@ -449,6 +471,7 @@ qx.Class.define("wisej.utils.Widget", {
 					var activeContainer = activeWidget.getTopLevelContainer();
 
 					if (activeContainer != topLevel
+						&& activeWidget != topLevel
 						&& !qx.ui.core.Widget.contains(topLevel, activeContainer)) {
 						return false;
 					}
@@ -744,7 +767,59 @@ qx.Class.define("wisej.utils.Widget", {
 
 			return map;
 		},
-		__cssParseElement: null
+		__cssParseElement: null,
+
+		/**
+		 * Converts Keys codes from the server to JavaScript codes.
+		 */
+		translateAcceleratorKey: function (code) {
+
+			switch (code) {
+				case "D0": code = "0"; break;
+				case "D1": code = "1"; break;
+				case "D2": code = "2"; break;
+				case "D3": code = "3"; break;
+				case "D4": code = "4"; break;
+				case "D5": code = "5"; break;
+				case "D6": code = "6"; break;
+				case "D7": code = "7"; break;
+				case "D8": code = "8"; break;
+				case "D9": code = "9"; break;
+				case "Esc": code = "Escape"; break;
+				case "Back": code = "Backspace"; break;
+				case "Return": code = "Enter"; break;
+				case "PrintScreen": code = "Print"; break;
+			}
+
+			return code;
+		},
+
+		/**
+		 * Returns whether parent contains the widget directly
+		 * or through an inline root.
+		 * 
+		 * @param parent {qx.ui.core.Widget} Owner.
+		 * @param widget {qx.ui.core.Widget} Owned widget to check.
+		 */
+		contains: function (parent, widget) {
+
+			if (!parent || !widget)
+				return false;
+
+			var child = widget;
+			while (child) {
+
+				// check inline roots.
+				if (child instanceof qx.ui.root.Inline)
+					child = child.getUserData("parent");
+
+				child = child.getLayoutParent();
+				if (parent == child)
+					return true;
+			}
+
+			return false;		
+		}
 	}
 
 });

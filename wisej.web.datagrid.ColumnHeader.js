@@ -49,6 +49,11 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		minWidth: { init: 10, check: "PositiveInteger", apply: "_applyProperty" },
 
 		/**
+		 * MaxWidth property.
+		 */
+		maxWidth: { init: null, check: "PositiveInteger", apply: "_applyProperty" },
+
+		/**
 		 * AutoEllipsis property.
 		 *
 		 * Sets the auto-ellipsis style.
@@ -243,7 +248,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		__cellWidgetProperties: [
 			"label",
 			"icon", "iconSize",
-			"width", "minWidth",
+			"width", "minWidth", "maxWidth",
 			"autoEllipsis",
 			"wrap",
 			"textAlign", "textColor",
@@ -290,19 +295,8 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		_applyPosition: function (value, old) {
 
 			var table = this.getTable();
-			if (table && this.getIndex() > -1) {
-				table.__internalChange = true;
-				try {
-					var model = table.getTableColumnModel();
-
-					// move the column.
-					var currentPosition = model.getOverallX(this.getIndex());
-					model.moveColumn(currentPosition, value);
-
-				} finally {
-					table.__internalChange = false;
-				}
-			}
+			if (table)
+				table._scheduleUpdateColumnsPosition();
 		},
 
 		/**
@@ -349,7 +343,13 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 			if (value) {
 				this._syncCellWidget();
 				this._applySortOrder(this.getSortOrder());
+
 				value.setName(this.getName());
+				value.removeState("borderNone");
+				value.removeState("borderBoth");
+				value.removeState("borderVertical");
+				value.removeState("borderHorizontal");
+				value.addState(this.getTable()._colHeadersBorderStyle);
 			}
 		},
 
@@ -457,6 +457,15 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 			return this.getHeaderWidget();
 		}
 
+	},
+
+	destruct: function () {
+
+		var headerWidget = this.getHeaderWidget();
+		if (headerWidget) {
+			headerWidget.destroy();
+			this.setHeaderWidget(null);
+		}
 	}
 
 });

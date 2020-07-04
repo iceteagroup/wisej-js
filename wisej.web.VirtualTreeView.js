@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2018 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -36,7 +38,8 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		wisej.mixin.MBorderStyle
 	],
 
-	implement: qx.ui.tree.core.IVirtualTreeDelegate,
+	implement: [qx.ui.tree.core.IVirtualTreeDelegate,
+				wisej.web.toolContainer.IToolPanelHost],
 
 	construct: function () {
 
@@ -46,6 +49,8 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		this.setDelegate(this);
 
 		this.addListener("dragstart", this._onItemDrag, this);
+		// adds the inner target to the drop & drop event object.
+		this.addListener("drop", this._onDragEvent, this);
 
 		// add local state properties.
 		this.setStateProperties(this.getStateProperties().concat(["topNode"]));
@@ -65,6 +70,9 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 		// overridden
 		appearance: { refine: true, init: "tree" },
+
+		// overridden
+		showLeafs: { refine: true, init: false },
 
 		/**
 		 * Root property.
@@ -108,7 +116,14 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 *  
 		 *  Default item height.
 		 */
-		itemHeight: { init: null, refine: true },
+		itemHeight: { init: 24, refine: true },
+
+		/**
+		 * PrefetchItems property.
+		 * 
+		 * Indicates the number of items to prefetch outside of the visible range.
+		 */
+		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" },
 
 		/**
 		 * Scrollable property.
@@ -144,6 +159,13 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 * Gets or sets the selected nodes.
 		 */
 		selectedNodes: { init: [], apply: "_applySelectedNodes", transform: "_transformComponents" },
+
+		/**
+		 * RightClickSelection property.
+		 * 
+		 * Determines whether a right click event ("contextmenu") selects the node under the pointer.
+		 */
+		rightClickSelection: { init: false, check: "Boolean", apply: "_applyRightClickSelection" },
 
 		// Node Icons.
 
@@ -206,6 +228,9 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 		// keep track if the nodes are being selected from the _applySelectedNodes method.
 		__inApplySelectedNodes: false,
+
+		// prefetch manager.
+		__prefetchManager: null,
 
 		/**
 		 * Scrolls the node into view.
@@ -272,6 +297,15 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 			return node.isExpanded()
 				|| qx.lang.Array.contains(this.__openNodes, node);
+		},
+
+		// overridden. interface implementation
+		isNode: function (node) {
+
+			var isRoot = node === this.getRootNode();
+			return isRoot
+				|| node.isVisible()
+				&& qx.ui.tree.core.Util.isNode(node, this.getChildProperty());
 		},
 
 		/**
@@ -433,6 +467,42 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		},
 
 		/**
+		 * Applies the PrefetchItems property.
+		 * 
+		 * @param {Integer} value New value.
+		 * @param {Integer?} old Previous value.
+		 */
+		_applyPrefetchItems: function (value, old) {
+
+			if (value > 0) {
+
+				if (!this.__prefetchManager) {
+					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
+						minLeft: 0,
+						maxLeft: 0,
+						minRight: 0,
+						maxRight: 0,
+						minAbove: 0,
+						maxAbove: 0,
+						minBelow: 0,
+						maxBelow: 0
+					});
+				}
+
+				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
+				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
+
+				var pixels = this.getItemHeight() * value;
+				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
+
+			}
+			else if (this.__prefetchManager) {
+				this.__prefetchManager.dispose();
+				this.__prefetchManager = null;
+			}
+		},
+
+		/**
 		 * Applies the checkBoxes property.
 		 *
 		 * The property value is propagated to all child nodes.
@@ -486,6 +556,40 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		},
 
 		/**
+		 * Applies the RightClickSelection property.
+		 */
+		_applyRightClickSelection: function (value, old) {
+
+			if (!value && old)
+				this.removeListener("contextmenu", this._onRightClick, this);
+
+			if (value && !old)
+				this.addListener("contextmenu", this._onRightClick, this);
+		},
+
+		/**
+		 * Handles right clicks to select the node when rightClickSelection is true.
+		 */
+		_onRightClick: function (e) {
+
+			if (this.getSelectionMode() !== "none") {
+				var node = this.getTreeNode(e.getTarget());
+				if (node) {
+
+					var selection = this.getSelection();
+					this.__inApplySelectedNodes = true;
+					try {
+						selection.removeAll();
+					} finally {
+
+						this.__inApplySelectedNodes = false;
+					}
+					selection.setItem(0, node);
+				}
+			}
+		},
+
+		/**
 		 * Applies the selectionMode property.
 		 */
 		_applySelectionMode: function (value, old) {
@@ -498,6 +602,19 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			}
 
 			this.base(arguments, value, old);
+		},
+
+		/**
+		 * Hook method which is called from the {@link qx.ui.virtual.selection.MModel}.
+		 * The hook method sets the first visible parent not as new selection when
+		 * the current selection is empty and the selection mode is one selection.
+		 *
+		 * @param newSelection {Array} The newSelection which will be set to the selection manager.
+		 */
+		_beforeApplySelection: function (newSelection) {
+
+			// ignore or it will scroll the parent node into view
+			// when clearing the selection since we use "one" when it should be "single".
 		},
 
 		/**
@@ -523,31 +640,56 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 */
 		_applyTools: function (value, old) {
 
-			if (value == null)
-				return;
+			var tools = this.getChildControl("tools", true);
 
-			var toolsContainer = this.getChildControl("tools", true);
-
-			if (value.length === 0) {
-
-				if (toolsContainer)
-					toolsContainer.exclude();
-
+			if (value == null || value.length == 0) {
+				if (tools)
+					tools.exclude();
 				return;
 			}
 
-			if (!toolsContainer) {
-				toolsContainer = this.getChildControl("tools");
-				this._getLayout().setRowFlex(0, 0);
-				this._add(toolsContainer, { row: 0, column: 0, colSpan: 2 });
+			tools = this.getChildControl("tools");
+			tools.show();
 
-				// update the scrollable area layout to make room for the tools container.
-				this._updateScrollAreaLayout();
+			wisej.web.ToolContainer.add(this, tools);
+			wisej.web.ToolContainer.install(this, tools, value, "left", { row: 0, column: 0 }, null, "treeview" );
+			wisej.web.ToolContainer.install(this, tools, value, "right", { row: 0, column: 1 }, null, "treeview");
+		},
+
+		/**
+		 * Implements: wisej.web.toolContainer.IToolPanelHost.updateToolPanelLayout
+		 * 
+		 * Changes the layout of the tools container according to overlayed scrollbar option in the theme,
+		 *
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
+		 */
+		updateToolPanelLayout: function (toolPanel) {
+
+			if (toolPanel) {
+
+				var layout = this._getLayout();
+				if (layout instanceof qx.ui.layout.Grid) {
+
+					layout.setRowFlex(0, 0);
+					toolPanel.setLayoutProperties({ row: 0, column: 0, colSpan: 2 });
+
+					this.getChildControl("pane").resetMargin();
+					this.getChildControl("scrollbar-y").resetMargin();
+
+					this._updateScrollAreaLayout();
+				}
+				// overlayed scrollbars.
+				else if (layout instanceof qx.ui.layout.Canvas) {
+
+					toolPanel.setLayoutProperties({ top: 0, left: 0, right: 0 });
+
+					var size = toolPanel.getSizeHint();
+					var pane = this.getChildControl("pane");
+					var scrollbarY = this.getChildControl("scrollbar-y");
+					pane.setMarginTop(size.height);
+					scrollbarY.setMarginTop(size.height);
+				}
 			}
-
-			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 });
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 });
 		},
 
 		/**
@@ -599,27 +741,38 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		},
 
 		/**
-		 * Returns the tree item, which contains the given widget.
+		 * Returns the tree item from the widget or node.
 		 *
-		 * @param widget {qx.ui.core.Widget} The widget to get the containing tree item.
+		 * @param widgetOrNode {qx.ui.core.Widget|wisej.web.virtualTreeView.TreeNode} The widget to get the containing tree item.
 		 * @return {qx.ui.tree.core.AbstractItem|null} The tree item containing the widget. If the
 		 *     widget is not inside of any tree item <code>null</code> is returned.
 		 */
-		getTreeItem: function (widget) {
+		getTreeItem: function (widgetOrNode) {
 
-			while (widget) {
-				if (widget === this)
-					return null;
-				if (widget instanceof qx.ui.tree.core.AbstractItem)
-					return widget;
-				widget = widget.getLayoutParent();
+			if (widgetOrNode instanceof qx.ui.core.Widget) {
+				var widget = widgetOrNode;
+				while (widget) {
+					if (widget === this)
+						return null;
+					if (widget instanceof qx.ui.tree.core.AbstractItem)
+						return widget;
+					widget = widget.getLayoutParent();
+				}
+			}
+			else if (widgetOrNode instanceof wisej.web.virtualTreeView.TreeNode) {
+				var node = widgetOrNode;
+				var lookup = this.getLookupTable();
+				var index = lookup.indexOf(node);
+				if (index > -1) {
+					return this._layer.getRenderedCellWidget(index, 0);
+				}
 			}
 
 			return null;
 		},
 
 		/**
-		 * Returns the tree item, which contains the given widget.
+		 * Returns the tree node rendered by the given widget.
 		 *
 		 * @param widget {qx.ui.core.Widget} The widget to get the data node.
 		 * @return {wisej.web.virtualTreeView.TreeNode|null} The tree node containing the data represented by the widget. If the
@@ -630,6 +783,34 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			var item = this.getTreeItem(widget);
 			if (item)
 				return item.getModel();
+		},
+
+		/**
+		 * Expands the node.
+		 * 
+		 * @param node {wisej.web.virtualTreeView.TreeNode} node Node to expand.
+		 */
+		expandNode: function (node) {
+
+			var item = this.getTreeItem(node);
+			if (item)
+				item.showLoader(true);
+
+			this.fireDataEvent("expand", node);
+		},
+
+		/**
+		 * Collapses the node.
+		 * 
+		 * @param node {wisej.web.virtualTreeView.TreeNode} Node to collapse/
+		 */
+		collapseNode: function (node) {
+
+			var item = this.getTreeItem(node);
+			if (item)
+				item.showLoader(false);
+
+			this.fireDataEvent("collapse", node);
 		},
 
 		// updates the properties of the node using the values
@@ -720,7 +901,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			clearTimeout(this.__editNodeTimer);
 			this.__editNodeTimer = 0;
 
-			if (!this.__inApplySelectedNodes)
+			if (!this.__inApplySelectedNodes && !this.core.processingActions)
 				this.fireDataEvent("selectionChanged", e.getData().added);
 		},
 
@@ -734,7 +915,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 					case "-":
 					case "Left":
 						if (this.isNodeOpen(node)) {
-							this.closeNode(node);
+							this.collapseNode(node);
 						}
 						else {
 							var parentNode = node.getParentNode();
@@ -746,7 +927,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 					case "+":
 					case "Right":
 						if (!this.isNodeOpen(node))
-							this.openNode(node);
+							this.expandNode(node);
 						return;
 
 					case "Enter":
@@ -762,8 +943,8 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 						}
 						else {
 							this.isNodeOpen(node)
-								? this.closeNode(node)
-								: this.openNode(node);
+								? this.collapseNode(node)
+								: this.expandNode(node);
 						}
 
 						return;
@@ -771,7 +952,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 				// if label editing is enabled, process F2
 				// to start editing the first selected node.
-				if (this.isLabelEdit()) {
+				if (this.isLabelEdit() && this.isEnabled()) {
 					switch (e.getKeyIdentifier()) {
 						case "F2":
 							if (!this.isWired("beginEdit")) {
@@ -842,9 +1023,20 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			clearTimeout(this.__editNodeTimer);
 			this.__editNodeTimer = 0;
 
-			var node = this.getTreeItem(e.getOriginalTarget());
+			var node = this.getTreeNode(e.getOriginalTarget());
 			if (node)
-				this.fireDataEvent("itemDrag", node);
+				this.fireDataEvent("itemDrag", node.getId());
+		},
+
+		// determines the target item (index) for a drag operation
+		// and adds it to the event object.
+		_onDragEvent: function (e) {
+
+			e.setUserData("eventData", null);
+			var target = this.getTreeNode(e.getOriginalTarget());
+			if (target instanceof wisej.web.virtualTreeView.TreeNode) {
+				e.setUserData("eventData", target.getId());
+			}
 		},
 
 		/**
@@ -875,10 +1067,16 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 			this.base(arguments, jobs);
 
-			if (!jobs || !jobs["applyModelChanges"])
+			if (!jobs)
 				return;
 
-			this.__applyModelChanges();
+			if (jobs["refresh"]) {
+				this.refresh();
+			}
+
+			if (jobs["applyModelChanges"]) {
+				this.__applyModelChanges();
+			}
 		},
 
 		// ------------------------------------------------------
@@ -914,7 +1112,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			item.removeState("selected");
 			item.removeState("disabled");
 			item.removeState("editing");
-			item.__hideLoader();
+			item.showLoader(false);
 		},
 
 		/**
@@ -935,6 +1133,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			controller.bindProperty("", "model", null, item, id);
 			controller.bindProperty("label", "label", null, item, id);
 			controller.bindProperty("icon", "icon", null, item, id);
+			controller.bindProperty("iconOpened", "iconOpened", null, item, id);
 			controller.bindProperty("iconSelected", "iconSelected", null, item, id);
 			controller.bindProperty("iconState", "iconState", null, item, id);
 			controller.bindProperty("visible", "visible", null, item, id);
@@ -969,6 +1168,12 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		// ------------------------------------------------------
 		// END: qx.ui.tree.core.IVirtualTreeDelegate
 		// ------------------------------------------------------
+
+	},
+
+	destruct: function () {
+
+		this._disposeObjects("__prefetchManager");
 
 	}
 });
@@ -1026,6 +1231,11 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 		icon: { init: null, check: "String", event: "changeIcon" },
 
 		/**
+		 * Standard icon used by all expanded parent nodes.
+		 */
+		iconOpened: { init: null, check: "String", event: "changeIconOpened" },
+
+		/**
 		 * Node icon when the node is selected.
 		 */
 		iconSelected: { init: null, check: "String", event: "changeIconSelected" },
@@ -1048,7 +1258,7 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 		/**
 		 * The visible property.
 		 */
-		visible: { init: true, check: "Boolean", event: "changeVisible" },
+		visible: { init: true, check: "Boolean", apply: "_applyVisible", event: "changeVisible" },
 
 		/**
 		 * The enabled property.
@@ -1185,6 +1395,23 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 		},
 
 		/**
+		 * Applies the visible property.
+		 *
+		 * When the node has been hidden and shown again, we need to
+		 * trigger the full refresh from here because the item (widget)
+		 * will be updated since it's not rendered.
+		 */
+		_applyVisible: function(value, old)
+		{
+			if (value && !old) {
+				var tree = this.getTree();
+				if (tree) {
+					qx.ui.core.queue.Widget.add(tree, "refresh");
+				}
+			}
+		},
+
+		/**
 		 * Applies the parentNode property.
 		 */
 		_applyParentNode: function (value, old) {
@@ -1220,15 +1447,12 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 
 			var parentNode = this.getParentNode();
 			if (parentNode) {
+				var newIndex = value;
 				var parentChildren = parentNode.getChildren();
-				if (parentChildren.contains(this)) {
-					var newIndex = value;
-					var currentIndex = parentChildren.indexOf(this);
-
-					if (newIndex !== currentIndex) {
+				var currentIndex = parentChildren.indexOf(this);
+				if (currentIndex > -1 && currentIndex !== newIndex) {
 						parentChildren.remove(this);
 						parentChildren.insertAt(newIndex, this);
-					}
 				}
 			}
 		},
@@ -1393,8 +1617,7 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 				this.setOpen(true);
 			}
 			else {
-				this.__showLoader();
-				treeView.fireDataEvent("expand", node);
+				treeView.expandNode(node);
 			}
 		},
 
@@ -1420,8 +1643,7 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 				this.setOpen(false);
 			}
 			else {
-				this.__hideLoader();
-				treeView.fireDataEvent("collapse", node);
+				treeView.collapseNode(node);
 			}
 		},
 
@@ -1445,6 +1667,12 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 			return this.isVisible();
 		},
 		setVisible: function (value) {
+
+			if (!value) {
+				var tree = this.getTree();
+				if (tree)
+					qx.ui.core.queue.Widget.add(tree, "refresh");
+			}
 
 			this.setVisibility(value ? "visible" : "excluded");
 		},
@@ -1478,7 +1706,7 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 
 		// overridden.
 		_applyOpen: function (value, old) {
-			this.__hideLoader();
+			this.showLoader(false);
 			this.base(arguments, value, old);
 		},
 
@@ -1534,7 +1762,7 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 		_applyShowLoader: function (value, old) {
 
 			if (old && !value)
-				this.__hideLoader();
+				this.showLoader(false);
 		},
 
 		removeState: function (state) {
@@ -1828,7 +2056,7 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 				this.setAppearance(this.getFileAppearance());
 
 				// remove the ajax loader, in case the node was loading.
-				this.__hideLoader();
+				this.showLoader(false);
 			}
 		},
 
@@ -1863,9 +2091,11 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 		 */
 		_onPointerOver: function (e) {
 
-			this.addState("hovered");
-
-			this.__fireNodeEvent("nodeMouseOver", e);
+			var treeView = this.getTree();
+			if (treeView && treeView.isEnabled()) {
+				this.addState("hovered");
+				this.__fireNodeEvent("nodeMouseOver", e);
+			}
 		},
 
 		/**
@@ -1873,9 +2103,11 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 		 */
 		_onPointerOut: function (e) {
 
-			this.removeState("hovered");
-
-			this.__fireNodeEvent("nodeMouseOut", e);
+			var treeView = this.getTree();
+			if (treeView && treeView.isEnabled()) {
+				this.removeState("hovered");
+				this.__fireNodeEvent("nodeMouseOut", e);
+			}
 
 		},
 
@@ -1903,24 +2135,25 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 			this.addLabel();
 		},
 
-		__showLoader: function () {
-
-			if (this.getShowLoader()) {
-				if (this.getModel().getChildren().length === 0) {
-					var open = this.getChildControl("open", true);
-					if (open) {
-						open.setSource(this.getLoader());
-					}
-				}
-			}
-		},
-
-		__hideLoader: function () {
+		/**
+		 * Shows or hides the node loader ajax image
+		 * when the node has the showLoader property set to true.
+		 * 
+		 * @param show {Boolean} true to show the loader, false to hide it.
+		 */
+		showLoader: function (show) {
 
 			if (this.getShowLoader()) {
 				var open = this.getChildControl("open", true);
 				if (open) {
-					open.resetSource();
+					if (show) {
+						if (this.getModel().getChildren().length === 0) {
+							open.setSource(this.getLoader());
+						}
+					}
+					else {
+						open.resetSource();
+					}
 				}
 			}
 		},
@@ -1980,16 +2213,19 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 		// handles clicks on the open/close button.
 		_onOpenCloseTap: function (e) {
 
-			this.isOpen()
-				? this.collapse()
-				: this.expand();
+			var treeView = this.getTree();
+			if (treeView != null && treeView.isEnabled()) {
+				this.isOpen()
+					? this.collapse()
+					: this.expand();
+			}
 		},
 
 		// edits the label when the pointer is released over an already selected node.
 		_onNodeLabelPointerDown: function (e) {
 
 			var treeView = this.getTree();
-			if (treeView != null && treeView.isLabelEdit()) {
+			if (treeView != null && treeView.isEnabled() && treeView.isLabelEdit()) {
 
 				if (!treeView.hasState("focused"))
 					return;

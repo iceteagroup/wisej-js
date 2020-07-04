@@ -111,15 +111,23 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 
 		__getCssClass: function (className, sheet, appearance, states, css) {
 
-
 			// create the cell class from the theme.
 			var decorator = null;
-			var themeData = this.__appearanceMgr.styleFrom(appearance, states, null, "");
+
+			var themeData = appearance && states
+				? this.__appearanceMgr.styleFrom(appearance, states, null, "")
+				: null;
+
 			if (themeData && themeData.decorator)
 				decorator = this.__decorationMgr.resolve(themeData.decorator);
 
 			// cache the class in the list of registered classes.
-			this.__classNames[className] = { appearance: appearance, states: states, defaultCss: css, decorator: decorator };
+			this.__classNames[className] = {
+				appearance: appearance,
+				states: states,
+				defaultCss: css,
+				decorator: decorator
+			};
 
 			// create the rule.
 			var selector = "." + className;
@@ -175,7 +183,7 @@ qx.Class.define("wisej.web.datagrid.StyleManager", {
 		/**
 		 * Creates a new pseudo class using the decorator from the specified theme appearance key and state.
 		 */
-		createCssPseudoClass: function (className, appearance, states, defaultCss) {
+		createCssClass: function (className, appearance, states, defaultCss) {
 
 			try {
 

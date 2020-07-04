@@ -104,74 +104,70 @@ qx.Class.define("wisej.utils.Loader", {
 
 			// retrieve the existing package with the same id.
 			var cache = wisej.utils.Loader.__cache;
-			var cachedPackage = cache[id];
+			var cachedItem = cache[id];
 
-			if (cachedPackage != null) {
+			if (cachedItem != null) {
 
 				// if the package is loading: queue the callback call.
 				// if the package is loaded: callback right away.
 				if (callback) {
-					var state = cachedPackage.getReadyState();
-					if (state == "loading" || state == "initialized") {
+					var state = cachedItem.package.getReadyState();
 
-						// async check closure.
-						function packageClosure(cachedPackage, callback) {
-
-							var timerId = setInterval(function () {
-
-								var state = cachedPackage.getReadyState();
-								if (state == "loading")
-									return;
-
-								clearInterval(timerId);
-
-								if (callback)
-									callback(state == "error" ? "error" : "cached");
-
-							}, 100);
-						}
-						packageClosure(cachedPackage, callback);
+					if (state === "loading" || state === "initialized") {
+						cachedItem.callbacks.push(callback);
 					}
 					else {
-						callback(state == "error" ? "error" : "cached");
+						callback(state === "error" ? "error" : "cached");
 					}
 				}
 
 				return;
 			}
 
+			var callbacks = [];
+			var pkg = new qx.io.part.Package([url], id);
+
+			cache[id] = {
+				package: pkg,
+				callbacks: callbacks
+			};
+
+			if (callback)
+				callbacks.push(callback);
+
 			// load a css or a js?
 			if (this.__isCss(url)) {
-
-				var pkg = new qx.io.part.Package([url], id);
-				cache[id] = pkg;
 
 				qx.bom.Stylesheet.includeFile(url, document,
 
 					// onload
 					function () {
 						pkg.__readyState = "cached";
-						if (callback)
-							callback("loaded");
+
+						for (var i = 0; i < callbacks.length; i++) {
+							callbacks[i]("loaded");
+						}
+						callbacks.length = 0;
 					},
 
 					// onerror
 					function () {
 						pkg.__readyState = "error";
-						if (callback)
-							callback("error");
+
+						for (var i = 0; i < callbacks.length; i++) {
+							callbacks[i]("error");
+						}
+						callbacks.length = 0;
 					}
 				);
 			}
 			else {
 
-				var pkg = new qx.io.part.Package([url], id);
-				cache[id] = pkg;
-
 				pkg.load(function () {
-					if (callback) {
-						var state = this.getReadyState();
-						callback(state == "error" ? "error" : "complete");
+					var state = this.getReadyState() === "error" ? "error" : "complete";
+
+					for (var i = 0; i < callbacks.length; i++) {
+						callbacks[i](state);
 					}
 				}, pkg);
 			}

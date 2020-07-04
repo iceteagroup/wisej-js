@@ -37,6 +37,9 @@ qx.Class.define("wisej.web.TagTextBox", {
 		this.addListener("keyup", this._onKeyUp, this);
 		this.addListener("keydown", this._onKeyDown, this);
 		this.addListener("keyinput", this._onKeyInput, this);
+		this.addListener("mouseup", this._onMouseUp, this);
+		this.addListener("dblclick", this._onDblClick, this);
+		this.getChildControl("textfield").getContentElement().addListener("paste", this._onPaste, this);
 
 		this._tagContainer = this.getChildControl("tag-container");
 	},
@@ -100,7 +103,21 @@ qx.Class.define("wisej.web.TagTextBox", {
 		 *
 		 * Gets or sets the character used to detect a new tag in addition to the Return.
 		 */
-		separatorChar: { init: "", check: "String", event: "changeSeparatorChar" }
+		separatorChar: { init: "", check: "String", event: "changeSeparatorChar" },
+
+		/**
+		 * KeepWatermark
+		 * 
+		 * Determines whether the watermark is kept when there are tags.
+		 */
+		keepWatermark: { init: false, check: "Boolean" },
+
+		/**
+		 * ShowToolTips.
+		 * 
+		 * Indicates whether to show a tooltip for each inner tag element.
+		 */
+		showToolTips: {init:false, check:"Boolean", apply:"_applyShowToolTips"}
 	},
 
 	events: {
@@ -173,14 +190,20 @@ qx.Class.define("wisej.web.TagTextBox", {
 				return;
 			}
 
-			// try to reuse the existing widgets.
+			var showToolTips = this.getShowToolTips();
 			for (var i = 0; i < value.length; i++) {
 
+				// try to reuse the existing widgets.
 				var tag =
 					this.__findTag(value[i].value)
 					|| this.__createNewTag();
 
 				tag.set(value[i]);
+
+				if (showToolTips)
+					tag.getContentElement().setAttribute("title", tag.getLabel());
+				else
+					tag.getContentElement().removeAttribute("title");
 
 				container.addAt(tag, i);
 			}
@@ -194,6 +217,9 @@ qx.Class.define("wisej.web.TagTextBox", {
 					children[i].destroy();
 			}
 
+			// update the watermark in the editable widget.
+			this._updateWatermark();
+
 			// restore the selected tag widget.
 			this._applySelectedIndex(this.getSelectedIndex());
 
@@ -202,6 +228,22 @@ qx.Class.define("wisej.web.TagTextBox", {
 
 			// done, notify whoever is listening.
 			this.fireDataEvent("changeValue", this.getValue(), oldValue);
+		},
+
+		/**
+		 * Updates the watermark depending on the property KeepWatermark
+		 * and the presence of tags.
+		 */
+		_updateWatermark: function () {
+
+			if (!this.getKeepWatermark()) {
+
+				if (this.__getTagCount())
+					this._applyPlaceholder("");
+				else
+					this._applyPlaceholder(this.getPlaceholder());
+			}
+
 		},
 
 		_applySelectedIndex: function (value) {
@@ -234,8 +276,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 		 */
 		_applyMaxTagWidth: function (value, old) {
 
-			var container = this._tagContainer;
-			var children = container.getChildren();
+			var children = this._tagContainer.getChildren();
 			for (var i = 0, count = this.__getTagCount() ; i < count; i++) {
 
 				if (value)
@@ -246,20 +287,71 @@ qx.Class.define("wisej.web.TagTextBox", {
 		},
 
 		/**
+		 * Applies the ShowToolTIps property.
+		 */
+		_applyShowToolTips: function (value, old) {
+
+			var children = this._tagContainer.getChildren();
+			for (var i = 0, count = this.__getTagCount(); i < count; i++) {
+
+				if (value)
+					children[i].getContentElement().setAttribute("title", children[i].getLabel());
+				else
+					children[i].getContentElement().removeAttribute("title");
+			}
+		},
+
+		/**
 		 * Handles "tap" events to delete tags.
 		 */
 		_onTap: function (e) {
 
-			this.focus();
+			var tag = e.getTarget();
+			if (tag instanceof wisej.web.tagtextbox.Tag) {
 
-			var target = e.getTarget();
-			if (target instanceof wisej.web.tagtextbox.Tag) {
-				var element = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
+				if (this.isReadOnly()) {
+					this.__selectTag(tag);
+				}
+				else {
+					// clicked on the delete icon?
+					var target = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
 
-				if (element instanceof qx.ui.basic.Image)
-					this.__removeTag(target);
-				else
-					this.__selectTag(target);
+					if (target instanceof qx.ui.basic.Image)
+						this.__removeTag(tag);
+					else
+						this.__selectTag(tag);
+				}
+			}
+		},
+
+		/**
+		 * Handles "mouseup" events on the inner tags.
+		 */
+		_onMouseUp: function (e) {
+
+			var tag = e.getTarget();
+			if (tag instanceof wisej.web.tagtextbox.Tag) {
+
+				this.__selectTag(tag);
+
+				// clicked on the delete icon?
+				var target = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
+				if (!(target instanceof qx.ui.basic.Image))
+					this.fireDataEvent("tagClick", tag.getValue());
+			}
+		},
+
+		/**
+		 * Handles "dblclick" events on the inner tags.
+		 */
+		_onDblClick: function (e) {
+
+			var tag = e.getTarget();
+			if (tag instanceof wisej.web.tagtextbox.Tag) {
+				// clicked on the delete icon?
+				var target = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
+				if (!(target instanceof qx.ui.basic.Image))
+					this.fireDataEvent("tagDblClick", tag.getValue());
 			}
 		},
 
@@ -277,23 +369,27 @@ qx.Class.define("wisej.web.TagTextBox", {
 			switch (key) {
 
 				case "Delete":
-					var index = this.getSelectedIndex();
-					if (index > -1) {
-						this.__removeTag(this.__getSelectedTag(), true);
-						e.stop();
+					if (!this.isReadOnly()) {
+						var index = this.getSelectedIndex();
+						if (index > -1) {
+							this.__removeTag(this.__getSelectedTag(), true);
+							e.stop();
+						}
 					}
 					break;
 
 				case "Backspace":
-					var index = this.getSelectedIndex();
-					if (index > -1) {
-						this.__removeTag(this.__getSelectedTag(), false);
-						e.stop();
-					}
-					else if (this.getTextSelectionStart() == 0) {
-						this.__selectTag(this.__getTagCount() - 1);
-						this.__removeTag(this.__getSelectedTag(), false);
-						e.stop();
+					if (!this.isReadOnly()) {
+						var index = this.getSelectedIndex();
+						if (index > -1) {
+							this.__removeTag(this.__getSelectedTag(), false);
+							e.stop();
+						}
+						else if (this.getTextSelectionStart() == 0) {
+							this.__selectTag(this.__getTagCount() - 1);
+							this.__removeTag(this.__getSelectedTag(), false);
+							e.stop();
+						}
 					}
 					break;
 
@@ -372,6 +468,29 @@ qx.Class.define("wisej.web.TagTextBox", {
 			}
 		},
 
+		/**
+		 * Handles the "paste" event to update the server immediately if the
+		 * pasted value contains a separator.
+		 * @param {any} e
+		 */
+		_onPaste: function (e) {
+			qx.event.Timer.once(function () {
+				var text = this.__getFieldText();
+				var separator = this.getSeparatorChar();
+
+				if (text && text.indexOf(separator) > -1) {
+
+					var tags = text.split(separator);
+					for (var i = 0; i < tags.length; i++) {
+						this.__addTag(tags[i]);
+					}
+
+					this.__setFieldText("");
+				}
+
+			}, this, 1);
+		},
+
 		__getFieldText: function () {
 			return this.getChildControl("textfield").getValue();
 		},
@@ -401,7 +520,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 		__addTag: function (text) {
 
 			if (!text)
-				return;
+				return false;
 
 			text = text.trim();
 
@@ -416,14 +535,14 @@ qx.Class.define("wisej.web.TagTextBox", {
 					this.getDuplicateDuration());
 
 					this.fireDataEvent("tagRejected", text);
-					return;
+					return false;
 				}
 			}
 
 			if (this.getMaxTagCount() > 0) {
 				if (this.__getTagCount() >= this.getMaxTagCount()) {
 					this.fireDataEvent("tagRejected", text);
-					return;
+					return false;
 				}
 			}
 
@@ -433,19 +552,26 @@ qx.Class.define("wisej.web.TagTextBox", {
 			tag.setValue(text);
 			tag.setLabel(text);
 
-			this.getChildControl("textfield").invalidateLayoutCache();
+			var textfield = this.getChildControl("textfield");
+			textfield.invalidateLayoutCache();
 			this.fireDataEvent("tagAdded", text);
+
+			// scroll the edit field into view.
+			this.scrollChildIntoView(textfield);
+
+			return true;
 		},
 
 		__removeTag: function (tag, forward) {
 			if (!tag)
-				return;
+				return false;
 
 			var container = this._tagContainer;
 			var index = container.indexOf(tag);
 			if (index > -1) {
 
-				this.getChildControl("textfield").invalidateLayoutCache();
+				var textfield = this.getChildControl("textfield");
+				textfield.invalidateLayoutCache();
 				this.fireDataEvent("tagRemoved", tag.getValue());
 
 				tag.destroy();
@@ -456,34 +582,50 @@ qx.Class.define("wisej.web.TagTextBox", {
 					this._applySelectedIndex(index);
 				else
 					this.setSelectedIndex(-1);
+
+				return true;
 			}
+
+			return false;
 		},
 
 		__selectTag: function (arg) {
 
+			var tag = null;
 			var index = -1;
 
 			if (typeof arg === "number")
 				index = arg;
 			else if (typeof arg === "string")
-				arg = this.__findTag(arg);
+				tag = this.__findTag(arg);
+			else if (arg instanceof wisej.web.tagtextbox.Tag)
+				tag = arg;
 
-			if (arg instanceof wisej.web.tagtextbox.Tag) {
-				var container = this._tagContainer;
-				index = container.indexOf(arg);
-			}
+			if (tag)
+				index = this._tagContainer.indexOf(arg);
+
+			// already selected?
+			if (tag && tag.hasState("selected"))
+				return;
 
 			this.setSelectedIndex(index);
-			var tag = this.__getSelectedTag();
-			if (tag)
+			tag = this.__getSelectedTag();
+			if (tag) {
+				this.scrollChildIntoView(tag);
 				this.fireDataEvent("tagSelected", tag.getValue());
+			}
+
+			// scroll the edit field into view.
+			if (index == -1)
+				this.scrollChildIntoView(this.getChildControl("textfield"));
+
+			return index > -1;
 		},
 
 		__findTag: function (text) {
 			if (text) {
 				text = text.toLowerCase();
-				var container = this._tagContainer;
-				var children = container.getChildren();
+				var children = this._tagContainer.getChildren();
 				for (var i = 0, count = this.__getTagCount() ; i < count; i++) {
 					var label = children[i].getValue().toLowerCase();
 					if (label === text)
@@ -524,7 +666,6 @@ qx.Class.define("wisej.web.TagTextBox", {
 
 			return control || this.base(arguments, id);
 		},
-
 
 		/*---------------------------------------------------------------------------
 		  qx.ui.form.IStringForm implementation

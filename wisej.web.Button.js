@@ -28,6 +28,7 @@ qx.Class.define("wisej.web.Button", {
 	// to provide services to the Wisej core.
 	include: [
 		wisej.mixin.MWisejControl,
+		wisej.mixin.MBorderStyle,
 		wisej.mixin.MShortcutTarget
 	],
 

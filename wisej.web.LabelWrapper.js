@@ -214,14 +214,31 @@ qx.Class.define("wisej.web.LabelWrapper", {
 			this.addState(value);
 
 			var label = this.getLabel();
+			var editor = this.getEditor();
 			var labelEl = label.getContentElement();
+			var textfield = editor ? editor.getChildControl("textfield", true) : null;
+			var labelfield = editor ? editor.getChildControl("labelfield", true) : null;
+
 			switch (value) {
 				case "inside":
+
 					label.resetTextAlign();
 					labelEl.setStyles({
 						"disabled": "disabled",
 						"pointer-events": "none"
 					});
+
+					if (textfield)
+						textfield.setAlignY("bottom");
+					if (labelfield)
+						labelfield.setAlignY("bottom");
+
+					// special case for multiline TextBox with label inside.
+					// add the label height to the inner padding.
+					if (editor instanceof wisej.web.TextArea) {
+						editor.setPaddingTop(label.getSizeHint().height);
+					}
+
 					break;
 
 				default:
@@ -229,6 +246,18 @@ qx.Class.define("wisej.web.LabelWrapper", {
 						"disabled": null,
 						"pointer-events": null
 					});
+
+					if (textfield)
+						textfield.resetAlignY();
+					if (labelfield)
+						labelfield.resetAlignY();
+
+					// special case for multiline TextBox with label inside.
+					// add the label height to the inner padding.
+					if (editor instanceof wisej.web.TextArea) {
+						editor.resetPaddingTop();
+					}
+
 					break;
 			}
 
@@ -242,6 +271,19 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		updateLayout: function () {
 
 			qx.ui.core.queue.Layout.add(this);
+		},
+
+		/**
+		 * Returns the element to use to set accessibility attributes.
+		 *
+		 */
+		getAccessibilityTarget: function () {
+
+			var editor = this.getEditor();
+			if (editor && editor.getAccessibilityTarget)
+				return editor.getAccessibilityTarget();
+
+			return editor;
 		},
 
 		/**
@@ -264,6 +306,10 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		 * Creates or updates the wrapped editor.
 		 */
 		setEditor: function (value) {
+
+			if (!value)
+				return;
+
 			var config = value;
 
 			if (this._editor) {
@@ -273,7 +319,15 @@ qx.Class.define("wisej.web.LabelWrapper", {
 				delete config.webMethods;
 
 				// update the wrapped widget.
-				this._editor.set(config);
+				this._editor.__inSetState = true;
+				try {
+					this._editor.set(config);
+				}
+				catch (error) {
+					if (this.core)
+						this.core.logError(error);
+				}
+				this._editor.__inSetState = false;
 			}
 			else {
 
@@ -306,7 +360,8 @@ qx.Class.define("wisej.web.LabelWrapper", {
 
 					this._editor = comp;
 					this._replaceGetSetDirty();
-					this.updateLayout();
+					this._applyName(this.getName());
+					this._applyPosition(this.getPosition());
 
 					if (this._editor.getValue) {
 
@@ -315,9 +370,10 @@ qx.Class.define("wisej.web.LabelWrapper", {
 							this.addState("full");
 
 						this._editor.addListener("changeValue", this._onEditorChangeValue, this);
+						this._editor.addListener("changeSelectedIndex", this._onEditorChangeSelectedIndex, this);
 					}
 
-					// propagate the multiline state when wrapping a textarea.
+					// propagate up the multiline state when wrapping a textarea.
 					if (this._editor.hasState("multiline"))
 						this.addState("multiline");
 				}
@@ -379,8 +435,17 @@ qx.Class.define("wisej.web.LabelWrapper", {
 
 		_onEditorChangeValue: function (e) {
 
-			var editorValue = e.getData();
-			if (editorValue !== null && editorValue !== "")
+			var value = e.getData();
+			if (value !== null && value !== "")
+				this.addState("full");
+			else
+				this.removeState("full");
+		},
+
+		_onEditorChangeSelectedIndex: function (e) {
+
+			var value = e.getData();
+			if (value > -1)
 				this.addState("full");
 			else
 				this.removeState("full");
@@ -413,7 +478,7 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		focus: function () {
 
 			if (this._editor)
-				this._editor.getFocusElement().focus();
+				this._editor.focus();
 		},
 
 		// overridden

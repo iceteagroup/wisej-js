@@ -72,6 +72,9 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		// the data store used to retrieve data from the server component.
 		__dataStore: null,
 
+		// set to true if the current request is canceled.
+		__canceled: false,
+
 		/**
 		 * Initialize the table model <--> table interaction. The table model is
 		 * passed to the table constructor, but the table model doesn't otherwise
@@ -300,6 +303,23 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		},
 
 		/**
+		 * Returns the maximum height of the specified row.
+		 *
+		 * @param rowIndex {Integer} the index of the row
+		 */
+		getMaxRowHeight: function (rowIndex) {
+
+			if (this.__table.isKeepSameRowHeight())
+				return this.__table.getMaxRowHeight();
+
+			var rowData = this.getRowData(rowIndex);
+			if (rowData && rowData.maxHeight)
+				return rowData.maxHeight;
+
+			return this.__table.getMaxRowHeight();
+		},
+
+		/**
 		 * Returns whether the row is resizable.
 		 *
 		 * @param rowIndex {Integer} the index of the row
@@ -397,6 +417,20 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		},
 
 		/**
+		 * Cancels the current request if possible.
+		 *
+		 * Should be overridden by subclasses if they are able to cancel requests. This
+		 * allows sending a new request directly after a call of {@link #reloadData}.
+		 *
+		 * @return {Boolean} whether the request was canceled.
+		 */
+		_cancelCurrentRequest: function () {
+
+			this.__canceled = true;
+			return true;
+		},
+
+		/**
 		 * Reads the total number of rows from the server.
 		 */
 		_loadRowCount: function () {
@@ -405,6 +439,23 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 				this._getDataStore().getRowCount(
 					this._onRowCountLoaded, this);
 			}
+		},
+
+		/**
+		 * Sets row data.
+		 *
+		 * Has to be called by {@link #_loadRowData}.
+		 *
+		 * @param rowDataArr {Map[]} the loaded row data or null if there was an error.
+		 */
+		_onRowDataLoaded: function (rowDataArr) {
+
+			if (this.__canceled) {
+				this.__canceled = false;
+				return;
+			}
+
+			this.base(arguments, rowDataArr);
 		},
 
 		/**

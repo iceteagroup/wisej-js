@@ -54,22 +54,22 @@ qx.Class.define("wisej.web.LinkLabel", {
 		/**
 		 * LinkColor property.
 		 */
-		linkColor: { nullable: true, check: "Color", themeable: true, apply: "__applyStyles" },
+		linkColor: { nullable: true, check: "Color", themeable: true },
 
 		/**
 		 * ActiveColor property.
 		 */
-		activeColor: { nullable: true, check: "Color", themeable: true, apply: "__applyStyles" },
+		activeColor: { nullable: true, check: "Color", themeable: true },
 
 		/**
 		 * DisabledColor property.
 		 */
-		disabledColor: { nullable: true, check: "Color", themeable: true, apply: "__applyStyles" },
+		disabledColor: { nullable: true, check: "Color", themeable: true },
 
 		/**
 		 * Behavior property.
 		 */
-		behavior: { init: "systemDefault", check: ["systemDefault", "alwaysUnderline", "neverUnderline", "hoverUnderline"], themeable: true, apply: "__applyStyles" },
+		behavior: { init: "systemDefault", check: ["systemDefault", "alwaysUnderline", "neverUnderline", "hoverUnderline"], themeable: true },
 	},
 
 	members: {
@@ -198,7 +198,7 @@ qx.Class.define("wisej.web.LinkLabel", {
 					qx.bom.Event.addNativeListener(links[i], "mouseover", this.__onNativeMouseOver.bind(this));
 					qx.bom.Event.addNativeListener(links[i], "mouseout", this.__onNativeMouseOut.bind(this));
 					qx.bom.Event.addNativeListener(links[i], "mousedown", this.__onNativeMouseDown.bind(this));
-					qx.bom.Event.addNativeListener(links[i], "mousedown", this.__onNativeMouseUp.bind(this));
+					qx.bom.Event.addNativeListener(links[i], "mouseup", this.__onNativeMouseUp.bind(this));
 				}
 			}
 

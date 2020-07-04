@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -308,6 +310,7 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 			var htmlArr = [];
 
 			var data = cellInfo.rowData;
+			var cellValue = this._getCellValue(cellInfo);
 			var cellStyle = this._resolveContentStyle(cellInfo);
 			var cellCss = cellStyle ? cellStyle.css : "";
 
@@ -339,10 +342,16 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 				}
 			}
 
+			// make room for the cell icon.
+			if (cellStyle.backgroundImage) {
+				if (cellCss) cellCss += ";";
+				cellCss += "padding-left:" + cellInfo.table.getRowHeight() + "px";
+			}
+
 			htmlArr.push(
 				"<div role='content' class='", this._contentClassName, "' style='", cellCss, "'>",
 				"<div class='", this._contentMiddleClassName, "'>",
-				cellInfo.value,
+				cellValue,
 				"</div></div>");
 
 			html = htmlArr.join("");
@@ -363,6 +372,33 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 
 			this.base(arguments);
 		},
+	}
+});
+
+
+/**
+ * wisej.web.propertygrid.PasswordCellRenderer
+ *
+ * Specialized cell renderer for the PropertyGrid.
+ */
+qx.Class.define("wisej.web.propertygrid.PasswordCellRenderer", {
+
+	extend: wisej.web.propertygrid.CellRenderer,
+
+	members:
+	{
+		/**
+		 * Returns the value to render inside the cell.
+		 *
+		 * This method may be overridden by sub classes.
+		 *
+		 * @param cellInfo {Map} The information about the cell.
+		 *          See {@link qx.ui.table.cellrenderer.Abstract#createDataCellHtml}.
+		 */
+		_getCellValue: function (cellInfo) {
+
+			return cellInfo.value ? cellInfo.value.replace(/./g, "•") : "";
+		}
 	}
 });
 

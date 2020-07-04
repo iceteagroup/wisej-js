@@ -27,6 +27,7 @@ qx.Class.define("wisej.web.PictureBox", {
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
 	include: [
+		qx.ui.core.MExecutable,
 		wisej.mixin.MWisejControl,
 		wisej.mixin.MBorderStyle
 	],
@@ -37,6 +38,8 @@ qx.Class.define("wisej.web.PictureBox", {
 
 		this.addListener("pointerover", this._onPointerOver);
 		this.addListener("pointerout", this._onPointerOut);
+		this.addListener("loaded", this._onImageLoaded);
+		this.addListener("tap", this._onTap);
 	},
 
 	properties: {
@@ -57,8 +60,7 @@ qx.Class.define("wisej.web.PictureBox", {
 		 */
 		_applySizeMode: function (value, old) {
 
-			var position = null,
-				size = null;
+			var position = null, size = null;
 
 			switch (value) {
 				case "normal":
@@ -74,6 +76,7 @@ qx.Class.define("wisej.web.PictureBox", {
 					position = "0px 0px";
 					this.resetWidth();
 					this.resetHeight();
+					this.invalidateLayoutCache();
 					break;
 
 				case "centerImage":
@@ -84,14 +87,33 @@ qx.Class.define("wisej.web.PictureBox", {
 					position = "center center";
 					size = "contain";
 					break;
+
+				case "cover":
+					size = "cover";
+					break;
+			
 			}
 
 			var elem = this.getContentElement();
 			elem.setStyles({
 				backgroundSize: size,
-				backgroundPosition: position
+				backgroundPosition: position,
+				backgroundOrigin: "content-box"
 			});
 
+		},
+
+		/**
+		 * Event handler for the "loaded" event.
+		 */
+		_onImageLoaded: function (e) {
+
+			// auto-resize the widget when sizeMode = "autoSize".
+			if (this.getSizeMode() === "autoSize") {
+				this.resetWidth();
+				this.resetHeight();
+				this.invalidateLayoutCache();
+			}
 		},
 
 		/**
@@ -108,6 +130,16 @@ qx.Class.define("wisej.web.PictureBox", {
 		_onPointerOut: function (e) {
 
 			this.removeState("hovered");
+		},
+
+        /**
+         * Listener method for "tap" event which stops the propagation.
+         *
+         * @param e {qx.event.type.Pointer} Pointer event
+         */
+		_onTap: function (e) {
+			this.execute();
+			e.stopPropagation();
 		},
 
 		/**

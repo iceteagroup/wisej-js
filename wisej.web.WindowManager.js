@@ -43,17 +43,22 @@ qx.Class.define("wisej.web.WindowManager", {
 		 */
 		syncWidget: function () {
 
-			this.__desktop.forceUnblock();
-
-			var windows = this.__desktop.getWindows();
+			var desktop = this.getDesktop();
+			var windows = desktop.getWindows();
 
 			// z-index for all three window kinds.
 			var zIndex = this._minZIndex;
 			var zIndexOnTop = zIndex + windows.length * 2;
 			var zIndexModal = zIndex + windows.length * 4;
 
-			// marker if there is an active window.
+			// window to bring to top.
 			var active = null;
+
+			// indicates whether to block and the blocking z-index.
+			var blockZIndex = -1;
+
+			// collects the z-indexes to assign to the windows.
+			var zIndexes = [];
 
 			for (var i = 0, l = windows.length; i < l; i++) {
 
@@ -63,43 +68,88 @@ qx.Class.define("wisej.web.WindowManager", {
 				if (!win.isVisible())
 					continue;
 
-				// take the first window as the active window.
+				// take the first window as active window
 				active = active || win;
+
+				// skip z-indexes already assigned.
+				if (zIndexes[i] !== undefined)
+					continue;
 
 				// use only every second z index to easily insert a blocker between two windows.
 				// alwaysOnTop windows stay on top of modal windows modal windows which stay
 				// stay on top of regular windows.
 				if (win.isModal()) {
+
+					block = true;
 					win.setZIndex(zIndexModal);
-					this.__desktop.blockContent(zIndexModal - 1);
+					zIndexes[i] = zIndexModal;
+					blockZIndex = zIndexModal - 1;
 					zIndexModal += 2;
 
-					//activate it if it's modal.
+					//just activate it if it's modal
 					active = win;
 
-				} else if (win.isAlwaysOnTop()) {
+				} else if (win.isAlwaysOnTop() && !win.getOwner()) {
 
 					win.setZIndex(zIndexOnTop);
+					zIndexes[i] = zIndexOnTop;
 					zIndexOnTop += 2;
 
 				} else {
 
-					win.setZIndex(zIndex);
-					zIndex += 2;
+					// if the form was created after a modal, use the modal z-index as the
+					// base z-index - the form must always be above the modal that was active
+					// when the form was created.
+
+					var owner = win.getOwner();
+					if (owner) {
+
+						var mi = windows.indexOf(owner);
+						if (mi > -1 && zIndexes[mi] === undefined) {
+
+							block = true;
+							owner.setZIndex(zIndexModal);
+							zIndexes[mi] = zIndexModal;
+							blockZIndex = zIndexModal - 1;
+							zIndexModal += 2;
+						}
+
+						win.setZIndex(zIndexModal);
+						zIndexes[i] = zIndexModal;
+						zIndexModal += 2;
+					}
+					else {
+
+						win.setZIndex(zIndex);
+						zIndexes[i] = zIndex;
+						zIndex += 2;
+					}
 				}
 
 				// update the active window.
-				if (!active.isModal() &&
-					win.isActive() ||
-					win.getZIndex() > active.getZIndex()) {
+				if (win.getZIndex() > active.getZIndex()) {
 
-					active = win;
+					if (win.isActive())
+						active = win;
+					else if (!active.isActive())
+						active = win;
 				}
 			}
 
+			// desktop.getBlocker().setKeepBlockerActive(false);
+
+			// remove the previous blocking and if we are not in modal, restore the previous active widget.
+			if (blockZIndex > -1) {
+				desktop.forceUnblock(false /*restoreActive*/);
+				desktop.blockContent(blockZIndex, true /*keepActive*/);
+			}
+			else {
+				desktop.forceUnblock(true /*restoreActive*/);
+			}
+
 			// set the active window or null.
-			this.__desktop.setActiveWindow(active);
-		},
+			desktop.setActiveWindow(active);
+		}
 	},
 
 	defer: function (statics) {

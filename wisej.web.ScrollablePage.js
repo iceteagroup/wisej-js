@@ -27,6 +27,7 @@ qx.Class.define("wisej.web.ScrollablePage", {
 	construct: function () {
 
 		this.base(arguments);
+
 	},
 
 	properties: {
@@ -51,7 +52,7 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		/**
 		 * CancelButton property.
 		 *
-		 * The button that is clicked when the user presses Esc.
+		 * The button that is clicked when the user presses Escape.
 		 */
 		cancelButton: { init: null, nullable: true, apply: "_applyCancelButton", transform: "_transformComponent" },
 	},
@@ -89,29 +90,30 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		 */
 		_applyAcceptButton: function (value, old) {
 
-			if (!value && old)
-				this._disposeObjects("__acceptButtonAccel");
+			if (!value && old) {
+				wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
+			}
 
-			if (value && !this.__acceptButtonAccel) {
-				this.__acceptButtonAccel = new qx.bom.Shortcut("Enter", false, false, document.body);
-				this.__acceptButtonAccel.addListener("execute", function (e) {
-
-					var acceptButton = this.getAcceptButton();
-					if (acceptButton != null && acceptButton.isSeeable()) {
-
-						// ignore accelerators on widgets that are not
-						// in an active top-level container: page, form, or desktop.
-						if (!wisej.utils.Widget.canExecute(acceptButton))
-							return;
-
-						e.stop();
-						acceptButton.execute();
-					}
-
-				}, this);
+			if (value && !old) {
+				wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onAcceptButton, this);
 			}
 		},
-		__acceptButtonAccel: null,
+
+		__onAcceptButton: function (e) {
+
+			var acceptButton = this.getAcceptButton();
+			if (acceptButton != null && acceptButton.isSeeable()) {
+
+				// ignore accelerators on widgets that are not
+				// in an active top-level container: page, form, or desktop.
+				if (!wisej.utils.Widget.canExecute(acceptButton))
+					return;
+
+				e.stop();
+				acceptButton.execute();
+				return true;
+			}
+		},
 
 		/**
 		 * Applies the cancelButton property.
@@ -121,31 +123,35 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		 */
 		_applyCancelButton: function (value, old) {
 
-			if (!value)
-				this._disposeObjects("__cancelButtonAccel");
+			if (!value && old) {
+				wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
+			}
 
-			if (value && !this.__cancelButtonAccel) {
-				this.__cancelButtonAccel = new qx.bom.Shortcut("Escape", false, false, document.body);
-				this.__cancelButtonAccel.addListener("execute", function (e) {
-
-					var cancelButton = this.getCancelButton();
-					if (cancelButton != null && cancelButton.isSeeable()) {
-
-						// ignore accelerators on widgets that are not
-						// in an active top-level container: page, form, or desktop.
-						if (!wisej.utils.Widget.canExecute(cancelButton))
-							return;
-
-						e.stop();
-						cancelButton.execute();
-					}
-
-				}, this);
+			if (value && !old) {
+				wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onCancelButton, this);
 			}
 		},
-		__cancelButtonAccel: null
+
+		__onCancelButton: function (e) {
+
+			var cancelButton = this.getCancelButton();
+			if (cancelButton != null && cancelButton.isSeeable()) {
+
+				// ignore accelerators on widgets that are not
+				// in an active top-level container: page, form, or desktop.
+				if (!wisej.utils.Widget.canExecute(cancelButton))
+					return;
+
+				e.stop();
+				cancelButton.execute();
+				return true;
+			}
+		},
 	},
 
+	/**
+	 * destruct
+	 */
 	destruct: function () {
 
 		if (!wisej.web.DesignMode) {
@@ -153,8 +159,8 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				Wisej.Platform.setMainPage(null);
 		}
 
-		this._disposeObjects("__acceptButtonAccel");
-		this._disposeObjects("__cancelButtonAccel");
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
 	}
 
 });

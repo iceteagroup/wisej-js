@@ -188,6 +188,50 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 			return target;
 		},
 
+		// ===================================================
+		// Methods to manage the tooltip directly.
+		// ===================================================
+
+		/**
+		 * Shows the tooltip at the location.
+		 * 
+		 * @param {Widget?} opener Optional opener widget.
+		 * @param {String} text Text of the tooltip.
+		 * @param {Map} location Location in screen (browser) coordinates.
+		 */
+		showTooltip: function (target, text, location) {
+
+			var tooltip = this.__getToolTip();
+			var manager = qx.ui.tooltip.Manager.getInstance();
+
+			manager.setCurrent(null);
+
+			tooltip.setLabel(text);
+			tooltip.setIcon(this._tooltipIcon);
+
+			// placement?
+			if (target) {
+
+				// retrieve the header widget if the opener is a column header.
+				if (target instanceof wisej.web.datagrid.ColumnHeader)
+					target = target.getHeaderWidget();
+				// retrieve the TabPage button, if the opener is a TabPage.
+				if (target instanceof qx.ui.tabview.Page)
+					target = target.getButton();
+
+				tooltip.setOpener(target);
+				tooltip.resetPlaceMethod();
+				tooltip.placeToWidget(target);
+				manager.setCurrent(tooltip);
+			}
+			else {
+				tooltip.setOpener(null);
+				tooltip.setPlaceMethod("pointer");
+				tooltip.placeToPoint({ left: location.x, top: location.y });
+				manager.setCurrent(tooltip);
+			}
+		}
+
 	}
 
 });

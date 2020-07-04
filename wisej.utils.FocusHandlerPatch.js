@@ -61,6 +61,24 @@ qx.Mixin.define("wisej.utils.FocusHandlerPatch", {
 	members: {
 
 		/**
+		 * Returns the previous widget in the tabbing order.
+		 *
+		 * @param widget {qx.ui.core.Widget} current widget.
+		 */
+		getPrevWidget: function (widget) {
+			return this.__getWidgetBefore(widget);
+		},
+
+		/**
+		 * Returns the next widget in the tabbing order.
+		 * 
+		 * @param widget {qx.ui.core.Widget} current widget.
+		 */
+		getNextWidget: function (widget) {
+			return this.__getWidgetAfter(widget);
+		},
+
+		/**
 		 * Compares the tabIndex of two widgets taking on consideration
 		 * their position as children widgets.
 		 *
@@ -71,6 +89,11 @@ qx.Mixin.define("wisej.utils.FocusHandlerPatch", {
 
 			if (widget1 === widget2)
 				return 0;
+
+			if (qx.ui.core.Widget.contains(widget2, widget1))
+				return 1;
+			if (qx.ui.core.Widget.contains(widget1, widget2))
+				return -1;
 
 			var tabPath1 = wisej.utils.FocusHandlerPatch.__collectTabIndexPath(widget1);
 			var tabPath2 = wisej.utils.FocusHandlerPatch.__collectTabIndexPath(widget2);

@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2019 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -33,7 +35,8 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 	extend: qx.ui.list.List,
 
-	implements: qx.ui.list.core.IListDelegate,
+	implement: [qx.ui.list.core.IListDelegate,
+				wisej.web.toolContainer.IToolPanelHost],
 
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
@@ -49,6 +52,10 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		this.setDelegate(this);
 		this.setIconPath("icon");
 		this.setLabelPath("label");
+		this.setModel(new qx.data.Array());
+
+		// add local state properties.
+		this.setStateProperties(this.getStateProperties().concat(["topIndex"]));
 
 		this.addListener("keyinput", this._onKeyInput);
 
@@ -57,6 +64,15 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		// update the size of the cells.
 		this.addListener("changeFont", this._onUpdated);
 		this._layer.addListener("updated", this._onUpdated, this);
+
+		// adds the inner target to the drop & drop event object.
+		this.addListener("drop", this._onDragEvent, this);
+		this.addListener("dragover", this._onDragEvent, this);
+
+		// initialize the search string
+		this.__pressedString = "";
+
+		this.addState("multiline");
 	},
 
 	properties: {
@@ -88,6 +104,12 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		// selectedIndices: { check: "Array", apply: "_applySelectedIndices" },
 
 		/**
+		 * TopIndex property.
+		 * Property defined with the setter/getter methods.
+		 */
+		// topIndex: { check: "Integer", apply: "_applyTopIndex" },
+
+		/**
 		 * ReadOnly property.
 		 */
 		readOnly: { check: "Boolean", apply: "_applyReadOnly", init: false },
@@ -110,7 +132,14 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		 * height of the largest item used also to calculate he maximum width.
 		 *
 		 */
-		itemHeight: { init: null, refine: true },
+		itemHeight: { init: 24, refine: true },
+
+		/**
+		 * PrefetchItems property.
+		 * 
+		 * Indicates the number of items to prefetch outside of the visible range.
+		 */
+		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" },
 
 		/**
 		 * Tools property.
@@ -122,8 +151,28 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		/**
 		 * Determines the appearance of child items.
 		 */
-		itemAppearance: { init: "listitem", themeable: true }
+		itemAppearance: { init: "listitem", themeable: true },
 
+		/**
+		 * LazyLoad property.
+		 * 
+		 * When true, it loads the items when the list becomes visible.
+		 */
+		lazyLoad: { init: false, check: "Boolean" },
+
+		/**
+		 * RightClickSelection property.
+		 * 
+		 * Determines whether a right click event ("contextmenu") selects the node under the pointer.
+		 */
+		rightClickSelection: { init: false, check: "Boolean", apply: "_applyRightClickSelection" },
+
+		/**
+		 * IncrementalSelection property.
+		 * 
+		 * Determines whether items are selected incrementally as the user types within a 1 second timeout.
+		 */
+		incrementalSelection: { init: true, check: "Boolean" }
 	},
 
 	members: {
@@ -136,6 +185,12 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 		// keeps the largest width calculated.
 		__maxItemWidth: 0,
+
+		// prefetch manager.
+		__prefetchManager: null,
+
+		// delayed selection when lazy loading is on.
+		__lazySelectedIndices: null,
 
 		/**
 		 * Applies the readOnly property.
@@ -176,6 +231,79 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		},
 
 		/**
+		 * Applies the RightClickSelection property.
+		 */
+		_applyRightClickSelection: function (value, old) {
+
+			if (!value && old)
+				this.removeListener("contextmenu", this._onRightClick, this);
+
+			if (value && !old)
+				this.addListener("contextmenu", this._onRightClick, this);
+		},
+
+		/**
+		 * Handles right clicks to select the node when rightClickSelection is true.
+		 */
+		_onRightClick: function (e) {
+
+			if (this.getSelectionMode() !== "none" && !this.isReadOnly()) {
+				var item = e.getTarget();
+				if (item instanceof wisej.web.listbox.ListItem) {
+
+					var index = item.getIndex();
+					var model = this.getModel();
+					var selection = this.getSelection();
+
+					this.__suspendEvents = true;
+					try {
+						selection.removeAll();
+					}
+					finally {
+						this.__suspendEvents = false;
+					}
+					selection.setItem(0, model.getItem(item.getIndex()));
+				}
+			}
+		},
+
+		/**
+		 * Applies the PrefetchItems property.
+		 * 
+		 * @param {Integer} value New value.
+		 * @param {Integer?} old Previous value.
+		 */
+		_applyPrefetchItems: function (value, old) {
+
+			if (value > 0) {
+
+				if (!this.__prefetchManager) {
+					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
+						minLeft: 0,
+						maxLeft: 0,
+						minRight: 0,
+						maxRight: 0,
+						minAbove: 0,
+						maxAbove: 0,
+						minBelow: 0,
+						maxBelow: 0
+					});
+				}
+
+				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
+				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
+
+				var pixels = this.getItemHeight() * value;
+				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
+
+			}
+			else if (this.__prefetchManager) {
+				this.__prefetchManager.dispose();
+				this.__prefetchManager = null;
+			}
+		},
+
+		/**
 		 * Applies the appearance property.
 		 *
 		 * Overridden to update the appearance immediately
@@ -194,13 +322,27 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 			var items = value;
 
-			if (items == null)
+			if (items == null) {
+
+				// schedule lazy loading.
+				if (this.isLazyLoad()) {
+
+					qx.event.Timer.once(function () {
+						this.fireEvent("load");
+					}, this, 0);
+
+					this.setLazyLoad(false);
+				}
+
 				return;
+			}
 
 			this.__suspendEvents = true;
 			try {
 
-				var model = this.getModel() || new qx.data.Array();
+				var index;
+				var model = this.getModel();
+				this.setModel(null);
 
 				// clear?
 				if (items.clear && model.getLength() > 0) {
@@ -214,7 +356,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 				if (items.added && items.added.length > 0) {
 					var added = items.added;
 					for (var i = 0; i < added.length; i++) {
-						model.setItem(added[i].index, this._createDataItem(added[i]));
+						model.insertAt(added[i].index, this._createDataItem(added[i]));
 					}
 				}
 
@@ -222,7 +364,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 				if (items.modified && items.modified.length > 0) {
 					var modified = items.modified;
 					for (var i = 0; i < modified.length; i++) {
-						var index = modified[i].index;
+						index = modified[i].index;
 
 						if (index < 0 || index >= model.getLength())
 							throw new Error("index out of bounds: " + index + " (0.." + model.getLength() + ")");
@@ -238,16 +380,16 @@ qx.Class.define("wisej.web.VirtualListBox", {
 					var start = -1;
 					var amount = 0;
 
-					var deleted = items.deleted;
+					var deleted = items.deleted, removed;
 					for (var i = deleted.length - 1; i >= 0; i--) {
 
-						var index = deleted[i];
+						index = deleted[i];
 						if (index < 0 || index >= model.getLength())
 							throw new Error("index out of bounds: " + index + " (0.." + model.getLength() + ")");
 
 						// remove the "accumulated" section.
 						if (amount > 0 && start > -1 && index !== start - 1) {
-							var removed = model.splice(start, amount);
+							removed = model.splice(start, amount);
 							removed.setAutoDisposeItems(true);
 							removed.dispose();
 
@@ -260,11 +402,18 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 					// remove the last "accumulated" section.
 					if (amount > 0 && start > -1 && index !== start - 1) {
-						var removed = model.splice(start, amount);
+						removed = model.splice(start, amount);
 						removed.setAutoDisposeItems(true);
 						removed.dispose();
 
 						amount = 0;
+					}
+				}
+
+				// align the indexes of the items if items have been added or deleted.
+				if (!items.clear && (items.added || items.deleted)) {
+					for (var i = 0, l = model.getLength(); i < l; i++) {
+						model.getItem(i).setIndex(i);
 					}
 				}
 
@@ -342,38 +491,23 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		},
 
 		/**
-		 * Event handler for the update event.
-		 *
-		 * @param event {qx.event.type.Event} The event.
+		 * Updates the size of the cells in the virtual pane.
 		 */
-		_onUpdated: function (event) {
-
-			if (this.__deferredCall == null) {
-				this.__deferredCall = new qx.util.DeferredCall(function () {
-					qx.ui.core.queue.Widget.add(this, "updateItemSize");
-				}, this);
-			}
-			this.__deferredCall.schedule();
-		},
-
-		// overridden
 		syncWidget: function (jobs) {
 
-			this.base(arguments, jobs);
-
-			if (!jobs || !jobs["updateItemSize"])
+			var pane = this.getPane();
+			if (!pane.getInnerSize())
 				return;
 
 			if (this.__maxItemWidth === -1)
 				this.__maxItemWidth = this._calcMaxWidth(this.getModel());
 
-			var pane = this.getPane();
 			var sizeHint = null;
+			var paneWidth = pane.getInnerSize().width;
 			var maxWidth = this.__maxItemWidth;
 			var maxHeight = this.getItemHeight() || 0;
 			var firstRow = this._layer.getFirstRow();
 			var rowSize = this._layer.getRowSizes().length;
-			var paneWidth = pane.getInnerSize().width;
 
 			for (var row = firstRow; row < firstRow + rowSize; row++) {
 				var widget = this._layer.getRenderedCellWidget(row, 0);
@@ -391,6 +525,21 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 			if (maxWidth && pane.getColumnConfig().getItemSize(0) !== maxWidth)
 				pane.getColumnConfig().setItemSize(0, maxWidth);
+		},
+
+		/**
+		 * Event handler for the update event.
+		 *
+		 * @param event {qx.event.type.Event} The event.
+		 */
+		_onUpdated: function (event) {
+
+			if (this.__deferredCall == null) {
+				this.__deferredCall = new qx.util.DeferredCall(function () {
+					qx.ui.core.queue.Widget.add(this);
+				}, this);
+			}
+			this.__deferredCall.schedule();
 		},
 
 		/**
@@ -414,22 +563,80 @@ qx.Class.define("wisej.web.VirtualListBox", {
 			return item;
 		},
 
+		// determines the target item (index) for a drag operation
+		// and adds it to the event object.
+		_onDragEvent: function (e) {
+
+			e.setUserData("eventData", null);
+			var target = e.getOriginalTarget();
+			if (target instanceof wisej.web.listbox.ListItem) {
+				e.setUserData("eventData", target.getIndex());
+			}
+		},
+
+		// select the item that initiated the drag operation.
+		_onDragStart: function (e) {
+
+			var item = e.getOriginalTarget();
+			if (item instanceof qx.ui.form.ListItem) {
+
+				var model = this.getModel();
+				var selection = this.getSelection();
+
+				this.__suspendEvents = true;
+				try {
+					selection.removeAll();
+				}
+				finally {
+					this.__suspendEvents = false;
+				}
+				selection.setItem(0, model.getItem(item.getIndex()));
+			}
+		},
+
+		// overridden
+		_onScrollPaneY: function (e) {
+
+			this.base(arguments, e);
+
+			// set it dirty when scrolling to update the topIndex state property.
+			this.setDirty(true);
+		},
+
+		/**
+		 * TopIndex property.
+		 */
+		getTopIndex: function () {
+
+			return this._layer.getFirstRow();
+
+		},
+		setTopIndex: function (value) {
+
+			this.getPane().scrollRowIntoView(value, "top");
+		},
+
 		/**
 		 * SelectedIndices property.
 		 */
 		getSelectedIndices: function () {
 
 			var indices = [];
-			var model = this.getModel();
 			var selection = this.getSelection();
 			for (var i = 0; i < selection.getLength(); i++) {
-				var index = model.indexOf(selection.getItem(i));
+				var index = selection.getItem(i).getIndex();
 				if (index > -1)
 					indices.push(index);
 			}
 			return indices;
 		},
-		setSelectedIndices: function (value, old) {
+		setSelectedIndices: function (value) {
+
+			if (this.isLazyLoad()) {
+				// save the selection for later.
+				this.__lazySelectedIndices = value;
+				return;
+			}
 
 			var model = this.getModel();
 			var selection = this.getSelection();
@@ -448,6 +655,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 							items.push(model.getItem(index));
 						}
 					}
+
 					selection.removeAll();
 					selection.append(items);
 				}
@@ -474,32 +682,57 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		 */
 		_applyTools: function (value, old) {
 
-			if (value == null)
-				return;
+			var tools = this.getChildControl("tools", true);
 
-			var toolsContainer = this.getChildControl("tools", true);
-
-			if (value.length == 0) {
-
-				if (toolsContainer)
-					toolsContainer.exclude();
-
+			if (value == null || value.length == 0) {
+				if (tools)
+					tools.exclude();
 				return;
 			}
 
-			if (!toolsContainer) {
-				toolsContainer = this.getChildControl("tools");
-				this._getLayout().setRowFlex(0, 0);
-				this._add(toolsContainer, { row: 0, column: 0, colSpan: 2 });
+			tools = this.getChildControl("tools");
+			tools.show();
 
-				// update the scrollable area layout to make room for the tools container.
-				this._updateScrollAreaLayout();
+			wisej.web.ToolContainer.add(this, tools);
+			wisej.web.ToolContainer.install(this, tools, value, "left", { row: 0, column: 0 }, null, "listbox");
+			wisej.web.ToolContainer.install(this, tools, value, "right", { row: 0, column: 1 }, null, "listbox");
+
+		},
+
+		/**
+		 * Implements: wisej.web.toolContainer.IToolPanelHost.updateToolPanelLayout
+		 * 
+		 * Changes the layout of the tools container according to overlayed scrollbar option in the theme,
+		 *
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
+		 */
+		updateToolPanelLayout: function (toolPanel) {
+
+			if (toolPanel) {
+
+				var layout = this._getLayout();
+				if (layout instanceof qx.ui.layout.Grid) {
+
+					layout.setRowFlex(0, 0);
+					toolPanel.setLayoutProperties({ row: 0, column: 0, colSpan: 2 });
+
+					this.getChildControl("pane").resetMargin();
+					this.getChildControl("scrollbar-y").resetMargin();
+
+					this._updateScrollAreaLayout();
+				}
+				// overlayed scrollbars.
+				else if (layout instanceof qx.ui.layout.Canvas) {
+
+					toolPanel.setLayoutProperties({ top: 0, left: 0, right: 0 });
+
+					var size = toolPanel.getSizeHint();
+					var pane = this.getChildControl("pane");
+					var scrollbarY = this.getChildControl("scrollbar-y");
+					pane.setMarginTop(size.height);
+					scrollbarY.setMarginTop(size.height);
+				}
 			}
-
-			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 });
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 });
-
 		},
 
 		// overridden
@@ -528,11 +761,12 @@ qx.Class.define("wisej.web.VirtualListBox", {
 				return;
 			}
 
-			// only useful in single or one selection mode.
+			// change behavior in multi selection by setting
+			// the lead item instead of selecting the item.
+			var multi = false;
 			var mode = this.getSelectionMode();
-			if (!(mode === "single" || mode === "one")) {
-				return;
-			}
+			if (mode !== "single" && mode !== "one")
+				multi = true;
 
 			// reset string after a second of non pressed key.
 			if (((new Date).valueOf() - this.__lastKeyPress) > 1000) {
@@ -544,17 +778,29 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 			// use the currently selected item to start the search.
 			var startIndex = -1;
-			var model = this.getModel();
 			var selection = this.getSelection();
-			if (selection && selection.getLength() > 0)
-				startIndex = model.indexOf(selection.getItem(0));
+			if (multi) {
+				startIndex = this._manager.getLeadItem();
+			}
+			else {
+				var model = this.getModel();
+				if (selection && selection.getLength() > 0)
+					startIndex = model.indexOf(selection.getItem(0));
+			}
 
 			// find matching item.
 			var matchedItem = this.findItemByLabelFuzzy(this.__pressedString, startIndex);
 
-			// if an item was found, select it.
+			// if an item was found, select it or scroll it into view.
 			if (matchedItem) {
-				selection.setItem(0, matchedItem);
+
+				if (multi) {
+					this._manager._setLeadItem(matchedItem.getIndex());
+					this._manager._scrollItemIntoView(matchedItem.getIndex());
+				}
+				else {
+					selection.setItem(0, matchedItem);
+				}
 
 				// stop default processing of the key input char when an item has been found 
 				// or we may get the char appended to the input text.
@@ -562,7 +808,10 @@ qx.Class.define("wisej.web.VirtualListBox", {
 			}
 
 			// Store timestamp
-			this.__lastKeyPress = (new Date).valueOf();
+			if (this.getIncrementalSelection())
+				this.__lastKeyPress = (new Date).valueOf();
+			else
+				this.__lastKeyPress = 0;
 		},
 
 		/**
@@ -583,7 +832,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 			// get all items of the list
 			var model = this.getModel();
-			var item;
+			var item, currentLabel;
 
 			// go through all items
 			startIndex = Math.max(0, Math.min(startIndex + 1 || 0, model.getLength()));
@@ -596,7 +845,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 					continue;
 
 				// get the label of the current item
-				var currentLabel = this._getItemText(item);
+				currentLabel = this._getItemText(item);
 
 				// if the label fits with the search text (ignore case, begins with)
 				if (currentLabel && currentLabel.toLowerCase().indexOf(search) === 0) {
@@ -616,7 +865,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 						continue;
 
 					// get the label of the current item
-					var currentLabel = this._getItemText(item);
+					currentLabel = this._getItemText(item);
 
 					// if the label fits with the search text (ignore case, begins with)
 					if (currentLabel && currentLabel.toLowerCase().indexOf(search) === 0) {
@@ -665,7 +914,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 			// the mode is changed only by _applyItems, which
 			// is where we update the virtual list after all changes
 			// have been applied.
-			
+
 		},
 
 		//---------------------------------------------------------
@@ -713,6 +962,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 			controller.bindProperty("label", "label", null, item, index);
 			controller.bindProperty("index", "index", null, item, index);
 			controller.bindProperty("enabled", "enabled", null, item, index);
+			controller.bindProperty("toolTipText", "toolTipText", null, item, index);
 			controller.bindProperty("font", "font", this.__bindItemInheritedPropertyFilter, item, index);
 			controller.bindProperty("textColor", "textColor", this.__bindItemInheritedPropertyFilter, item, index);
 			controller.bindProperty("backgroundColor", "backgroundColor", this.__bindItemInheritedPropertyFilter, item, index);
@@ -737,6 +987,8 @@ qx.Class.define("wisej.web.VirtualListBox", {
 			model.setAutoDisposeItems(true);
 			model.dispose();
 		}
+
+		this._disposeObjects("__prefetchManager");
 
 		this._layer.removeListener("updated", this._onUpdated, this);
 
@@ -1012,11 +1264,14 @@ qx.Class.define("wisej.web.listbox.DataItem", {
 		// text color.
 		textColor: { init: null, check: "Color", event: "changeTextColor" },
 
+		// tooltip.
+		toolTipText: { init: null, check: "String", event: "changeToolTipText" },
+
 		// font.
 		font: { init: null, check: "Font", event: "changeFont", dereference: true },
 
 		// enabled.
-		enabled: { init: true, check: "Boolean", event: "changeEnabled", dereference: true }
+		enabled: { init: true, check: "Boolean", event: "changeEnabled" }
 	}
 });
 

@@ -65,7 +65,7 @@ qx.Class.define("wisej.web.datagrid.ColumnModel", {
 		 * Note: The style is applied to all the cells in the column, not the column header.
 		 *
 		 * @param col {Integer} The model index of the column.
-		 * @param style {Map} The style map.
+		 * @param style {Map} The style map to apply to the column's style.
 		 */
 		setColumnStyle: function (col, style) {
 
@@ -75,6 +75,7 @@ qx.Class.define("wisej.web.datagrid.ColumnModel", {
 			}
 
 			var oldStyle = this.__columnDataArr[col].style;
+
 			this.__columnDataArr[col].style = style;
 
 			if (!this.__internalChange) {

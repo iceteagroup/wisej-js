@@ -113,6 +113,7 @@ qx.Class.define("wisej.web.SplitContainer", {
 			var splitter = this.getChildControl("splitter");
 
 			if (value < 0) {
+				splitter.syncAppearance();
 				splitter.resetWidth();
 				splitter.resetHeight();
 			}
@@ -164,11 +165,17 @@ qx.Class.define("wisej.web.SplitContainer", {
 
 				if (this.__isHorizontal) {
 					first.setWidth(value);
-					second.setWidth(this.getWidth() - splitter.getWidth() - value);
+					splitter.syncAppearance();
+					second.setWidth(Math.max(0, this.getWidth() - splitter.getWidth() - value));
+					if (second.isWisejComponent)
+						second.updateState("width");
 				}
 				else {
 					first.setHeight(value);
-					second.setHeight(this.getHeight() - splitter.getHeight() - value);
+					splitter.syncAppearance();
+					second.setHeight(Math.max(0, this.getHeight() - splitter.getHeight() - value));
+					if (second.isWisejComponent)
+						second.updateState("height");
 				}
 			}
 		},
@@ -178,17 +185,22 @@ qx.Class.define("wisej.web.SplitContainer", {
 		 */
 		_applySplitterEnabled: function (value, old) {
 
-			value
-				? this.getBlocker().show()
-				: this.getBlocker().hide();
+			if (value) {
+				this.getBlocker().show();
+				this.removeState("fixed");
+				this.getChildControl("splitter").removeState("fixed");
+			}
+			else {
+				this.getBlocker().hide();
+				this.addState("fixed");
+				this.getChildControl("splitter").addState("fixed");
+			}
 		},
 
 		__onSplitterResize: function (e) {
 
-			var splitter = e.getTarget();
 			if (!this.isSplitterEnabled())
 				this.getBlocker().hide();	
-
 		},
 
 		/**

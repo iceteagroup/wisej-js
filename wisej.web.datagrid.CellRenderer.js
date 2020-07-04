@@ -194,6 +194,7 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 			var col = cellInfo.col;
 			var row = cellInfo.row;
 			var rowData = cellInfo.rowData;
+
 			if (rowData && rowData.styles) {
 
 				var style = rowData.styles[col];
@@ -204,10 +205,14 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 
 					if (colSpan > 1 || rowSpan > 1) {
 
+						// avoid an error.
+						if (cellInfo.xPos == null || !cellInfo.scroller || !cellInfo.columnModel)
+							return;
+
 						var insets = this.getRowInsets(cellInfo);
+						var table = cellInfo.table;
 						var columnModel = cellInfo.columnModel;
-						var dataModel = cellInfo.table.getTableModel();
-						var paneModel = cellInfo.scroller.getTablePaneModel();
+						var dataModel = table.getTableModel();
 
 						var cellHeight = 0;
 						var rowCount = dataModel.getRowCount();
@@ -218,7 +223,9 @@ qx.Class.define("wisej.web.datagrid.CellRenderer", {
 						cellHeight = cellHeight - insets.top - insets.bottom;
 
 						var cellWidth = 0;
+						var paneModel = cellInfo.scroller.getTablePaneModel();
 						var colCount = paneModel.getColumnCount();
+
 						for (var colPos = cellInfo.xPos, maxIndex = Math.min(colCount, colPos + colSpan);
 							colPos < maxIndex; colPos++) {
 							cellWidth += columnModel.getColumnWidth(paneModel.getColumnAtX(colPos));
@@ -346,7 +353,9 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			var appearance = this.getAppearance();
 			var state = this._getCellState(cellInfo);
 
-			return qx.theme.manager.Decoration.CSS_CLASSNAME_PREFIX + "cell " + styleMgr.getCssClass(appearance, state, wisej.web.datagrid.CellRenderer.DEFAULT_CSS);
+			return qx.theme.manager.Decoration.CSS_CLASSNAME_PREFIX + "cell "
+				+ styleMgr.getCssClass(appearance, state, wisej.web.datagrid.CellRenderer.DEFAULT_CSS)
+				+ this._getCssClass(cellInfo);
 		},
 
 		// builds the state map for the cell.
@@ -383,7 +392,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				state.rightToLeft = true;
 
 			// cell border.
-			state[cellInfo.table._gridLinesStateName] = true;
+			state[cellInfo.table._cellBorderStyle] = true;
 
 			// add cell specific states.
 			if (cellInfo.rowData && cellInfo.rowData.styles) {
@@ -394,10 +403,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 			// expanded or collapsed?
 			var data = cellInfo.rowData;
-			if (cellInfo.xPos === 0
-				&& !cellInfo.scroller.isFrozenPane()
-				&& !cellInfo.scroller.isRowHeaderPane()
-				&& data && data.expanded !== undefined) {
+			if (data && data.expanded !== undefined && this._isTreeColumn(cellInfo)) {
 
 				if (data.expanded === true) {
 					state.expanded = true;
@@ -408,6 +414,21 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			}
 
 			return state;
+		},
+
+		/**
+		 * Returns whether the cell being rendered is on the tree column
+		 * when rendering the open/close buttons on parent rows.
+		 */
+		_isTreeColumn: function (cellInfo) {
+
+			var treeCol = cellInfo.table.getTreeColumn();
+			if (treeCol > 0 || treeCol === 0)
+				return cellInfo.col == treeCol;
+
+			return cellInfo.xPos === 0
+				&& !cellInfo.scroller.isFrozenPane()
+				&& !cellInfo.scroller.isRowHeaderPane();
 		},
 
 		/**
@@ -428,17 +449,12 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			// NOTE: "middle" is the default.
 
 			var htmlArr = [];
-			var table = cellInfo.table;
 			var data = cellInfo.rowData;
 			var cellValue = this._getCellValue(cellInfo);
 			var cellStyle = this._resolveContentStyle(cellInfo);
 			var cellCss = cellStyle ? cellStyle.css : "";
 			var vAlign = cellStyle ? cellStyle.verticalAlign : null;
-			var isNode = cellInfo.xPos === 0
-				&& !cellInfo.scroller.isFrozenPane()
-				&& !cellInfo.scroller.isRowHeaderPane()
-				&& cellInfo.col > table._rowHeaderColIndex
-				&& data && (data.expanded !== undefined || data.level !== undefined);
+			var isNode = data && (data.expanded !== undefined || data.level !== undefined) && this._isTreeColumn(cellInfo);
 
 			// if this is a tree-cell, add the open/close icon.
 			if (isNode) {
@@ -622,7 +638,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				var styles = cellInfo.rowData.styles[cellInfo.col];
 				if (styles && styles.widgetId) {
 					return "qx-widget-id='" + styles.widgetId + "' " +
-							"qx-widget-dock='" + styles.widgetDock + "' ";
+						"qx-widget-dock='" + styles.widgetDock + "' ";
 				}
 			}
 
@@ -634,7 +650,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		 * 
 		 * @param cellInfo {Map} The information about the cell.
 		 */
-		_getCellAutomationAttributes: function(cellInfo) {
+		_getCellAutomationAttributes: function (cellInfo) {
 
 			if (qx.core.Environment.get("automation.mode") === true) {
 
@@ -645,7 +661,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 					var ownerId = table.getContentElement().getAttribute(propName);
 
 					return propName + "'=" + ownerId + "_" + colName + "_" + cellInfo.row + "' " +
-							"name='" + colName + "_" + cellInfo.row + "' ";
+						"name='" + colName + "_" + cellInfo.row + "' ";
 				}
 			}
 
@@ -670,7 +686,10 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			if (style && !qx.lang.String.endsWith(style, ";"))
 				style += ";";
 
-			style += "z-index:" + ((10000 - cellInfo.xPos) || 0) + "";
+			style += "z-index:" + ((10000 - cellInfo.xPos) || 0);
+
+			// add the css style string from the server.
+			style += this._getCssStyle(cellInfo);
 
 			return style;
 		},
@@ -749,7 +768,10 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 								var cell = qx.lang.Object.clone(cellInfo);
 								cachedStyle.backgroundImage = this._resolveImage(cachedStyle.backgroundImage, cachedStyle.color, function (url) {
 
-									cachedStyle.css = undefined;
+									delete cachedStyle.css;
+									delete cachedStyle.class;
+									delete cachedStyle.style;
+
 									cachedStyle.backgroundImage = url;
 									cachedStyle.backgroundPosition = cachedStyle.backgroundPosition || "center left";
 									cachedStyle.css = qx.bom.element.Style.compile(cachedStyle);
@@ -763,7 +785,10 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 						}
 
 						// compile the style rules into a css string.
-						cachedStyle.css = undefined;
+						delete cachedStyle.css;
+						delete cachedStyle.class;
+						delete cachedStyle.style;
+
 						cachedStyle.css = qx.bom.element.Style.compile(cachedStyle);
 					}
 					else {
@@ -1142,10 +1167,12 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		},
 
 		/**
-		 * Returns the calculated size of the content. Doesn't take in consideration
-		 * colSpan and rowSpan.
+		 * Returns the calculated size of the content.
 		 */
 		getCellSize: function (cellInfo) {
+
+			if (!cellInfo.rowData)
+				return null;
 
 			var htmlArr = [];
 			htmlArr.push(
@@ -1163,8 +1190,76 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			var html = htmlArr.join("");
 
 			var fontStyle = cellInfo.table._getFontStyle();
-			var size = wisej.utils.Widget.measure(html, null, fontStyle);
+			var size = wisej.utils.Widget.measure(html, null, fontStyle, cellInfo.columnWidth);
 			return size;
+		},
+
+		/**
+		 * Returns the combined custom css style assigned to the table, col or cell DataGridViewStyle objects.
+		 */
+		_getCssStyle: function (cellInfo) {
+
+			var table = cellInfo.table;
+			var columnIndex = cellInfo.col;
+			var rowData = cellInfo.rowData;
+			var columnModel = cellInfo.columnModel;
+			if (rowData) {
+
+				var styles = [];
+				var rowStyle = rowData.style ? rowData.style.style : null;
+				var defaultStyle = table.getDefaultCellStyle() ? table.getDefaultCellStyle().style : null;
+				var colStyle = columnModel.getColumnStyle(columnIndex) ? columnModel.getColumnStyle(columnIndex).style : null;
+				var cellStyle = rowData.styles ? rowData.styles[columnIndex] ? rowData.styles[columnIndex].style : null : null;
+
+				// apply the style in this order: default + col + row + cell.
+				if (defaultStyle && cellInfo.col > table._rowHeaderColIndex)
+					styles.push(defaultStyle);
+				if (colStyle)
+					styles.push(colStyle);
+				if (rowStyle && cellInfo.col > table._rowHeaderColIndex)
+					styles.push(rowStyle);
+				if (cellStyle)
+					styles.push(cellStyle);
+
+				if (styles.length > 0)
+					return ";" + styles.join(";");
+			}
+
+			return "";
+		},
+
+		/**
+		 * Returns the combined custom css class name assigned to the table, col or cell DataGridViewStyle objects.
+		 */
+		_getCssClass: function (cellInfo) {
+
+			var table = cellInfo.table;
+			var columnIndex = cellInfo.col;
+			var rowData = cellInfo.rowData;
+			var columnModel = cellInfo.columnModel;
+			if (rowData) {
+
+				var classes = [];
+				var rowClass = rowData.style ? rowData.style.class : null;
+				var defaultClass = table.getDefaultCellStyle() ? table.getDefaultCellStyle().class : null;
+				var colClass = columnModel.getColumnStyle(columnIndex) ? columnModel.getColumnStyle(columnIndex).class : null;
+				var cellClass = rowData.styles ? rowData.styles[columnIndex] ? rowData.styles[columnIndex].class : null : null;
+
+				// apply the css class in this order: default + col + row + cell.
+				if (defaultClass && cellInfo.col > table._rowHeaderColIndex)
+					classes.push(defaultClass);
+				if (colClass)
+					classes.push(colClass);
+				if (rowClass && cellInfo.col > table._rowHeaderColIndex)
+					classes.push(rowClass);
+				if (cellClass)
+					classes.push(cellClass);
+
+				if (classes.length > 0)
+					return " " + classes.join(" ");
+			}
+
+			return "";
 		},
 
 		/**
@@ -1179,10 +1274,10 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			this._errorClassName = styleMgr.getCssClass(appearance + "/error", {}, wisej.web.datagrid.CellRenderer.DEFAULT_ERROR_CSS);
 
 			// register the pseudo classes to support hovering since cannot handle it in the code because cells are not widgets.
-			styleMgr.createCssPseudoClass(this._errorClassName + ":hover", appearance + "/error", { hovered: true }, "");
+			styleMgr.createCssClass(this._errorClassName + ":hover", appearance + "/error", { hovered: true }, "");
 
 			// content element.
-			this._contentClassName = styleMgr.getCssClass(appearance + "/content", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS);
+			this._contentClassName = styleMgr.getCssClass(appearance + "/content", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";word-wrap:normal");
 			this._contentMiddleClassName = styleMgr.getCssClass(appearance + "/content/middle", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:50%;transform:translateY(-46%);-webkit-transform:translateY(-46%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
 			this._contentBottomClassName = styleMgr.getCssClass(appearance + "/content/bottom", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:100%;transform:translateY(-100%);-webkit-transform:translateY(-100%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
 			this._contentSpacerClassName = styleMgr.getCssClass(appearance + "/spacer", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
@@ -1445,8 +1540,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.ButtonCell", {
 
 			// register the pseudo classes to support hovering and pressed states since
 			// we cannot handle it in the code because cells are not widgets.
-			styleMgr.createCssPseudoClass(this._buttonClassName + ":hover", appearance, { hovered: true }, "");
-			styleMgr.createCssPseudoClass(this._buttonClassName + ":active", appearance, { pressed: true }, "");
+			styleMgr.createCssClass(this._buttonClassName + ":hover", appearance, { hovered: true }, "");
+			styleMgr.createCssClass(this._buttonClassName + ":active", appearance, { pressed: true }, "");
 
 			this.base(arguments);
 		}
@@ -1497,11 +1592,11 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.LinkCell", {
 
 			// register the pseudo classes to support hovering since
 			// we cannot handle it in the code because cells are not widgets.
-			styleMgr.createCssPseudoClass(linkClass + ":hover", appearance, { hovered: true }, ""); // systemDefault = theme setting.
-			styleMgr.createCssPseudoClass(linkClass + "-neverUnderline", appearance, {}, "text-decoration:none");
-			styleMgr.createCssPseudoClass(linkClass + "-alwaysUnderline", appearance, {}, "text-decoration:underline;cursor:pointer");
-			styleMgr.createCssPseudoClass(linkClass + "-hoverUnderline", appearance, {}, "text-decoration:none");
-			styleMgr.createCssPseudoClass(linkClass + "-hoverUnderline:hover", appearance, {}, "text-decoration:underline;cursor:pointer");
+			styleMgr.createCssClass(linkClass + ":hover", appearance, { hovered: true }, ""); // systemDefault = theme setting.
+			styleMgr.createCssClass(linkClass + "-neverUnderline", appearance, {}, "text-decoration:none");
+			styleMgr.createCssClass(linkClass + "-alwaysUnderline", appearance, {}, "text-decoration:underline;cursor:pointer");
+			styleMgr.createCssClass(linkClass + "-hoverUnderline", appearance, {}, "text-decoration:none");
+			styleMgr.createCssClass(linkClass + "-hoverUnderline:hover", appearance, {}, "text-decoration:underline;cursor:pointer");
 
 			return linkClass;
 
@@ -1645,6 +1740,9 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.RowHeader", {
 
 			style += "z-index:" + ((10000 - cellInfo.xPos) || 0);
 
+			// add the css style string from the server.
+			style += this._getCssStyle(cellInfo);
+
 			return style;
 		},
 
@@ -1675,7 +1773,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.RowHeader", {
 			this._errorClassName = styleMgr.getCssClass(appearance + "/error", {}, wisej.web.datagrid.cellRenderer.RowHeader.DEFAULT_ERROR_CSS);
 
 			// register the pseudo classes to support hovering since cannot handle it in the code because cells are not widgets.
-			styleMgr.createCssPseudoClass(this._errorClassName + ":hover", appearance + "/error", { hovered: true }, "");
+			styleMgr.createCssClass(this._errorClassName + ":hover", appearance + "/error", { hovered: true }, "");
 
 			this.base(arguments);
 		}

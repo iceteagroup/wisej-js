@@ -84,7 +84,7 @@ qx.Class.define("wisej.web.Desktop", {
 		 *
 		 * Assigns the list of child items to display in the taskbar.
 		 */
-		items: { init: null, nullable: true, check: "Array", apply: "_applyItems", transform: "_transformComponents" },
+		items: { init: [], nullable: true, check: "Array", apply: "_applyItems", transform: "_transformComponents" },
 
 		/**
 		 * Wallpaper property.
@@ -417,32 +417,36 @@ qx.Class.define("wisej.web.Desktop", {
 
 			// return only the relevant components.
 			var items = [];
-			for (var i = 0, l = all.length; i < l; i++) {
-				var widget = all[i];
-				if (widget.isWisejComponent && widget.isSeeable()) {
 
-					var widgetRect = qx.lang.Object.clone(widget.getBounds());
-					var containerRect = widget.getLayoutParent().getBounds();
-					widgetRect.top += taskbarRect.top + containerRect.top;
-					widgetRect.left += taskbarRect.left + containerRect.left;
+			if (all && all.length > 0) {
+				for (var i = 0, l = all.length; i < l; i++) {
+					var widget = all[i];
+					if (widget.isWisejComponent && widget.isSeeable()) {
 
-					items.push({
-						id: widget.getId(),
-						rect: widgetRect
-					});
+						var widgetRect = qx.lang.Object.clone(widget.getBounds());
+						var containerRect = widget.getLayoutParent().getBounds();
+						widgetRect.top += taskbarRect.top + containerRect.top;
+						widgetRect.left += taskbarRect.left + containerRect.left;
 
-					// add the rect for the wrapped control.
-					if (widget instanceof wisej.web.DesktopTaskBarItemControl) {
-						var control = widget.getControl();
-						if (control && control.isWisejComponent) {
-							items.push({
-								id: control.getId(),
-								rect: control.getBounds()
-							});
+						items.push({
+							id: widget.getId(),
+							rect: widgetRect
+						});
+
+						// add the rect for the wrapped control.
+						if (widget instanceof wisej.web.DesktopTaskBarItemControl) {
+							var control = widget.getControl();
+							if (control && control.isWisejComponent) {
+								items.push({
+									id: control.getId(),
+									rect: control.getBounds()
+								});
+							}
 						}
 					}
 				}
 			}
+
 			return items;
 		},
 	},
@@ -967,6 +971,8 @@ qx.Class.define("wisej.web.desktop.TaskBarItem", {
 		this.addListener("execute", this._onExecute);
 		this.window.addListener("close", this._onWindowClose, this);
 		this.window.addListener("disappear", this._onWindowDisappear, this);
+		this.window.addListener("changeIcon", this._onWindowChangeIcon, this);
+		this.window.addListener("changeLargeIcon", this._onWindowChangeLargeIcon, this);
 
 		// set the "name" to the name of the related window for QA automation.
 		this.getContentElement().setAttribute("name", $window.getName());
@@ -1104,6 +1110,20 @@ qx.Class.define("wisej.web.desktop.TaskBarItem", {
 		},
 
 		/**
+		 * Updates the desktop item's icon when the related window changes its icon.
+		 */
+		_onWindowChangeIcon: function (e) {
+			this.setIcon(e.getData() || "window-icon");
+		},
+
+		/**
+		 * Updates the desktop item's icon when the related window changes its large icon.
+		 */
+		_onWindowChangeLargeIcon: function (e) {
+			this.setIcon(e.getData() || "window-icon");
+		},
+
+		/**
 		 * Returns the singleton preview widget.
 		 */
 		_getPreviewInstance: function () {
@@ -1118,6 +1138,8 @@ qx.Class.define("wisej.web.desktop.TaskBarItem", {
 		this.window.removeListener("close", this._onWindowClose, this);
 		this.window.removeListener("appear", this._onWindowAppear, this);
 		this.window.removeListener("disappear", this._onWindowDisappear, this);
+		this.window.removeListener("changeIcon", this._onWindowChangeIcon, this);
+		this.window.removeListener("changeLargeIcon", this._onWindowChangeLargeIcon, this);
 
 	},
 

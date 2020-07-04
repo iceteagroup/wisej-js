@@ -41,6 +41,11 @@ qx.Class.define("wisej.web.UpDownBase", {
 
 		this.__layoutChildComponents();
 
+		var textField = this.getChildControl("textfield");
+
+		// enable the native context menu by default.
+		this.setNativeContextMenu(true);
+
 		// add local state properties.
 		this.setStateProperties(this.getStateProperties().concat(["value", "text"]));
 
@@ -48,23 +53,23 @@ qx.Class.define("wisej.web.UpDownBase", {
 		this.setStateEvents(this.getStateEvents().concat(["changeValue"]));
 
 		// any action on the textbox marks this widget as dirty to update the state on the server.
-		var textField = this.getChildControl("textfield");
-		textField.addListener("input", function (e) { this.setDirty(true); }, this);
+		textField.addListener("keydown", function (e) {
+			this.setDirty(true);
+		}, this);
 
-		// forward the focusin and focusout events to the textField.
+		// forward the focusin and focusout events to the textfield. The textfield
 		// is not focusable so the events need to be forwarded manually.
-		this.addListener("focusin", this.__onFocusIn, this);
-		this.addListener("focusout", this.__onFocusOut, this);
+		this.addListener("focusin", function (e) {
+			textField.fireNonBubblingEvent("focusin", qx.event.type.Focus);
+		}, this);
+		this.addListener("focusout", function (e) {
+			textField.fireNonBubblingEvent("focusout", qx.event.type.Focus);
+		}, this);
 
-		// hovered event handlers.
-		this.addListener("pointerover", this._onPointerOver);
-		this.addListener("pointerout", this._onPointerOut);
-
-		// set the focus to the inner textfield.
-		this.addListener("tap", this._onTap, this);
-
-		// enable the native context menu by default.
-		this.setNativeContextMenu(true);
+		// pointer events.
+		this.addListener("pointerout", this._onPointerOut, this);
+		this.addListener("pointerover", this._onPointerOver, this);
+		this.addListener("pointerdown", this._onPointerDown, this);
 	},
 
 	properties: {
@@ -109,6 +114,13 @@ qx.Class.define("wisej.web.UpDownBase", {
 		 */
 		// text: { init: "", check: "String", nullable: true },
 
+		/**
+		 * SelectOnEnter property.
+		 * 
+		 * When set to true, the entire text is selected when the element gains the focus.
+		 */
+		selectOnEnter: { init: false, check: "Boolean", apply: "_applySelectOnEnter" }
+
 	},
 
 	members: {
@@ -141,6 +153,26 @@ qx.Class.define("wisej.web.UpDownBase", {
 		},
 
 		/**
+		 * Filters the state collected by MWisejControl.updateState().
+		 */
+		getState: function (state) {
+
+			// force a "changeValue" event when reading the state
+			// in case the user clicked on an item that doesn't change the focus
+			// such as menu item or some utility buttons.
+
+			// without a focus change or enter, the "changeValue" event is not 
+			// fired and the value of the spinner is not updated.
+
+			var textField = this.getChildControl("textfield");
+			textField.fireNonBubblingEvent("changeValue", qx.event.type.Data, [textField.getValue()]);
+
+			state.value = this.getValue();
+
+			return state;
+		},
+
+		/**
 		 * Applies the readOnly property.
 		 */
 		_applyReadOnly: function (value, old) {
@@ -164,6 +196,21 @@ qx.Class.define("wisej.web.UpDownBase", {
 			var textField = this.getChildControl("textfield");
 			textField.setReadOnly(!value);
 			textField.setFocusable(false);
+		},
+
+		/**
+		 * Applies the selectOnEnter property.
+		 */
+		_applySelectOnEnter: function (value, old) {
+
+			if (value && !old) {
+				this.addListener("focusin", function (e) {
+					if (this.isSelectOnEnter()) {
+						var textField = this.getChildControl("textfield");
+						qx.event.Timer.once(textField.selectAllText, textField, 1);
+					}
+				}, this);
+			}
 		},
 
 		/**
@@ -227,42 +274,6 @@ qx.Class.define("wisej.web.UpDownBase", {
 			}
 		},
 
-		// forward the "focus" event and 
-		// focus the inner textfield when gaining the focus, otherwise the editable
-		// textfield doesn't get the focus when clicking close or on the border.
-		__onFocusIn: function (e) {
-
-			var textField = this.getChildControl("textfield");
-			if (textField.isVisible()) {
-
-				textField.fireNonBubblingEvent("focusin", qx.event.type.Focus);
-
-				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
-					qx.event.Timer.once(function () {
-						textField.getFocusElement().focus();
-					}, this, 0);
-				}
-			}
-		},
-
-		// forward the "blur" event.
-		__onFocusOut: function (e) {
-
-			var textField = this.getChildControl("textfield");
-			textField.fireNonBubblingEvent("focusout", qx.event.type.Focus);
-		},
-
-		/**
-		 * Transfer the focus.
-		 *
-		 * @param e {qx.event.type.Pointer} Pointer tap event
-		 */
-		_onTap: function (e) {
-
-			if (!this.hasState("focused"))
-				this.tabFocus();
-		},
-
 		/**
 		 * Handles "contextmenu" to stop the bubbling of the event
 		 * when nativeContextMenu is enabled and the widget doesn't even
@@ -272,6 +283,32 @@ qx.Class.define("wisej.web.UpDownBase", {
 
 			if (!this.getContextMenu() && this.getNativeContextMenu())
 				e.stopPropagation();
+		},
+
+		/**
+		 * Event handler for the "pointerover" event.
+		 */
+		_onPointerOver: function (e) {
+
+			this.addState("hovered");
+		},
+
+		/**
+		 * Event handler for the "pointerout" event.
+		 */
+		_onPointerOut: function (e) {
+
+			this.removeState("hovered");
+		},
+
+		/**
+		 * Event handler for the "pointerdown" event.
+		 */
+		_onPointerDown: function (e) {
+
+			if (e.getTarget() === this) {
+				qx.event.Timer.once(this.focus, this, 0);
+			}
 		},
 
 		// overridden
@@ -305,22 +342,6 @@ qx.Class.define("wisej.web.UpDownBase", {
 
 			e.stopPropagation();
 			e.preventDefault();
-		},
-
-		/**
-		 * Event handler for the pointer over event.
-		 */
-		_onPointerOver: function (e) {
-
-			this.addState("hovered");
-		},
-
-		/**
-		 * Event handler for the pointer out event.
-		 */
-		_onPointerOut: function (e) {
-
-			this.removeState("hovered");
 		},
 
 		// overridden
@@ -360,8 +381,8 @@ qx.Class.define("wisej.web.UpDownBase", {
 							layout.setColumnFlex(1, 0);
 							layout.setColumnFlex(2, 1);
 
-							this._add(upButton, { column: 0, row: 0 });
-							this._add(downButton, { column: 1, row: 0 });
+							this._add(upButton, { column: 1, row: 0 });
+							this._add(downButton, { column: 0, row: 0 });
 							this._add(textField, { column: 2, row: 0, rowSpan: 1 });
 
 						}
@@ -382,8 +403,8 @@ qx.Class.define("wisej.web.UpDownBase", {
 						layout.setColumnFlex(1, 1);
 						layout.setColumnFlex(2, 0);
 
-						this._add(upButton, { column: 0, row: 0 });
-						this._add(downButton, { column: 2, row: 0 });
+						this._add(upButton, { column: 2, row: 0 });
+						this._add(downButton, { column: 0, row: 0 });
 						this._add(textField, { column: 1, row: 0, rowSpan: 1 });
 					}
 					break;
@@ -396,8 +417,8 @@ qx.Class.define("wisej.web.UpDownBase", {
 							layout.setColumnFlex(1, 0);
 							layout.setColumnFlex(2, 0);
 
-							this._add(upButton, { column: 1, row: 0 });
-							this._add(downButton, { column: 2, row: 0 });
+							this._add(upButton, { column: 2, row: 0 });
+							this._add(downButton, { column: 1, row: 0 });
 							this._add(textField, { column: 0, row: 0, rowSpan: 1 });
 						}
 						else {
@@ -646,6 +667,9 @@ qx.Class.define("wisej.web.DomainUpDown", {
 				this._index--;
 			}
 
+			if (this._index < 0)
+				return;
+
 			this.getChildControl("textfield").setValue(items[this._index]);
 		},
 
@@ -724,6 +748,416 @@ qx.Class.define("wisej.web.DomainUpDown", {
 			return items.indexOf(text);
 		}
 
+	}
+
+});
+
+
+/**
+ * wisej.web.TimeUpDown
+ */
+qx.Class.define("wisej.web.TimeUpDown", {
+
+	extend: wisej.web.UpDownBase,
+
+	construct: function () {
+
+		this.base(arguments);
+
+		this.initFormat();
+
+	},
+
+	properties: {
+
+		/**
+		 * Maximum value property.
+		 */
+		maximum: { init: new Date(0, 0, 0, 23, 59, 59), check: "Date", apply: "_applyMaximum" },
+
+		/**
+		 * Minimum value property.
+		 */
+		minimum: { init: new Date(0, 0, 0, 0, 0, 0), check: "Date", apply: "_applyMinimum" },
+
+		/** 
+		 *  The value of the spinner.
+		 *
+		 */
+		value: { init: null, check: "Date", apply: "_applyValue", transform:"_transformValue" },
+
+		/** 
+		 * Format property.
+		 *
+		 * Sets the format used to display the time.
+		 */
+		format: { init: "H:m:s", check: "String", apply: "_applyFormat" },
+	},
+
+	members: {
+
+		/** qx.locale.Date.getDateTimeFormat used to format and parse the time. */
+		__formatter: null,
+
+		/** flag to indicate the value is changing because it's being formatted. */
+		__formattingText: false,
+
+		/**
+		 * Applies the value property.
+		 */
+		_applyValue: function (value, old) {
+
+			if (value == old || (value != null && old != null && value.getTime() === old.getTime()))
+				return;
+
+			if (value && this.__formatter != null) {
+
+				this.setText(this.__formatter.format(value));
+
+			} else {
+
+				this.setText(null);
+			}
+
+			this._updateButtons();
+
+			this.fireDataEvent("changeValue", value, old);
+		},
+
+		/**
+		 * Transforms the value to apply the limits.
+		 */
+		_transformValue: function (value) {
+
+			return this.__limitMin(this.__limitMax(value, this.getMaximum()), this.getMinimum());
+		},
+
+		// overridden
+		_countUp: function () {
+
+			var value = this.getValue();
+			if (!value)
+				return;
+
+			var wrap = this.getWrap();
+
+			var newValue = new Date(value);
+			var part = this.__selectCurrentTimePart();
+			if (part) {
+				var H = newValue.getHours();
+				var M = newValue.getMinutes();
+				var S = newValue.getSeconds();
+				switch (part.type) {
+					case "H":
+						if (wrap || H < 23)
+							newValue.setHours(H + 1);
+						break;
+					case "M":
+						if (wrap || M < 59)
+							newValue.setMinutes(M + 1);
+						break;
+					case "S":
+						if (wrap || S < 59)
+							newValue.setSeconds(S + 1);
+						break;
+					case "AM":
+						newValue.setHours(H + 12);
+						break;
+					case "PM":
+						if (wrap)
+							newValue.setHours(H - 12);
+						break;
+				}
+				this.setValue(newValue);
+				var field = this.getChildControl("textfield");
+				field.setTextSelection(part.position, part.position + part.length)
+			}
+
+		},
+
+		// overridden
+		_countDown: function () {
+
+			var value = this.getValue();
+			if (!value)
+				return;
+
+			var wrap = this.getWrap();
+
+			var newValue = new Date(value);
+			var part = this.__selectCurrentTimePart();
+			if (part) {
+				var H = newValue.getHours();
+				var M = newValue.getMinutes();
+				var S = newValue.getSeconds();
+				switch (part.type) {
+					case "H":
+						if (wrap || H > 0)
+							newValue.setHours(H - 1);
+						break;
+					case "M":
+						if (wrap || M > 0)
+							newValue.setMinutes(M - 1);
+						break;
+					case "S":
+						if (wrap || S > 0)
+							newValue.setSeconds(S - 1);
+						break;
+					case "AM":
+						if (wrap)
+							newValue.setHours(H + 12);
+						break;
+					case "PM":
+						newValue.setHours(H - 12);
+						break;
+				}
+
+				// update the value and preserve the selected text.
+				this.setValue(newValue);
+				var field = this.getChildControl("textfield");
+				field.setTextSelection(part.position, part.position + part.length)
+			}
+		},
+
+		// overridden
+		_onTextChange: function (e) {
+
+			var text = e.getData();
+
+			try {
+
+				this.setValue(this.__formatter.parse(text));
+
+			} catch (ex) {
+			}
+
+			this._updateButtons();
+		},
+
+		// overridden
+		// updates the up/down buttons according to the value and the constraints in the field.
+		_updateButtons: function () {
+
+			if (this.isReadOnly()) {
+				this.base(arguments);
+				return;
+			}
+
+			var value = this.getValue();
+			var upButton = this.getChildControl("upbutton");
+			var downButton = this.getChildControl("downbutton");
+
+			if (this.getWrap() || !value) {
+				upButton.setEnabled(true);
+				downButton.setEnabled(true);
+			}
+			else {
+
+				var value = this.getValue();
+				var minValue = this.getMinimum();
+				var maxValue = this.getMaximum();
+
+				var H = value.getHours();
+				var M = value.getMinutes();
+				var S = value.getSeconds();
+				var minH = minValue.getHours();
+				var minM = minValue.getMinutes();
+				var minS = minValue.getSeconds();
+				var maxH = maxValue.getHours();
+				var maxM = maxValue.getMinutes();
+				var maxS = maxValue.getSeconds();
+
+				upButton.setEnabled(H < maxH || (H === maxH && M < maxM) || (H === maxH && M === maxM && S < maxS));
+				downButton.setEnabled(H > minH || (H === minH && M > minM) || (H === minH && M === minM && S > minS));
+
+			}
+		},
+
+		// overridden to eliminate the numeric filter.
+		_getFilterRegExp: function () {
+
+			return null;
+		},
+
+		/**
+		 * Applies the Maximum property.
+		 */
+		_applyMaximum: function (value, old) {
+
+			this.setValue(this.__limitMax(this.getValue(), value));
+
+		},
+
+		/**
+		 * Applies the Minimum property.
+		 */
+		_applyMinimum: function (value, old) {
+
+			this.setValue(this.__limitMin(this.getValue(), value));
+
+		},
+
+		__limitMin: function (value, minValue) {
+
+			if (!value)
+				return value;
+
+			var H = value.getHours();
+			var M = value.getMinutes();
+			var S = value.getSeconds();
+			var minH = minValue.getHours();
+			var minM = minValue.getMinutes();
+			var minS = minValue.getSeconds();
+			if (H < minH
+				|| (H === minH && M < minM)
+				|| (H === minH && M === minM && S < minS)) {
+
+				return minValue
+			}
+
+			return value;
+
+		},
+
+		__limitMax: function (value, maxValue) {
+
+			if (!value)
+				return value;
+
+			var H = value.getHours();
+			var M = value.getMinutes();
+			var S = value.getSeconds();
+			var maxH = maxValue.getHours();
+			var maxM = maxValue.getMinutes();
+			var maxS = maxValue.getSeconds();
+			if (H > maxH
+				|| (H === maxH && M > maxM)
+				|| (H === maxH && M === maxM && S > maxS)) {
+
+				return maxValue;
+			}
+
+			return value;
+		},
+
+		/**
+		 * Applies the Format property.
+		 */
+		_applyFormat: function (value, old) {
+
+			var savedValue = this.getValue();
+
+			if (this.__formatter)
+				this.__formatter.dispose();
+
+			this.__formatter = new qx.util.format.DateFormat(value);
+			var locale = qx.locale.Manager.getInstance().getLocale();
+
+			var rule = value;
+			rule = rule.replace(/[HMS]/ig, "\\d");
+			rule = rule.replace(/\./ig, "\\.");
+			rule = rule.replace(/a/ig, qx.locale.Date.getAmMarker(locale) + qx.locale.Date.getPmMarker(locale));
+			var textfield = this.getChildControl("textfield");
+			textfield.setFilter(new RegExp("[" + rule + "]"));
+
+			if (savedValue)
+				this.setText(this.__formatter.format(savedValue));
+		},
+
+		// Selects the time part under the current cursor.
+		__selectCurrentTimePart: function () {
+
+			var part = null;
+			var parts = this.__parseTimeParts();
+			var field = this.getChildControl("textfield");
+			var currentPos = field.getTextSelectionStart();
+
+			// find the part closes to the caret.
+			for (var i = parts.length - 1; i > -1; i--) {
+
+				part = parts[i];
+				if (currentPos >= part.position) {
+					break;
+				}
+			}
+
+			if (part) {
+				field.setTextSelection(part.position, part.position + part.length)
+			}
+
+			return part;
+		},
+
+		// Parses the text into 4 parts: H, M, S, AM, PM with their cursor position and length.
+		__parseTimeParts: function () {
+
+			var parts = [];
+			var text = this.getText();
+			var typeIndex = 0;
+			var types = ["H", "M", "S", "AM", "PM"];
+
+			// detect H, M, S
+			var re = new RegExp("\\d+", "g");
+			var match = null;
+			while (match = re.exec(text)) {
+				parts.push({
+					value: match[0],
+					position: match.index,
+					length: match[0].length,
+					type: types[typeIndex++]
+				});
+			}
+
+			// detect AM
+			var locale = qx.locale.Manager.getInstance().getLocale();
+			var re = new RegExp(qx.locale.Date.getAmMarker(locale));
+			var match = re.exec(text);
+			if (match) {
+				parts.push({
+					value: match[0],
+					position: match.index,
+					length: match[0].length,
+					type: types[3]
+				});
+			}
+
+			// detect PM
+			var locale = qx.locale.Manager.getInstance().getLocale();
+			var re = new RegExp(qx.locale.Date.getPmMarker(locale));
+			var match = re.exec(text);
+			if (match) {
+				parts.push({
+					value: match[0],
+					position: match.index,
+					length: match[0].length,
+					type: types[4]
+				});
+			}
+
+			return parts;
+		},
+
+		_createChildControlImpl: function (id, hash) {
+			var control;
+
+			switch (id) {
+				case "upbutton":
+					control = this.base(arguments, id, hash);
+					control.setKeepFocus(true);
+					break;
+
+				case "downbutton":
+					control = this.base(arguments, id, hash);
+					control.setKeepFocus(true);
+					break;
+			}
+
+			return control || this.base(arguments, id);
+		}
+
+	},
+	destruct: function () {
+		this._disposeObjects("__formatter");
 	}
 
 });

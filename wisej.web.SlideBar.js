@@ -45,6 +45,9 @@ qx.Class.define("wisej.web.SlideBar", {
 
 		this._createChildControl("content");
 
+		// add local state properties.
+		this.setStateProperties(this.getStateProperties().concat(["scrollVisible"]));
+
 		this.base(arguments);
 	},
 
@@ -148,6 +151,29 @@ qx.Class.define("wisej.web.SlideBar", {
 			data.type = position == 0 ? "first" : position == maxPos ? "last" : "step";
 
 			this.fireDataEvent("scroll", data);
+		},
+
+		/**
+		 * ScrollVisible state property.
+		 */
+		getScrollVisible: function () {
+			return this.getChildControl("button-forward").isVisible();
+		},
+
+		/**
+		 * Show the arrows (Called from resize event)
+		 */
+		_showArrows: function () {
+			this.base(arguments);
+			this.setDirty(true);
+		},
+
+		/**
+		 * Hide the arrows (Called from resize event)
+		 */
+		_hideArrows: function () {
+			this.base(arguments);
+			this.setDirty(true);
 		}
 	}
 

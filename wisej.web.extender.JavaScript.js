@@ -51,7 +51,7 @@ qx.Class.define("wisej.web.extender.JavaScript", {
 						if (events && events.length > 0) {
 							for (var j = 0; j < events.length; j++) {
 								var ev = events[j];
-								if (ev.event && ev.javaShandlercript) {
+								if (ev.event && ev.handler) {
 									comp.removeListener(ev.event, ev.handler, comp);
 								}
 							}
@@ -80,7 +80,7 @@ qx.Class.define("wisej.web.extender.JavaScript", {
 								var ev = events[j];
 								if (ev.event && ev.javaScript) {
 									ev.handler = new Function("e",
-										"//# sourceURL=" + comp.getName() + "("+comp.getId() + ").on" + qx.lang.String.firstUp(ev.event) +
+										"//# sourceURL=" + comp.getName() + ".on" + qx.lang.String.firstUp(ev.event) +
 										"\r\n\r\n" + ev.javaScript);
 
 									comp.addListener(ev.event, ev.handler, comp);

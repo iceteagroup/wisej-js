@@ -27,6 +27,7 @@ qx.Class.define("wisej.web.Label", {
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
 	include: [
+		qx.ui.core.MExecutable,
 		wisej.mixin.MWisejControl,
 		wisej.mixin.MShortcutTarget,
 		wisej.mixin.MBorderStyle
@@ -38,6 +39,7 @@ qx.Class.define("wisej.web.Label", {
 
 		this.initRich();
 		this.initTextAlign();
+		this.addListener("tap", this._onTap);
 	},
 
 	properties: {
@@ -112,42 +114,46 @@ qx.Class.define("wisej.web.Label", {
 			if (!this.isEnabled() || !this.isVisible())
 				return false;
 
+			var handler = qx.ui.core.FocusHandler.getInstance();
+
 			// focus the next widget.
 			var parent = this.getParent() || this.getLayoutParent();
 			if (parent) {
 
-				// if the label a buddy control, focus it.
+				// if the label has a buddy control, focus it.
 				var next = this.getBuddy();
 				if (next) {
-					if (next.isFocusable())
-						next.focus();
 
-					return true;
+					if (next.isFocusable()) {
+
+						if (handler.isFocused(next))
+							return false;
+
+						next.focus();
+						return true;
+					}
 				}
 
 				// otherwise focus the next control in the tab order, unless already focused.
 
-				var nextTabIndex;
 				var myTabIndex = this.getTabIndex();
 				var children = parent.getChildren();
-				var handler = qx.ui.core.FocusHandler.getInstance();
 
 				for (var i = 0; i < children.length; i++) {
 
-					var childTabIndex = children[i].getTabIndex();
-					if (children[i] === this || childTabIndex < myTabIndex)
+					if (children[i] === this)
+						continue;
+					if (myTabIndex > children[i].getTabIndex())
+						continue;
+					if (!children[i].isFocusable())
 						continue;
 
-					if (next && childTabIndex > nextTabIndex)
-						continue;
-
-					next = children[i];
-					nextTabIndex = next.getTabIndex();
-					if (handler.isFocused(next))
-						next = null;
+					// find the child with the closed tab index.
+					if (next == null || children[i].getTabIndex() < next.getTabIndex())
+						next = children[i];
 				}
 
-				if (next && next.isFocusable()) {
+				if (next && !handler.isFocused(next)) {
 					next.focus();
 					return true;
 				}
@@ -274,19 +280,29 @@ qx.Class.define("wisej.web.Label", {
 			}
 
 			this._updateInsets = true;
+			this.__invalidContentSize = true;
 			qx.ui.core.queue.Layout.add(this);
+		},
+
+        /**
+         * Listener method for "tap" event which stops the propagation.
+         *
+         * @param e {qx.event.type.Pointer} Pointer event
+         */
+		_onTap: function (e) {
+			this.execute();
+			e.stopPropagation();
 		},
 
 		// overridden
 		renderLayout: function (left, top, width, height) {
 
-			this.base(arguments, left, top, width, height);
+			var changes = this.base(arguments, left, top, width, height);
+			if (changes && (changes.size || changes.local || changes.margin))
+				this.__invalidContentSize = true;
 
 			var textAlign = this.getTextAlign();
-			var textSize = this._getContentHint();
-
-			if (this.isWrap() && this.isRich())
-				textSize.height = this._getHeightForWidth(width);
+			var textSize = this._getContentHint(width);
 
 			var icon = this.getIcon();
 			var iconSize = this.getIconSize();
@@ -329,6 +345,29 @@ qx.Class.define("wisej.web.Label", {
 			var el = this.getContentElement();
 			var padding = this.__calculateTextPadding(width, height, textAlign, textSize, iconAlign, iconSize);
 			el.setStyle("padding", padding.join("px ") + "px");
+
+			return changes;
+		},
+
+		// overridden
+		_getContentHint: function (width) {
+
+			if (this.__invalidContentSize) {
+
+				if (this._hasHeightForWidth()) {
+					this.__contentSize = this.__computeContentSize(width || this.getWidth());
+				}
+				else {
+					this.__contentSize = this.__computeContentSize();
+				}
+
+				delete this.__invalidContentSize;
+			}
+
+			return {
+				width: this.__contentSize.width,
+				height: this.__contentSize.height
+			};
 		},
 
 		__calculateTextPadding: function (width, height, textAlign, textSize, iconAlign, iconSize) {
@@ -339,7 +378,6 @@ qx.Class.define("wisej.web.Label", {
 			var paddingBottom = this.getPaddingBottom() | 0;
 
 			// factor in the padding calculated by  the decorator.
-			var content = this.getContentElement();
 			decorator = qx.theme.manager.Decoration.getInstance().resolve(this.getDecorator());
 			if (decorator) {
 				var stylePadding = decorator.getPadding();
@@ -351,12 +389,12 @@ qx.Class.define("wisej.web.Label", {
 
 			// center vertically.
 			if (qx.lang.String.startsWith(textAlign, "middle")) {
-				paddingTop += Math.max(0, Math.round((height - textSize.height) / 2));
+				paddingTop = Math.round((height - textSize.height - paddingBottom + paddingTop) / 2);
 			}
 
 			// dock to bottom.
 			if (qx.lang.String.startsWith(textAlign, "bottom")) {
-				paddingTop += Math.max(0, height - textSize.height);
+				paddingTop = height - textSize.height - paddingBottom;
 			}
 
 			// text and image overlap?

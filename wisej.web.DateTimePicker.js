@@ -43,25 +43,26 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		this._forwardStates.checked = true;
 		this._forwardStates.unchecked = true;
 
+		var textField = this.getChildControl("textfield");
+
+		// enable the native context menu by default.
+		this.setNativeContextMenu(true);
+
 		// add local state properties.
 		this.setStateProperties(this.getStateProperties().concat(["value", "checked", "text"]));
 
 		// add local state events.
 		this.setStateEvents(this.getStateEvents().concat(["changeValue", "changeText"]));
 
-		// hovered event handlers.
-		this.addListener("pointerover", this._onPointerOver);
-		this.addListener("pointerout", this._onPointerOut);
-
 		// any action on the textbox marks this widget as dirty to update the state on the server.
-		var textField = this.getChildControl("textfield");
-		textField.addListener("input", function (e) { this.setDirty(true); }, this);
+		textField.addListener("keydown", function (e) {
+			this.setDirty(true);
+		}, this);
 
-		// redirect the focus to the inner textfield.
-		this.addListener("focusin", this.__onFocusIn, this);
-
-		// enable the native context menu by default.
-		this.setNativeContextMenu(true);
+		// pointer events.
+		this.addListener("pointerout", this._onPointerOut, this);
+		this.addListener("pointerover", this._onPointerOver, this);
+		this.addListener("pointerdown", this._onPointerDown, this);
 	},
 
 	events:
@@ -116,6 +117,20 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 * Shows or hides the tooltips displayed by the popup calendar control.
 		 */
 		showToolTips: { init: true, check: "Boolean" },
+
+		/**
+		 * ShowWeekNumbers property.
+		 *
+		 * Show or hide the week numbers panel.
+		 */
+		showWeekNumbers: { init: true, check: "Boolean" },
+
+		/**
+		 * firstDayOfWeek property.
+		 *
+		 * The first day of the week displayed in the drop down calendar.
+		 */
+		firstDayOfWeek: { init: -1, check: "Integer" },
 
 		/**
 		 * Text property.
@@ -200,6 +215,13 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		hidePrompt: { init: false, check: "Boolean", apply: "_applyHidePrompt" },
 
 		/**
+		 * SelectOnEnter property.
+		 * 
+		 * When set to true, the entire text is selected when the element gains the focus.
+		 */
+		selectOnEnter: { init: false, check: "Boolean", apply: "_applySelectOnEnter" },
+
+		/**
 		 * Tools property.
 		 *
 		 * Collection of tool definitions to display next to the edit field.
@@ -260,18 +282,44 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			else
 				this.removeState("readonly");
 
-            if (!this.isReadOnly())
-                this.getChildControl("button").resetEnabled();
+			if (value) {
+				this.getChildControl("button").setEnabled(false);
+				this.getChildControl("checkbox").setEnabled(false);
+				this.getChildControl("upbutton").setEnabled(false);
+				this.getChildControl("downbutton").setEnabled(false);
+			}
+			else {
+				this.getChildControl("button").resetEnabled();
+				this.getChildControl("checkbox").resetEnabled();
+				this.getChildControl("upbutton").resetEnabled();
+				this.getChildControl("downbutton").resetEnabled();
+			}
 
-			this.getChildControl("textfield").setReadOnly(value);
+			var readOnly = value || !this.isEditable();
+			this.getChildControl("textfield").setReadOnly(readOnly);
 		},
 
 		/**
 		 * Applies the editable property.
 		 */
 		_applyEditable: function (value, old) {
-			value = value && !this.isReadOnly();
-			this.getChildControl("textfield").setReadOnly(!value);
+
+			var readOnly = this.isReadOnly() || !value;
+			this.getChildControl("textfield").setReadOnly(readOnly);
+		},
+
+		/**
+		 * Applies the selectOnEnter property.
+		 */
+		_applySelectOnEnter: function (value, old) {
+
+			if (value && !old) {
+				this.addListener("focusin", function (e) {
+					if (this.isSelectOnEnter()) {
+						qx.event.Timer.once(this.selectAllText, this, 1);
+					}
+				}, this);
+			}
 		},
 
 		/**
@@ -484,20 +532,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			}
 		},
 
-		// focus the inner textfield when gaining the focus, otherwise the editable
-		// textfield doesn't get the focus when clicking close or on the border.
-		__onFocusIn: function (e) {
-
-			var textField = this.getChildControl("textfield");
-			if (textField.isVisible()) {
-
-				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
-					qx.event.Timer.once(function () {
-						textField.getFocusElement().focus();
-					}, this, 0);
-				}
-			}
-		},
 
 		/**
 		 * Toggles the popup's visibility and transfer the focus.
@@ -595,6 +629,16 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			this.removeState("hovered");
 		},
 
+		/**
+		 * Event handler for the pointer down event.
+		 */
+		_onPointerDown: function (e) {
+
+			if (e.getTarget() === this) {
+				qx.event.Timer.once(this.focus, this, 0);
+			}
+		},
+
 		// overridden
 		_createChildControlImpl: function (id, hash) {
 			var control;
@@ -642,6 +686,10 @@ qx.Class.define("wisej.web.DateTimePicker", {
 					});
 					control.addState("inner");
 					control.addListener("execute", this.__onDownButtonExecute, this);
+					break;
+
+				case "list":
+					control = this.base(arguments, id, hash);
 					break;
 
 				case "popup":
@@ -739,16 +787,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 				var chooser = this.getChildControl("list");
 
-				// show/hide the tooltips in the chooser control.
-				var hide = !this.getShowToolTips();
-				chooser.getChildControl("last-year-button").setBlockToolTip(hide);
-				chooser.getChildControl("next-year-button").setBlockToolTip(hide);
-				chooser.getChildControl("last-month-button").setBlockToolTip(hide);
-				chooser.getChildControl("next-month-button").setBlockToolTip(hide);
-
-				// update the min/max limits.
-				chooser.setMinValue(this.getMinValue());
-				chooser.setMaxValue(this.getMaxValue());
+				this.__updateChooserStyle(chooser);
 
 				chooser.setValue(this.getValue());
 			}
@@ -757,6 +796,35 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 			if (e.getOldData() === "visible")
 				this.tabFocus();
+		},
+
+		// Updates the chooser using the properties of the date time picker.
+		__updateChooserStyle: function (chooser) {
+
+			// show/hide the tooltips in the chooser control.
+			var hide = !this.getShowToolTips();
+			chooser.getChildControl("last-year-button").setBlockToolTip(hide);
+			chooser.getChildControl("next-year-button").setBlockToolTip(hide);
+			chooser.getChildControl("last-month-button").setBlockToolTip(hide);
+			chooser.getChildControl("next-month-button").setBlockToolTip(hide);
+
+			// update the min/max limits.
+			chooser.setMinValue(this.getMinValue());
+			chooser.setMaxValue(this.getMaxValue());
+
+			// apply showWeekNumbers.
+			var visibility = this.getShowWeekNumbers() ? "visible" : "excluded";
+			for (var w = 0; w < 7; w++) {
+				chooser.getChildControl("week#" + w).setVisibility(visibility);
+			}
+
+			// apply firstDayOfWeek.
+			var firstDay = this.getFirstDayOfWeek();
+			if (chooser.getWeekStart() != firstDay) {
+				chooser.setWeekStart(firstDay);
+			}
+
+			chooser._updateDatePane();
 		},
 
 		/*---------------------------------------------------------------------------

@@ -1,4 +1,6 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
@@ -30,6 +32,8 @@ qx.Class.define("wisej.web.TreeView", {
 		wisej.mixin.MWisejControl,
 		wisej.mixin.MBorderStyle
 	],
+
+	implement: [wisej.web.toolContainer.IToolPanelHost],
 
 	construct: function () {
 
@@ -125,6 +129,13 @@ qx.Class.define("wisej.web.TreeView", {
 		 * Gets or sets the selected nodes.
 		 */
 		selectedNodes: { init: [], apply: "_applySelectedNodes", transform: "_transformComponents" },
+
+		/**
+		 * RightClickSelection property.
+		 * 
+		 * Determines whether a right click event ("contextmenu") selects the node under the pointer.
+		 */
+		rightClickSelection: {init:false, check:"Boolean",apply:"_applyRightClickSelection"},
 
 		// Node Icons.
 
@@ -464,36 +475,86 @@ qx.Class.define("wisej.web.TreeView", {
 
 		},
 
+		/**
+		 * Applies the RightClickSelection property.
+		 */
+		_applyRightClickSelection: function (value, old) {
+
+			if (!value && old)
+				this.removeListener("contextmenu", this._onRightClick, this);
+
+			if (value && !old)
+				this.addListener("contextmenu", this._onRightClick, this);
+		},
+
+		/**
+		 * Handles right clicks to select the node when rightClickSelection is true.
+		 */
+		_onRightClick: function (e) {
+
+			if (this.getSelectionMode() !== "none") {
+				var node = wisej.utils.Widget.findWisejComponent(e.getTarget());
+				if (node instanceof wisej.web.TreeNode) {
+					this.setSelection([node]);
+				}
+			}
+		},
+
 		/** 
 		 * Applies the tools property.
 		 */
 		_applyTools: function (value, old) {
 
-			if (value == null)
-				return;
+			var tools = this.getChildControl("tools", true);
 
-			var toolsContainer = this.getChildControl("tools", true);
-
-			if (value.length == 0) {
-
-				if (toolsContainer)
-					toolsContainer.exclude();
-
+			if (value == null || value.length == 0) {
+				if (tools)
+					tools.exclude();
 				return;
 			}
 
-			if (!toolsContainer) {
-				toolsContainer = this.getChildControl("tools");
-				this._getLayout().setRowFlex(0, 0);
-				this._add(toolsContainer, { row: 0, column: 0, colSpan: 2 });
+			tools = this.getChildControl("tools");
+			tools.show();
 
-				// update the scrollable area layout to make room for the tools container.
-				this._updateScrollAreaLayout();
+			wisej.web.ToolContainer.add(this, tools);
+			wisej.web.ToolContainer.install(this, tools, value, "left", { row: 0, column: 0 }, null, "treeview");
+			wisej.web.ToolContainer.install(this, tools, value, "right", { row: 0, column: 1 }, null, "treeview");
+		},
+
+		/**
+		 * Implements: wisej.web.toolContainer.IToolPanelHost.updateToolPanelLayout
+		 * 
+		 * Changes the layout of the tools container according to overlayed scrollbar option in the theme,
+		 *
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
+		 */
+		updateToolPanelLayout: function (toolPanel) {
+
+			if (toolPanel) {
+
+				var layout = this._getLayout();
+				if (layout instanceof qx.ui.layout.Grid) {
+
+					layout.setRowFlex(0, 0);
+					toolPanel.setLayoutProperties({ row: 0, column: 0, colSpan: 2 });
+
+					this.getChildControl("pane").resetMargin();
+					this.getChildControl("scrollbar-y").resetMargin();
+
+					this._updateScrollAreaLayout();
+				}
+				// overlayed scrollbars.
+				else if (layout instanceof qx.ui.layout.Canvas) {
+
+					toolPanel.setLayoutProperties({ top: 0, left: 0, right: 0 });
+
+					var size = toolPanel.getSizeHint();
+					var pane = this.getChildControl("pane");
+					var scrollbarY = this.getChildControl("scrollbar-y");
+					pane.setMarginTop(size.height);
+					scrollbarY.setMarginTop(size.height);
+				}
 			}
-
-			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, null, "treeview");
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 }, null, "treeview");
 		},
 
 		/**
@@ -629,7 +690,7 @@ qx.Class.define("wisej.web.TreeView", {
 
 			this.base(arguments, e);
 
-			if (!this.__inApplySelectedNodes)
+			if (!this.__inApplySelectedNodes && !this.core.processingActions)
 				this.fireDataEvent("selectionChanged", e.getData());
 		},
 
@@ -678,7 +739,7 @@ qx.Class.define("wisej.web.TreeView", {
 
 				// if label editing is enabled, process F2
 				// to start editing the first selected node.
-				if (this.isLabelEdit()) {
+				if (this.isLabelEdit() && this.isEnabled()) {
 					switch (e.getKeyIdentifier()) {
 						case "F2":
 							if (!this.isWired("beginEdit")) {
@@ -722,7 +783,7 @@ qx.Class.define("wisej.web.TreeView", {
 
 			var node = this.getTreeItem(e.getOriginalTarget());
 			if (node)
-				this.fireDataEvent("itemDrag", node);
+				this.fireDataEvent("itemDrag", node.getId());
 		},
 
 		/**
@@ -990,6 +1051,14 @@ qx.Class.define("wisej.web.TreeNode", {
 			return this.isVisible();
 		},
 		setVisible: function (value) {
+
+			var nodesContainer = this.hasChildrenContainer() ? this.getChildrenContainer() : null;
+			if (nodesContainer) {
+				if (!value)
+					nodesContainer.exclude();
+				else if (this.getExpanded())
+					nodesContainer.show();
+			}
 
 			this.setVisibility(value ? "visible" : "excluded");
 		},
@@ -1367,11 +1436,12 @@ qx.Class.define("wisej.web.TreeNode", {
 
 			var parentNode = this.getParent();
 			if (parentNode != null) {
-
-				if (parentNode.getChildren().indexOf(this) == value)
-					return;
-
-				parentNode.addAt(this, value);
+				var newIndex = value;
+				var currentIndex = parentNode.getChildren().indexOf(this);
+				if (currentIndex > -1 && currentIndex !== newIndex) {
+					parentNode.remove(this);
+					parentNode.addAt(this, newIndex);
+				}
 			}
 		},
 
@@ -1580,7 +1650,7 @@ qx.Class.define("wisej.web.TreeNode", {
 		_onNodeLabelPointerDown: function (e) {
 
 			var treeView = this.getTree();
-			if (treeView != null && treeView.isLabelEdit()) {
+			if (treeView != null && treeView.isEnabled() && treeView.isLabelEdit()) {
 
 				if (!treeView.hasState("focused"))
 					return;

@@ -166,6 +166,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 		 * @return {String} The HTML table fragment for the given row range.
 		 */
 		_getRowsHtml: function (firstRow, rowCount) {
+
 			var table = this.getTable();
 			var selectionModel = table.getSelectionModel();
 			var tableModel = table.getTableModel();
@@ -213,6 +214,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			var spanOffset = this.getTopScrollOffset();
 			if (firstRow < spanOffset)
 				spanOffset = firstRow;
+
 			firstRow -= spanOffset;
 			rowCount += spanOffset;
 
@@ -430,11 +432,13 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			var widget = Wisej.Core.getComponent(cellElem.getAttribute("qx-widget-id"));
 			if (widget) {
 
+				var table = this.getTable();
 				var repository = this.__widgetRepository;
 
 				var root = cellElem.$$root;
 				if (!root) {
 					cellElem.$$root = root = new wisej.web.datagrid.gridPane.InlineRoot(cellElem);
+					root.setUserData("parent", table);
 					repository.push(root);
 				}
 
@@ -447,7 +451,6 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				widget.setMinHeight(0);
 
 				// add "owner" and "opener" QA attributes.
-				var table = this.getTable();
 				var colIndex = parseInt(cellElem.getAttribute("col"));
 				var column = table.getColumns()[colIndex];
 				widget.setUserData("owner", table);

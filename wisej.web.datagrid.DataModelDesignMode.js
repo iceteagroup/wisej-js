@@ -20,9 +20,9 @@
 /**
  * wisej.web.datagrid.DataModelDesignMode
  *
- * Remote data model designed to interact with Wisej
+ * Local data model designed to interact with Wisej
  * data provider interface and to support the new
- * additional properties.
+ * additional properties in design mode.
  *
  * Each row in the data model is expected to
  * to be a map with these fields:
@@ -132,7 +132,20 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 
 			var rowData = this.getRowData(rowIndex);
 			return rowData && rowData.minHeight ? rowData.minHeight : this.__table.getMinRowHeight();
+		},
 
+		/**
+		 * Returns the maximum height of the specified row.
+		 *
+		 * @param rowIndex {Integer} the index of the row
+		 */
+		getMaxRowHeight: function (rowIndex) {
+
+			if (this.__table.isKeepSameRowHeight())
+				return this.__table.getMaxRowHeight();
+
+			var rowData = this.getRowData(rowIndex);
+			return rowData && rowData.maxHeight ? rowData.maxHeight : this.__table.getMaxRowHeight();
 		},
 
 		/**

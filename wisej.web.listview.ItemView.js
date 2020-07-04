@@ -103,7 +103,15 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 *
 		 * Sets the size of the state icon in the listView item. The state icon is displayed before the item's icon.
 		 */
-		stateIconSize: { init: { width: 16, height: 16 }, check: "Map" }
+		stateIconSize: { init: { width: 16, height: 16 }, check: "Map" },
+
+		/**
+		 * PrefetchItems property.
+		 * 
+		 * Indicates the number of items to prefetch outside of the visible range.
+		 */
+		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" }
+
 	},
 
 	members: {
@@ -137,6 +145,9 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 		// suppresses firing server events.
 		__internalChange: false,
+
+		// prefetch manager.
+		__prefetchManager: null,
 
 		/**
 		 * Returns all the currently rendered widgets.
@@ -234,7 +245,6 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			if (actions && actions.length > 0) {
 				// enter update mode to trigger the grid update only once.
 				this.__updateMode = true;
-				var model = this.getDataModel();
 				try {
 					for (var i = 0, length = actions.length; i < length; i++) {
 						var action = actions[i];
@@ -336,6 +346,45 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		_getItemCount: function () {
 
 			return this.__itemCount;
+		},
+
+		/**
+		 * Applies the PrefetchItems property.
+		 * 
+		 * @param {Integer} value New value.
+		 * @param {Integer?} old Previous value.
+		 */
+		_applyPrefetchItems: function (value, old) {
+
+			if (value > 0) {
+
+				if (!this.__prefetchManager) {
+					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
+						minLeft: 0,
+						maxLeft: 0,
+						minRight: 0,
+						maxRight: 0,
+						minAbove: 0,
+						maxAbove: 0,
+						minBelow: 0,
+						maxBelow: 0
+					});
+				}
+
+				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
+				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
+
+				var pixels = this.getItemSize().width * value;
+				this.__prefetchManager.setPrefetchX(pixels, pixels, pixels, pixels);
+
+				var pixels = this.getItemSize().height * value;
+				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
+			}
+			else if (this.__prefetchManager) {
+
+				this.__prefetchManager.dispose();
+				this.__prefetchManager = null;
+			}
 		},
 
 		/**
@@ -882,6 +931,9 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			var index = this.__getItemIndex(item);
 			this.__owner.fireItemEvent(e, "itemClick", index);
 
+			// move the focus indicator.
+			this.__updateFocusedItem(index);
+
 			// determine if the user clicked the state icon.
 			var clickedWidget = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
 			if (clickedWidget != null && clickedWidget != item && clickedWidget === item.getChildControl("state"))
@@ -998,7 +1050,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 	destruct: function()
 	{
 		this.getDataModel().dispose();
-		this._disposeObjects("__layer", "__cellProvider", "__selectionManager");
+		this._disposeObjects("__layer", "__cellProvider", "__selectionManager", "__prefetchManager");
 
 	}
 });
@@ -1360,7 +1412,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 
 				// the item's image.
 				if (icon && icon.isVisible()){
-					icon.setLayoutProperties({ row: 0, column: 1 });
+					icon.setLayoutProperties({ row: 0, column: 1, colSpan: 1 });
 				}
 
 				// the item's label, or the hosted widget.
@@ -1397,7 +1449,7 @@ qx.Class.define("wisej.web.listview.ItemCellWidget", {
 
 					// the item's image.
 					if (icon && icon.isVisible()) {
-						icon.setLayoutProperties({ row: 0, column: 1 });
+						icon.setLayoutProperties({ row: 0, column: 1, colSpan: 2 });
 						this.__layout.setColumnFlex(1, 1);
 					}
 					else {
@@ -1680,7 +1732,7 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 
 
 /**
- * wisej.web.listview.DataModel
+ * wisej.web.listview.ItemDataModel
  *
  * Remote data model designed to interact with the Wisej
  * IWisejDataStore interface and to support the new
@@ -1708,8 +1760,8 @@ qx.Class.define("wisej.web.listview.ItemDataModel", {
 
 		// increase the blocks in the cache since the list view can
 		// display more items when in small icon view mode.
+		blockSize: { init: 500, refine: true },
 		maxCachedBlockCount: { init: 100, refine: true }
-
 	},
 
 	members: {
@@ -1783,3 +1835,49 @@ qx.Class.define("wisej.web.listview.ItemDataModel", {
 
 });
 
+
+/**
+ * wisej.web.listview.ItemDataModelDesignMode
+ *
+ * Local data model designed to interact with the Wisej
+ * IWisejDataStore interface and to support the new
+ * additional properties in design mode.
+ *
+ * Each row in the data model is expected to
+ * to be a map with these fields:
+ *
+ *		{
+ *			"data":
+ *			{
+ *				"icon": "the item's icon".
+ *				"stateIcon": "the item's state icon".
+ *				"0": "item's text",
+ *				...
+ *			},
+ *          "styles": {item's style map}
+ *		}
+ */
+qx.Class.define("wisej.web.listview.ItemDataModelDesignMode", {
+
+	extend: qx.ui.table.model.Simple,
+
+	members: {
+
+		// the listview that owns this model.
+		__listview: null,
+
+		// the data store used to retrieve data from the server component.
+		__dataStore: null,
+
+		/**
+		 * Initialize the model <--> listview interaction.
+		 *
+		 * @param listview {wisej.web.listview.ListView}
+		 *   The listview to which this model is attached
+		 */
+		init: function (listview) {
+
+			this.__listview = listview;
+		},
+	}
+});

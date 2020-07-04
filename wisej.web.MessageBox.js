@@ -92,7 +92,9 @@ qx.Class.define("wisej.web.MessageBox", {
 		this.setAlignY("middle");
 
 		this.addListener("focusin", this._onFocusIn, this);
-		qx.event.Idle.getInstance().addListener("interval", this.__ensureActiveMessageBox, this);
+
+		if (!wisej.web.DesignMode)
+			qx.event.Idle.getInstance().addListener("interval", this.__ensureActiveMessageBox, this);
 
 		// process Enter and Esc.
 		this.addListener("keypress", this._onKeyPress, this);
@@ -168,7 +170,7 @@ qx.Class.define("wisej.web.MessageBox", {
 		 */
 		__ensureActiveMessageBox: function () {
 
-			if (!this.isActive())
+			if (!this.isActive() || wisej.web.DesignMode)
 				return;
 
 			if (this.__defaultBtn)
@@ -193,9 +195,14 @@ qx.Class.define("wisej.web.MessageBox", {
 
 		/** 
 		 * Handles keypress events to close the
-		 * messagebox when pressing Esc.
+		 * messagebox when pressing Esc and to
+		 * navigate between button options with
+		 * arrow keys.
 		 */
 		_onKeyPress: function (e) {
+
+			if (e.getModifiers() !== 0)
+				return;
 
 			switch (e.getKeyIdentifier()) {
 
@@ -206,6 +213,16 @@ qx.Class.define("wisej.web.MessageBox", {
 				case "Enter":
 					if (this.__defaultBtn)
 						this.__defaultBtn.execute();
+					break;
+
+				case "Down":
+				case "Right":
+					qx.ui.core.FocusHandler.getInstance().focusNext();
+					break;
+
+				case "Up":
+				case "Left":
+					qx.ui.core.FocusHandler.getInstance().focusPrev();
 					break;
 			}
 		},

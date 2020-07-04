@@ -81,6 +81,33 @@ qx.Class.define("wisej.web.ToolContainer", {
 	statics: {
 
 		/**
+		 * Adds the {wisej.web.toolContainer.ToolPanel} to the host widget and adjusts the
+		 * host to make enough room to show the ToolContainer.
+		 * 
+		 * @param host {wisej.web.toolContainer.IToolPanelHost} Widget that hosts the ToolPanel.
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} ToolPanel to add to the @host.
+		 */
+		add: function (host, toolPanel) {
+
+			if (host !== toolPanel.getLayoutParent()) {
+
+				host._add(toolPanel);
+
+				if (!toolPanel.hasListener("resize", this._onToolPanelResize, this))
+					toolPanel.addListener("resize", this._onToolPanelResize, this);
+			}
+
+			host.updateToolPanelLayout(toolPanel);
+		},
+
+		_onToolPanelResize: function (e) {
+
+			var toolPanel = e.getTarget();
+			var host = toolPanel.getLayoutParent();
+			host.updateToolPanelLayout(toolPanel);
+		},
+
+		/**
 		 * Creates a new instance of wisej.web.ToolContainer and adds it
 		 * to the owner widget at the specified location.
 		 *
@@ -308,11 +335,14 @@ qx.Class.define("wisej.web.ToolContainer", {
 		 */
 		__onToolWidgetExecute: function (e) {
 
-			if (this.__target != null) {
-				var widget = e.getTarget();
-				this.__target.fireDataEvent("toolClick", widget.getId());
-			}
+			var target = this.__target;
+			if (target != null) {
+				if (target.isFocusable() && !target.hasState("focused"))
+					target.focus();
 
+				var tool = e.getTarget();
+				target.fireDataEvent("toolClick", tool.getId());
+			}
 		},
 
 		__onToolsAppear: function (e) {
@@ -422,6 +452,16 @@ qx.Class.define("wisej.web.toolContainer.ToolButton", {
 	// to provide services to the Wisej core.
 	include: [wisej.mixin.MWisejComponent],
 
+	construct: function () {
+
+		this.base(arguments);
+
+		this.setKeepFocus(true);
+		this.setKeepActive(true);
+
+		this.addListener("dbltap", this._onDblTap);
+	},
+
 	properties: {
 
 		/**
@@ -489,6 +529,15 @@ qx.Class.define("wisej.web.toolContainer.ToolButton", {
 				this.base(arguments, value, old);
 
 		},
+
+		/**
+		 * Listener method for "dbltap" event which stops the propagation.
+		 *
+		 * @param e {qx.event.type.Pointer} Pointer event
+		 */
+		_onDblTap: function (e) {
+			e.stopPropagation();
+		}
 	}
 
 });
@@ -505,11 +554,55 @@ qx.Class.define("wisej.web.toolContainer.ToolPanel", {
 	extend: qx.ui.container.Composite,
 
 	construct: function () {
+
 		var layout = new qx.ui.layout.Grid();
 		layout.setRowFlex(0, 1);
 		layout.setColumnFlex(0, 1);
 
 		this.base(arguments, layout);
+	},
+
+	members: {
+
+		// overridden
+		_onChangeTheme: function () {
+
+			if (this.isDisposed()) {
+				return;
+			}
+
+			this.base(arguments);
+
+			var host = this.getLayoutParent();
+			if (host)
+				host.updateToolPanelLayout(this);
+		}
+	}
+
+});
+
+
+/**
+ * wisej.web.toolContainer.IToolPanelHost
+ * 
+ * Widgets that host the {wisej.web.toolContainer.ToolPanel} must implement
+ * this interface.
+ */
+qx.Interface.define("wisej.web.toolContainer.IToolPanelHost", {
+
+	members: {
+
+		/**
+		 * Returns the position of the hosted {wisej.web.toolContainer.ToolPanel}.
+		 */
+		getToolsPosition: function () { return null; },
+
+		/**
+		 * Updates the layout of the hosted {wisej.web.toolContainer.ToolPanel}.
+		 * 
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the ToolPanel to arrange.
+		 */
+		updateToolPanelLayout: function (toolPanel) { }
 	}
 
 });

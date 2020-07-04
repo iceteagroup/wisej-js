@@ -47,11 +47,16 @@ qx.Class.define("wisej.web.DragDrop", {
 	construct: function () {
 
 		if (wisej.web.DragDrop.__singleton)
-			throw new Error("Only one instance of wisej.web.DragDrop is allowed.");
+			wisej.web.DragDrop.__singleton.dispose();
 
 		wisej.web.DragDrop.__singleton = this;
 
 		this.base(arguments);
+
+		this.__handleDropCallback = this.__handleDrop.bind(this);
+		this.__handleDragEnterCallback = this.__handleDragEnter.bind(this);
+		this.__handleDragOverCallback = this.__handleDragOver.bind(this);
+		this.__handleDragLeaveCallback = this.__handleDragLeave.bind(this);
 	},
 
 	properties: {
@@ -144,6 +149,12 @@ qx.Class.define("wisej.web.DragDrop", {
 	},
 
 	members: {
+
+		/** Native drop handlers bound to this singleton. */
+		__handleDropCallback: null,
+		__handleDragEnterCallback: null,
+		__handleDragOverCallback: null,
+		__handleDragLeaveCallback: null,
 
 		/**
 		 * allowedEffects getter/setter.
@@ -341,16 +352,54 @@ qx.Class.define("wisej.web.DragDrop", {
 					/*
 					if (component.isDraggable()) {
 						dom.setAttribute("draggable", "true");
-						qx.bom.Event.addNativeListener(dom, "drag", this.__handleDrag.bind(this));
-						qx.bom.Event.addNativeListener(dom, "dragend", this.__handleDragEnd.bind(this));
-						qx.bom.Event.addNativeListener(dom, "dragstart", this.__handleDragStart.bind(this));
+						qx.bom.Event.addNativeListener(dom, "drag", this.__handleDrag);
+						qx.bom.Event.addNativeListener(dom, "dragend", this.__handleDragEnd);
+						qx.bom.Event.addNativeListener(dom, "dragstart", this.__handleDragStart);
 					}
 					*/
 
-					qx.bom.Event.addNativeListener(dom, "drop", this.__handleDrop.bind(this));
-					qx.bom.Event.addNativeListener(dom, "dragenter", this.__handleDragEnter.bind(this));
-					qx.bom.Event.addNativeListener(dom, "dragover", this.__handleDragOver.bind(this));
-					qx.bom.Event.addNativeListener(dom, "dragleave", this.__handleDragLeave.bind(this));
+					qx.bom.Event.addNativeListener(dom, "drop", this.__handleDropCallback);
+					qx.bom.Event.addNativeListener(dom, "dragenter", this.__handleDragEnterCallback);
+					qx.bom.Event.addNativeListener(dom, "dragover", this.__handleDragOverCallback);
+					qx.bom.Event.addNativeListener(dom, "dragleave", this.__handleDragLeaveCallback);
+				}
+				else {
+					component.addListenerOnce("appear", function (e) {
+						this.registerComponent(component);
+					}, this);
+				}
+			}
+		},
+
+		/**
+		 * Unregisters the component with the drag-drop handler to
+		 * manage native html5 drag-drop file operations.
+		 *
+		 * @param component {Widget} the component to register.
+		 */
+		unregisterComponent: function (component) {
+
+			if (wisej.web.DesignMode)
+				return;
+
+			var el = component.getContentElement();
+			if (el) {
+				var dom = el.getDomElement();
+				if (dom) {
+
+					// dragging out of the browser is not yet supported.
+					/*
+						dom.setAttribute("draggable", "true");
+						qx.bom.Event.removeNativeListener(dom, "drag", this.__handleDrag);
+						qx.bom.Event.removeNativeListener(dom, "dragend", this.__handleDragEnd);
+						qx.bom.Event.removeNativeListener(dom, "dragstart", this.__handleDragStart);
+					}
+					*/
+
+					qx.bom.Event.removeNativeListener(dom, "drop", this.__handleDropCallback);
+					qx.bom.Event.removeNativeListener(dom, "dragenter", this.__handleDragEnterCallback);
+					qx.bom.Event.removeNativeListener(dom, "dragover", this.__handleDragOverCallback);
+					qx.bom.Event.removeNativeListener(dom, "dragleave", this.__handleDragLeaveCallback);
 				}
 			}
 		},

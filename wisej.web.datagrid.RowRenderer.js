@@ -129,9 +129,7 @@ qx.Class.define("wisej.web.datagrid.RowRenderer", {
 			var className = null;
 
 			// determine the cell renderer class.
-			var table = rowInfo.table;
 			var rowData = rowInfo.rowData;
-			var rowIndex = rowInfo.row;
 
 			if (rowData) {
 
@@ -227,7 +225,9 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 			var appearance = this.getAppearance();
 			var state = this.getRowState(rowInfo);
 
-			return qx.theme.manager.Decoration.CSS_CLASSNAME_PREFIX + "row " + styleMgr.getCssClass(appearance, state, wisej.web.datagrid.RowRenderer.DEFAULT_CSS);
+			return qx.theme.manager.Decoration.CSS_CLASSNAME_PREFIX + "row "
+				+ styleMgr.getCssClass(appearance, state, wisej.web.datagrid.RowRenderer.DEFAULT_CSS)
+				+ this._getCssClass(rowInfo);
 		},
 
 		// builds the state map for the row.
@@ -254,7 +254,7 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 
 			// cell border.
 			if (rowInfo.table)
-				state[rowInfo.table._gridLinesStateName] = true;
+				state[rowInfo.table._cellBorderStyle] = true;
 
 			// new row?
 			var rowData = rowInfo.rowData;
@@ -303,6 +303,9 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 			var rowCount = rowInfo.tableModel.getRowCount();
 			style += this.getRowHeightStyle(rowHeight) + "z-index:" + (rowCount - rowInfo.row);
 
+			// add the css style string from the server.
+			style += this._getCssStyle(rowInfo);
+
 			return style;
 		},
 
@@ -318,7 +321,6 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 			var tableModel = table.getTableModel();
 			var columnModel = table.getTableColumnModel();
 			var paneModel = rowInfo.scroller.getTablePaneModel();
-			var firstIndex = paneModel.getFirstColumnX();
 			var colCount = paneModel.getColumnCount();
 
 			// propagate the class change to the child cells.
@@ -377,6 +379,48 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 
 			return "role='row' row='" + rowInfo.row + "' ";
 
+		},
+
+		/**
+		 * Returns the combined custom css style assigned to the row.
+		 */
+		_getCssStyle: function (rowInfo) {
+
+			var rowData = rowInfo.rowData;
+			if (rowData) {
+
+				var styles = [];
+				var rowStyle = rowData.style ? rowData.style.style : null;
+
+				if (rowStyle)
+					styles.push(rowStyle);
+
+				if (styles.length > 0)
+					return ";" + styles.join(";");
+			}
+
+			return "";
+		},
+
+		/**
+		 * Returns the combined custom css class name assigned to the table, or row DataGridViewStyle objects.
+		 */
+		_getCssClass: function (rowInfo) {
+
+			var rowData = rowInfo.rowData;
+			if (rowData) {
+
+				var classes = [];
+				var rowClass = rowData.style ? rowData.style.class : null;
+
+				if (rowClass)
+					classes.push(rowClass);
+
+				if (classes.length > 0)
+					return " " + classes.join(" ");
+			}
+
+			return "";
 		},
 
 		/**

@@ -26,7 +26,11 @@ qx.Class.define("wisej.web.SplitButton", {
 
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
-	include: [wisej.mixin.MWisejControl, wisej.mixin.MShortcutTarget],
+	include: [
+		wisej.mixin.MWisejControl,
+		wisej.mixin.MBorderStyle,
+		wisej.mixin.MShortcutTarget
+	],
 
 	construct: function (label) {
 
@@ -204,14 +208,14 @@ qx.Class.define("wisej.web.SplitButton", {
 
 			var t = 0;
 			var r = 0;
-			var l = 0;
 			var b = 0;
+			var l = 0;
 
 			if (value instanceof Array) {
 				t = value[0];
 				r = value[1];
-				l = value[2];
-				b = value[3];
+				b = value[2];
+				l = value[3];
 			}
 			else {
 				t = r = l = b = value;

@@ -56,9 +56,6 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 
 					value = value || "";
 					setValueMethod.call(cellEditor, value);
-
-					if (cellEditor.setTextSelection)
-						cellEditor.setTextSelection(value.length);
 				}
 			}
 		},

@@ -1,8 +1,10 @@
-﻿///////////////////////////////////////////////////////////////////////////////
+﻿//#Requires=wisej.web.ToolContainer.js
+
+///////////////////////////////////////////////////////////////////////////////
 //
 // (C) 2015 ICE TEA GROUP LLC - ALL RIGHTS RESERVED
 //
-// Author: Gianluca Pivato
+//
 //
 // ALL INFORMATION CONTAINED HEREIN IS, AND REMAINS
 // THE PROPERTY OF ICE TEA GROUP LLC AND ITS SUPPLIERS, IF ANY.
@@ -30,6 +32,8 @@ qx.Class.define("wisej.web.ListBox", {
 		wisej.mixin.MWisejControl,
 		wisej.mixin.MBorderStyle
 	],
+
+	implement: [wisej.web.toolContainer.IToolPanelHost],
 
 	construct: function () {
 
@@ -111,13 +115,38 @@ qx.Class.define("wisej.web.ListBox", {
 		/**
 		 * Determines the appearance of child items.
 		 */
-		itemAppearance: { init: "listitem", themeable: true }
+		itemAppearance: { init: "listitem", themeable: true },
+
+		/**
+		 * LazyLoad property.
+		 * 
+		 * When true, it loads the items when the list becomes visible.
+		 */
+		lazyLoad: { init: false, check: "Boolean" },
+
+		/**
+		 * RightClickSelection property.
+		 * 
+		 * Determines whether a right click event ("contextmenu") selects the node under the pointer.
+		 */
+		rightClickSelection: { init: false, check: "Boolean", apply: "_applyRightClickSelection" },
+
+		/**
+		 * IncrementalSelection property.
+		 * 
+		 * Determines whether items are selected incrementally as the user types within a 1 second timeout.
+		 */
+		incrementalSelection: { init: true, check: "Boolean" }
+
 	},
 
 	members: {
 
 		// suspend event dispatching.
 		__suspendEvents: false,
+
+		// delayed selection when lazy loading is on.
+		__lazySelectedIndices: null,
 
 		/**
 		 * Applies the readOnly property.
@@ -176,8 +205,20 @@ qx.Class.define("wisej.web.ListBox", {
 
 			var items = value;
 
-			if (items == null)
+			if (items == null) {
+
+				// schedule lazy loading.
+				if (this.isLazyLoad()) {
+
+					qx.event.Timer.once(function () {
+						this.fireEvent("load");
+					}, this, 0);
+
+					this.setLazyLoad(false);
+				}
+
 				return;
+			}
 
 			this.__suspendEvents = true;
 			try {
@@ -199,6 +240,10 @@ qx.Class.define("wisej.web.ListBox", {
 						item = this._createListItem(added[i]);
 						this.addAt(item, index);
 					}
+
+					// re-read the children collection, if it was empty
+					// it was a clone and now we'd still have an empty collection.
+					children = this.getChildren();
 				}
 
 				// apply modified items.
@@ -240,9 +285,15 @@ qx.Class.define("wisej.web.ListBox", {
 					qx.ui.core.queue.Layout.add(this);
 				}
 
+				// apply the deferred selection now that we have the items.
+				if (this.__lazySelectedIndices) {
+					this.setSelectedIndices(this.__lazySelectedIndices);
+				}
+
 			} finally {
 
 				this.__suspendEvents = false;
+				this.__lazySelectedIndices = null;
 			}
 		},
 
@@ -259,6 +310,31 @@ qx.Class.define("wisej.web.ListBox", {
 			var items = this.getChildren();
 			for (var i = 0; i < items.length; i++) {
 				items[i].setHeight(value);
+			}
+		},
+
+		/**
+		 * Applies the RightClickSelection property.
+		 */
+		_applyRightClickSelection: function (value, old) {
+
+			if (!value && old)
+				this.removeListener("contextmenu", this._onRightClick, this);
+
+			if (value && !old)
+				this.addListener("contextmenu", this._onRightClick, this);
+		},
+
+		/**
+		 * Handles right clicks to select the node when rightClickSelection is true.
+		 */
+		_onRightClick: function (e) {
+
+			if (this.getSelectionMode() !== "none" && !this.isReadOnly()) {
+				var item = e.getTarget();
+				if (item instanceof wisej.web.listbox.ListItem) {
+					this.setSelection([item]);
+				}
 			}
 		},
 
@@ -313,6 +389,12 @@ qx.Class.define("wisej.web.ListBox", {
 		},
 		setSelectedIndices: function (value) {
 
+			if (this.isLazyLoad()) {
+				// save the selection for later.
+				this.__lazySelectedIndices = value;
+				return;
+			}
+
 			this.__suspendEvents = true;
 			try {
 
@@ -342,32 +424,56 @@ qx.Class.define("wisej.web.ListBox", {
 		 */
 		_applyTools: function (value, old) {
 
-			if (value == null)
-				return;
+			var tools = this.getChildControl("tools", true);
 
-			var toolsContainer = this.getChildControl("tools", true);
-
-			if (value.length == 0) {
-
-				if (toolsContainer)
-					toolsContainer.exclude();
-
+			if (value == null || value.length == 0) {
+				if (tools)
+					tools.exclude();
 				return;
 			}
 
-			if (!toolsContainer) {
-				toolsContainer = this.getChildControl("tools");
-				this._getLayout().setRowFlex(0, 0);
-				this._add(toolsContainer, { row: 0, column: 0, colSpan: 2 });
+			tools = this.getChildControl("tools");
+			tools.show();
 
-				// update the scrollable area layout to make room for the tools container.
-				this._updateScrollAreaLayout();
+			wisej.web.ToolContainer.add(this, tools);
+			wisej.web.ToolContainer.install(this, tools, value, "left", { row: 0, column: 0 }, null, "listbox");
+			wisej.web.ToolContainer.install(this, tools, value, "right", { row: 0, column: 1 }, null, "listbox");
+		},
+
+		/**
+		 * Implements: wisej.web.toolContainer.IToolPanelHost.updateToolPanelLayout
+		 * 
+		 * Changes the layout of the tools container according to overlayed scrollbar option in the theme,
+		 *
+		 * @param toolPanel {wisej.web.toolContainer.ToolPanel} the panel that contains the two wise.web.ToolContainer widgets.
+		 */
+		updateToolPanelLayout: function (toolPanel) {
+
+			if (toolPanel) {
+
+				var layout = this._getLayout();
+				if (layout instanceof qx.ui.layout.Grid) {
+
+					layout.setRowFlex(0, 0);
+					toolPanel.setLayoutProperties({ row: 0, column: 0, colSpan: 2 });
+
+					this.getChildControl("pane").resetMargin();
+					this.getChildControl("scrollbar-y").resetMargin();
+
+					this._updateScrollAreaLayout();
+				}
+				// overlayed scrollbars.
+				else if (layout instanceof qx.ui.layout.Canvas) {
+
+					toolPanel.setLayoutProperties({ top: 0, left: 0, right: 0 });
+
+					var size = toolPanel.getSizeHint();
+					var pane = this.getChildControl("pane");
+					var scrollbarY = this.getChildControl("scrollbar-y");
+					pane.setMarginTop(size.height);
+					scrollbarY.setMarginTop(size.height);
+				}
 			}
-
-			toolsContainer.show();
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "left", { row: 0, column: 0 }, null, "listbox");
-			wisej.web.ToolContainer.install(this, toolsContainer, value, "right", { row: 0, column: 1 }, null, "listbox");
-
 		},
 
 		/**
@@ -487,8 +593,20 @@ qx.Class.define("wisej.web.ListBox", {
 			var item = e.getOriginalTarget();
 			if (item instanceof qx.ui.form.ListItem)
 				this.setSelection([item]);
-		}
+		},
 
+		// overridden.
+		// handles the inline find.
+		_onKeyInput: function (e) {
+
+			this.base(arguments, e);
+
+			if (!this.getIncrementalSelection()) {
+
+				// reset the key buffer timer.
+				this.__lastKeyPress = 0;
+			}
+		}
 	}
 
 });

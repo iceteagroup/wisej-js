@@ -74,12 +74,11 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 		 */
 		_applyClassNames: function (value, old) {
 
-
 			// remove the css class names from the previous list.
 			if (old != null && old.length > 0)
 			{
 				for (var i = 0; i < old.length; i++) {
-					var comp = Wisej.Core.getComponent(old[i].id);
+					var comp = this._transformComponent(old[i].id);
 					if (comp) {
 						var el = comp.getContentElement();
 						el.removeClass(old[i].className);
@@ -90,7 +89,7 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 			// add the new css class names.
 			if (value != null && value.length > 0) {
 				for (var i = 0; i < value.length; i++) {
-					var comp = Wisej.Core.getComponent(value[i].id);
+					var comp = this._transformComponent(value[i].id);
 					if (comp) {
 						var el = comp.getContentElement();
 						el.addClass(value[i].className);
@@ -102,9 +101,9 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 				if (value) {
 					// when in design mode, the value contains the single set of extended
 					// properties only for the widget being designed.
-					var comp = window.WisejDesignComponent;
-					if (comp) {
-						var el = comp.getContentElement();
+					var component = this._transformComponent(value.id)
+					if (component) {
+						var el = component.getContentElement();
 						el.addClass(value.className);
 					}
 				}

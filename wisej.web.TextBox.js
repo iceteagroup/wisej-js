@@ -54,35 +54,52 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		this._setLayout(layout);
 		layout.setAlignY("middle");
 
-		// add local state properties.
-		this.setStateProperties(this.getStateProperties().concat(["value", "selection"]));
-
-		// forward the focusin and focusout events to the textField.
-		// it's not focusable so the events need to be forwarded manually.
-		this.addListener("focusin", this.__onFocusIn, this);
-		this.addListener("focusout", this.__onFocusOut, this);
-
-		// hovered event handlers.
-		this.addListener("pointerover", this._onPointerOver);
-		this.addListener("pointerout", this._onPointerOut);
-
-		// any action on the textbox marks it as dirty to update the state on the server.
 		var textField = this.getChildControl("textfield");
-		textField.addListener("changeValue", this.__onTextFieldChangeValue, this);
-		textField.addListener("input", function (e) { this.setDirty(true); }, this);
-		textField.addListener("mousedown", function (e) { this.setDirty(true); }, this);
-
-		// attach the native event "oncopy" to update the clipboard on the server.
-		this.__getTextFieldElement().addListener("copy", function (e) { this.fireEvent("copy"); }, this);
 
 		// enable the native context menu by default.
 		this.setNativeContextMenu(true);
 
-		// rightToLeft support.
-		this.addListener("changeRtl", function (e) { this._mirrorChildren(e.getData()); }, this);
+		// add local state properties.
+		this.setStateProperties(this.getStateProperties().concat(["value", "selection"]));
+
+		// any action on the textbox marks it as dirty to update the state on the server.
+		textField.addListener("input", this.__onTextFieldInput, this);
+		textField.addListener("changeValue", this.__onTextFieldChangeValue, this);
+		textField.addListener("keydown", function (e) { this.setDirty(true); }, this);
+
+		// attach the native event "oncopy" to update the clipboard on the server.
+		this.__getTextFieldElement().addListener("copy", this._onNativeCopy, this);
+
+		// forward the focusin and focusout events to the textfield. The textfield
+		// is not focusable so the events need to be forwarded manually.
+		this.addListener("focusin", function (e) {
+			textField.fireNonBubblingEvent("focusin", qx.event.type.Focus);
+		}, this);
+		this.addListener("focusout", function (e) {
+			textField.fireNonBubblingEvent("focusout", qx.event.type.Focus);
+		}, this);
+
+		// rtl support.
+		this.addListener("changeRtl", function (e) {
+			this._mirrorChildren(e.getData());
+		}, this);
+
+		// pointer events.
+		this.addListener("pointerout", this._onPointerOut, this);
+		this.addListener("pointerover", this._onPointerOver, this);
+		this.addListener("pointerdown", this._onPointerDown, this);
 	},
 
 	events: {
+
+		/**
+		 * The event is fired on every keystroke modifying the value of the field.
+		 *
+		 * The method {@link qx.event.type.Data#getData} returns the
+		 * current value of the text field.
+		 */
+		"input": "qx.event.type.Data",
+
 		/**
 		 * The "changeValue" event is fired each time the text field looses focus and the
 		 * text field values has changed.
@@ -177,7 +194,14 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * When set to false, it skips calls to the text selection API. It's used when
 		 * the TextBox type is set to "checkbox" or "radio".
 		 */
-		allowTextSelection: { init: true, check: "Boolean" }
+		allowTextSelection: { init: true, check: "Boolean" },
+
+		/**
+		 * SelectOnEnter property.
+		 * 
+		 * When set to true, the entire text is selected when the element gains the focus.
+		 */
+		selectOnEnter: {init: false, check:"Boolean", apply:"_applySelectOnEnter"}
 	},
 
 	statics: {
@@ -206,7 +230,8 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		// forwarded states.
 		_forwardStates: {
 			focused: true,
-			invalid: true
+			invalid: true,
+			readonly: true
 		},
 
 		/**
@@ -308,6 +333,20 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		},
 
 		/**
+		 * Applies the selectOnEnter property.
+		 */
+		_applySelectOnEnter: function (value, old) {
+
+			if (value && !old) {
+				this.addListener("focusin", function (e) {
+					if (this.isSelectOnEnter()) {
+						qx.event.Timer.once(this.selectAllText, this, 1);
+					}
+				}, this);
+			}
+		},
+
+		/**
 		 * Applies the nativeContextMenu property.
 		 */
 		_applyNativeContextMenu: function (value, old) {
@@ -326,7 +365,9 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 */
 		_applySpellCheck: function (value, old) {
 			var el = this.__getTextFieldElement();
-			el.setAttribute("spellcheck", value ? "true" : "false");
+			if (el) {
+				el.setAttribute("spellcheck", value ? "true" : "false");
+			}
 		},
 
 		/**
@@ -384,6 +425,44 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		},
 
 		/**
+		 * Event handler for the "pointerover" event.
+		 */
+		_onPointerOver: function (e) {
+
+			this.addState("hovered");
+		},
+
+		/**
+		 * Event handler for the "pointerout" event.
+		 */
+		_onPointerOut: function (e) {
+
+			this.removeState("hovered");
+		},
+
+		/**
+		 * Event handler for the "pointerdown" event.
+		 */
+		_onPointerDown: function (e) {
+
+			if (e.getTarget() === this) {
+
+				if (this.isSelectOnEnter())
+					this.selectAllText();
+
+				qx.event.Timer.once(this.focus, this, 0);
+			}
+		},
+
+		/**
+		 * Event handler for the native "copy" event.
+		 */
+		_onNativeCopy: function (e) {
+
+			this.fireEvent("copy");
+		},
+
+		/**
 		 * Get/set the selection property.
 		 */
 		getSelection: function () {
@@ -421,39 +500,12 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 		__createInnerTextField: function () {
 
-			return new qx.ui.form.TextField().set({
-				allowGrowY: false
-			});
+			return new qx.ui.form.TextField();
 		},
 
 		__getTextFieldElement: function () {
 
 			return this.getChildControl("textfield").getContentElement();
-		},
-
-		// forward the "focus" event and 
-		// focus the inner textfield when gaining the focus, otherwise the editable
-		// textfield doesn't get the focus when clicking close or on the border.
-		__onFocusIn: function (e) {
-
-			var textField = this.getChildControl("textfield");
-			if (textField.isVisible()) {
-
-				textField.fireNonBubblingEvent("focusin", qx.event.type.Focus);
-
-				if (textField != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
-					qx.event.Timer.once(function () {
-						textField.getFocusElement().focus();
-					}, this, 0);
-				}
-			}
-		},
-
-		// forward the "blur" event.
-		__onFocusOut: function (e) {
-
-			var textField = this.getChildControl("textfield");
-			textField.fireNonBubblingEvent("focusout", qx.event.type.Focus);
 		},
 
 		// forward the "changeValue" event.
@@ -463,25 +515,19 @@ qx.Class.define("wisej.web.TextBoxBase", {
 			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
 		},
 
+		// forward the "input" event.
+		__onTextFieldInput: function (e) {
+
+			this.setDirty(true);
+			this.fireDataEvent("input", e.getData(), e.getOldData());
+
+			if (e.getData() != e.getOldData())
+				this.fireEvent("modified");
+		},
+
 		// checks whether the textbox has the focus.
 		_isFocused: function () {
 			return qx.ui.core.FocusHandler.getInstance().getFocusedWidget() === this;
-		},
-
-		/**
-		 * Event handler for the pointer over event.
-		 */
-		_onPointerOver: function (e) {
-
-			this.addState("hovered");
-		},
-
-		/**
-		 * Event handler for the pointer out event.
-		 */
-		_onPointerOut: function (e) {
-
-			this.removeState("hovered");
 		},
 
 		/**
@@ -694,7 +740,17 @@ qx.Class.define("wisej.web.TextBox", {
 		 * 
 		 * Works only when the TextBox is of type "checkbox" or "radio".
 		 */
-		checked: { init: false, check:"Boolean", apply: "_applyChecked", event: "changeChecked" }
+		checked: { init: false, check: "Boolean", apply: "_applyChecked", event: "changeChecked" },
+
+		/**
+		 * Filter property.
+		 * 
+		 * RegExp responsible for filtering the value of the textfield. the RegExp
+		 * gives the range of valid values.
+		 * The following example only allows digits in the textfield.
+		 * <pre class='javascript'>field.setFilter(/[0-9]/);</pre>
+		 */
+		filter: { init: null, check: "String", nullable: true, apply: "_applyFilter", transform:"_transformFilter" }
 
 	},
 
@@ -716,6 +772,7 @@ qx.Class.define("wisej.web.TextBox", {
 
 				this.removeState(old.type);
 				this.setAllowTextSelection(true);
+				this.__onCheckTextBoxChangeListener = null;
 			}
 
 			if (value) {
@@ -730,6 +787,7 @@ qx.Class.define("wisej.web.TextBox", {
 				if (value.type === "checkbox" || value.type === "radio") {
 
 					this.setAllowTextSelection(false);
+
 					this.__onCheckTextBoxChangeListener =
 						this.__onCheckTextBoxChangeListener || qx.lang.Function.listener(this.__onCheckTextBoxChange, this);
 
@@ -743,18 +801,17 @@ qx.Class.define("wisej.web.TextBox", {
 
 		__onCheckTextBoxAppear: function (e) {
 
-			// complete the of the non-standard textbox using the native input-type.
+			// sync the checked status of the native checkbox or radio input.
 			var textField = this.getChildControl("textfield");
 			var dom = textField.getContentElement().getDomElement();
-			var inputType = this.getInputType();
-			if (dom && (inputType.type === "checkbox" || inputType.type === "radio")) {
+			if (dom) {
 				dom.checked = this.isChecked();
 				qx.bom.Event.addNativeListener(dom, "change", this.__onCheckTextBoxChangeListener);
 			}
-
 		},
 
 		__onCheckTextBoxChange: function (e) {
+			// update the checked property when the user checks the native checkbox or radio input.
 			var textField = this.getChildControl("textfield");
 			var dom = textField.getContentElement().getDomElement();
 			if (dom) {
@@ -771,6 +828,20 @@ qx.Class.define("wisej.web.TextBox", {
 			var dom = textField.getContentElement().getDomElement();
 			if (dom)
 				dom.checked = value === true;
+		},
+
+		/**
+		 * Applies the Filter property.
+		 */
+		_applyFilter: function (value, old) {
+
+			this.getChildControl("textfield").setFilter(value);
+		},
+		_transformFilter: function (value) {
+			if (value)
+				return new RegExp(value);
+			else
+				return null;
 		}
 	}
 });
@@ -807,14 +878,14 @@ qx.Class.define("wisej.web.TextArea", {
 		 *
 		 * true if the ENTER key creates a new line of text in a multiline version of the control; false if the ENTER key activates the default button for the form.
 		 */
-		acceptsReturn: { init: false, check: "Boolean", apply: "_applyAcceptsReturnOrTab" },
+		acceptsReturn: { init: false, check: "Boolean", apply: "_applyAcceptsReturn" },
 
 		/** 
 		 * AcceptsTab property.
 		 *
 		 * true if users can enter tabs in a multiline text box using the TAB key; false if pressing the TAB key moves the focus.
 		 */
-		acceptsTab: { init: false, check: "Boolean", apply: "_applyAcceptsReturnOrTab" },
+		acceptsTab: { init: false, check: "Boolean", apply: "_applyAcceptsTab" },
 
 		/**
 		 * Determines which scrollbars should be visible: 0 = None, 1 = Horizontal, 2 = Vertical, 3 = Both, 4 = Hidden.
@@ -851,79 +922,109 @@ qx.Class.define("wisej.web.TextArea", {
 		},
 
 		/**
-		 * Applies the AcceptsReturn or AcceptsTab properties.
+		 * Applies the AcceptsReturn property.
 		 */
-		_applyAcceptsReturnOrTab: function (value, old) {
+		_applyAcceptsReturn: function (value, old) {
 
-			if (value && !this.__keyHandlerDone) {
-				this.__keyHandlerDone = true;
+			if (old) {
+				qx.event.Registration.removeListener(document.body, "keydown", this.__onDocumentAcceptsReturn, this, true);
+			}
+
+			if (value) {
 				// register the document level handlers to override shortcuts.
-				qx.event.Registration.addListener(document.documentElement, "keydown", this.__onDocumentKeyEvent, this, true);
-				qx.event.Registration.addListener(document.documentElement, "keypress", this.__onDocumentKeyEvent, this, true);
+				qx.event.Registration.addListener(document.body, "keydown", this.__onDocumentAcceptsReturn, this, true);
 			}
 		},
 
-		// true when the document key handlers are registered.
-		__keyHandlerDone: false,
+		/**
+		 * Applies the AcceptsTab property.
+		 */
+		_applyAcceptsTab: function (value, old) {
+
+			if (old) {
+				qx.event.Registration.removeListener(document, "keydown", this.__onDocumentAcceptsTab, this, true);
+				qx.event.Registration.removeListener(document, "keypress", this.__onDocumentAcceptsTab, this, true);
+			}
+
+			if (value) {
+				// register the document level handlers to override shortcuts.
+				qx.event.Registration.addListener(document, "keydown", this.__onDocumentAcceptsTab, this, true);
+				qx.event.Registration.addListener(document, "keypress", this.__onDocumentAcceptsTab, this, true);
+			}
+		},
 
 		// handles "keydown" to stop Enter from adding newlines to the text area.
 		_onKeyPress: function (e) {
 
-			var modifiers = e.getModifiers();
-			var identifier = e.getKeyIdentifier();
-
-			switch (identifier) {
+			switch (e.getKeyIdentifier()) {
 
 				case "Enter":
-					if (modifiers === 0)
+					if (!this.getAcceptsReturn() && e.getModifiers() === 0) {
 						e.preventDefault();
+					}
 					break;
 			}
 		},
 
-		// handles "keydown" and "keypress" from the document.
-		_handleEnterTabKeys: function (e) {
+		/**
+		 * Event handler for the "keydown" and "keypress" event at the document level. 
+		 * Needed when the TextArea has the AcceptsReturn and AcceptsTab property set to true.
+		 * 
+		 * @param {qx.event.type.KeySequence} e The event data.
+		 */
+		__onDocumentAcceptsReturn: function (e) {
 
-			var handled = false;
-			var modifiers = e.getModifiers();
-			var identifier = e.getKeyIdentifier();
+			// verify the event was meant for this instance.
+			if (e.getTarget() !== this.__getTextFieldElement().getDomElement())
+				return;
 
-			switch (identifier) {
+			switch (e.getKeyIdentifier()) {
 
 				case "Enter":
-					if (modifiers === 0 || modifiers === qx.event.type.Dom.CTRL_MASK) {
-
-						handled = true;
-
-						// insert the \r\n character.
-						if (e.getType() === "keydown") {
-							this.__insert("\r\n");
-						}
-					}
-					break;
-
-				case "Tab":
-
-					if (modifiers === 0) {
-
-						handled = true;
-
-						// insert the \t character.
-						if (e.getType() === "keydown") {
-							this.__insert("\t");
-						}
-					}
-					else if (modifiers === qx.event.type.Dom.SHIFT_MASK) {
-
-						handled = true;
-
-						if (e.getType() === "keypress")
-							qx.ui.core.FocusHandler.getInstance().focusNext(this);
+					if (this.getAcceptsReturn() && e.getModifiers() === 0) {
+						this.__insert("\r\n");
+						e.stop();
 					}
 					break;
 			}
+		},
 
-			return handled;
+		/**
+		 * Event handler for the "keydown" and "keypress" event at the document level. 
+		 * Needed when the TextArea has the AcceptsReturn and AcceptsTab property set to true.
+		 * 
+		 * @param {qx.event.type.KeySequence} e The event data.
+		 */
+		__onDocumentAcceptsTab: function (e) {
+
+			// verify the event was meant for this instance.
+			if (e.getTarget() !== this.__getTextFieldElement().getDomElement())
+				return;
+
+			switch (e.getKeyIdentifier()) {
+
+				case "Tab":
+					if (this.getAcceptsTab()) {
+						var modifiers = e.getModifiers();
+						if (modifiers === 0) {
+
+							// insert the \t character.
+							if (e.getType() === "keydown") {
+								this.__insert("\t");
+							}
+
+							e.stop();
+						}
+						else if (modifiers === qx.event.type.Dom.SHIFT_MASK) {
+
+							if (e.getType() === "keypress")
+								qx.ui.core.FocusHandler.getInstance().focusNext(this);
+
+							e.stop();
+						}
+					}
+					break;
+			}
 		},
 
 		// inserts the specified characters at the current position.
@@ -937,48 +1038,14 @@ qx.Class.define("wisej.web.TextArea", {
 			value = value.substring(0, start) + characters + value.substring(end);
 			textField.setValue(value);
 			textField.setTextSelection(start + 1, start + 1);
-		},
-
-		/**
-		 * Event handler for the "keydown" and "keypress" event at the document level. 
-		 * Needed when the TextArea has the AcceptsReturn and AcceptsTab property set to true.
-		 * 
-		 * @param {qx.event.type.KeySequence} e The event data.
-		 */
-		__onDocumentKeyEvent: function (e) {
-
-			// verify the event was meant for this instance.
-			if (e.getTarget() !== this.__getTextFieldElement().getDomElement())
-				return;
-
-			switch (e.getKeyIdentifier()) {
-
-				case "Enter":
-					if (this.getAcceptsReturn() || e.isCtrlPressed()) {
-						if (this._handleEnterTabKeys(e))
-							e.stop();
-					}
-					break;
-
-				case "Tab":
-					if (this.getAcceptsTab()) {
-						if (this._handleEnterTabKeys(e))
-							e.stop();
-					}
-					break;
-			}
 		}
 	},
 
 	destruct: function () {
 
-		if (this.__keyHandlerDone) {
-			this.__keyHandlerDone = false;
-			// un-register the Enter and Tab accelerators.
-			qx.event.Registration.removeListener(document.documentElement, "keydown", this.__onDocumentKeyEvent, this, true);
-			qx.event.Registration.removeListener(document.documentElement, "keypress", this.__onDocumentKeyEvent, this, true);
-		}
-
+		// detach the document events.
+		this.setAcceptsTab(false);
+		this.setAcceptsReturn(false);
 	}
 });
 
