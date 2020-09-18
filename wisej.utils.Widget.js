@@ -810,8 +810,11 @@ qx.Class.define("wisej.utils.Widget", {
 			while (child) {
 
 				// check inline roots.
-				if (child instanceof qx.ui.root.Inline)
+				if (child instanceof qx.ui.root.Inline) {
 					child = child.getUserData("parent");
+					if (!child)
+						break
+				}
 
 				child = child.getLayoutParent();
 				if (parent == child)

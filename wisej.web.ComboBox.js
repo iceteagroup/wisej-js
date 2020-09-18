@@ -87,11 +87,23 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		"input": "qx.event.type.Data",
 
-		/** Whenever the value is changed this event is fired
+		/**
+		 * Whenever the value is changed this event is fired
 		 *
 		 *  Event data: The new value.
 		 */
-		"changeValue": "qx.event.type.Data"
+		"changeValue": "qx.event.type.Data",
+
+		/**
+		 * Fired when LazyLoading is true and the control needs load
+		 * the items from the server.
+		 */
+		"load": "qx.event.type.Event",
+
+		/**
+		 * Fired when the items collection changes.
+		 */
+		"changeItems": "qx.event.type.Event"
 	},
 
 	properties: {
@@ -466,6 +478,7 @@ qx.Class.define("wisej.web.ComboBox", {
 				this._suspendEvents = false;
 			}
 
+			this.fireEvent("changeItems");
 		},
 
 		/**
@@ -1038,7 +1051,7 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			// notify the server the drop down list was opened or closed.
 			this.fireEvent(opened ? "open" : "close");
-	
+
 			if (opened && this.getDropDownStyle() !== "dropDownList") {
 
 				var text = this.getValue();
@@ -1341,7 +1354,21 @@ qx.Class.define("wisej.web.ComboBox", {
 					}
 				}
 				else if (e.getModifiers() === 0) {
-					list.handleKeyPress(e);
+
+					// defer the key handling for after the list is loaded.
+					if (this.isLazyLoad()) {
+
+						this.__showLoader();
+						this.fireEvent("load");
+						this.setLazyLoad(false);
+
+						this.addListenerOnce("changeItems", function () {
+							list.handleKeyPress(e);
+						}, this);
+					}
+					else {
+						list.handleKeyPress(e);
+					}
 				}
 			}
 			finally {
@@ -1429,7 +1456,20 @@ qx.Class.define("wisej.web.ComboBox", {
 				// the next item in the list.This is the same as the ListBox
 				// keyboard selection behavior.
 
-				this.getDropDownList()._onKeyInput(e);
+				// defer the key handling for after the list is loaded.
+				if (this.isLazyLoad()) {
+
+					this.__showLoader();
+					this.fireEvent("load");
+					this.setLazyLoad(false);
+
+					this.addListenerOnce("changeItems", function () {
+						this.getDropDownList()._onKeyInput(e);
+					}, this);
+				}
+				else {
+					this.getDropDownList()._onKeyInput(e);
+				}
 			}
 		},
 

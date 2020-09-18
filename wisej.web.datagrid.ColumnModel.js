@@ -145,47 +145,6 @@ qx.Class.define("wisej.web.datagrid.ColumnModel", {
 		},
 
 		/**
-		 * Sets the selected state of a column. 
-		 *
-		 * @param col {Integer} The model index of the column.
-		 * @param selected {Boolean} The selected flag.
-		 */
-		setColumnSelected: function (col, selected) {
-
-			if (qx.core.Environment.get("qx.debug")) {
-				this.assertInteger(col, "Invalid argument 'col'.");
-				this.assertNotUndefined(this.__columnDataArr[col], "Column not found in table model");
-			}
-
-			var oldSelected = this.__columnDataArr[col].selected || false;
-			this.__columnDataArr[col].selected = selected || false;
-
-			if (!this.__internalChange) {
-				this.fireDataEvent("selectionChanged", {
-					col: col,
-					newSelected: selected,
-					oldSelected: oldSelected
-				});
-			}
-		},
-
-		/**
-		 * Returns the selected state of a column.
-		 *
-		 * @param col {Integer} the model index of the column.
-		 * @return {Boolean} the selected state.
-		 */
-		getColumnSelected: function (col) {
-
-			if (qx.core.Environment.get("qx.debug")) {
-				this.assertInteger(col, "Invalid argument 'col'.");
-				this.assertNotUndefined(this.__columnDataArr[col], "Column not found in table model");
-			}
-
-			return this.__columnDataArr[col].selected || false;
-		},
-
-		/**
 		 * Reorders all columns to new overall positions. Will fire one "orderChanged" event
 		 * without data afterwards
 		 *

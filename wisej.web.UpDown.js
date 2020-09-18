@@ -119,7 +119,12 @@ qx.Class.define("wisej.web.UpDownBase", {
 		 * 
 		 * When set to true, the entire text is selected when the element gains the focus.
 		 */
-		selectOnEnter: { init: false, check: "Boolean", apply: "_applySelectOnEnter" }
+		selectOnEnter: { init: false, check: "Boolean", apply: "_applySelectOnEnter" },
+
+		/**
+		 * When set to true, hides the up and down buttons on the control.
+		 */
+		hideUpDownButtons: { init: false, check: "Boolean", apply: "_applyHideUpDownButtons" }
 
 	},
 
@@ -214,9 +219,23 @@ qx.Class.define("wisej.web.UpDownBase", {
 		},
 
 		/**
-			* Checks the min and max values, disables / enables the
-			* buttons and handles the wrap around.
-			*/
+		 * Applies the hideUpDownButtons property.
+		 */
+		_applyHideUpDownButtons: function (value, old) {
+
+			if (value) {
+				this._excludeChildControl("upbutton");
+				this._excludeChildControl("downbutton");
+			} else {
+				this._showChildControl("upbutton");
+				this._showChildControl("downbutton");
+			}
+		},
+
+		/**
+		 * Checks the min and max values, disables / enables the
+		 * buttons and handles the wrap around.
+		 */
 		_updateButtons: function () {
 
 			if (this.isReadOnly()) {

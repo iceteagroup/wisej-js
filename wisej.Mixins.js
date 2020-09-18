@@ -401,13 +401,14 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 		 */
 		_applyId: function (value, old) {
 
-			if (this instanceof qx.ui.core.Widget) {
+			if (this.isWisejControl) {
+
 				var el = this.getContentElement();
 				if (el)
 					el.setAttribute("id", value);
 			}
 
-			if (!wisej.web.DesignMode)
+			if (value && !wisej.web.DesignMode)
 				this.core.registerComponent(this);
 		},
 
@@ -850,7 +851,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 			return comp;
 		},
 
-	},
+	}
 });
 
 
@@ -2199,6 +2200,18 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 			this.__updateUserBounds();
 		},
 
+		/**
+		 * Fires a "widgetEvent" with the specified data.
+		 *
+		 * @param type {String} the event type.
+		 * @param data {Map} The event data map.
+		 */
+		fireWidgetEvent: function (type, data) {
+
+			this.fireDataEvent("widgetEvent", { type: type, data: data });
+
+		},
+
 		// overridden.
 		_applyDimension: function (value, old, name) {
 
@@ -2984,11 +2997,8 @@ qx.Mixin.define("wisej.mixin.MBorderStyle", {
 		 */
 		_applyBorderStyle: function (value, old) {
 
-			this.removeState("borderNone");
-			this.removeState("borderSolid");
-			this.removeState("borderDashed");
-			this.removeState("borderDotted");
-			this.removeState("borderDouble");
+			if (old)
+				this.removeState("border" + qx.lang.String.firstUp(old));
 
 			if (value)
 				this.addState("border" + qx.lang.String.firstUp(value));

@@ -572,7 +572,7 @@ qx.Class.define("wisej.web.Upload", {
 			el.appendChild(uploadEl);
 
 			// attach the change event handler to upload right after the selection.
-			qx.bom.Element.addListener(uploadEl, "change", this.__onUpload, this);
+			qx.bom.Element.addListener(uploadEl, "change", this._onChange, this);
 
 			// apply the multiple property.
 			this._applyMultiple(this.getMultiple());
@@ -581,9 +581,33 @@ qx.Class.define("wisej.web.Upload", {
 		},
 
 		/**
+		 * Handles the "change" event on the inner <input type="file"/> element.
+		 */
+		_onChange: function (e) {
+
+			if (this.isWired("uploading")) {
+
+				var data = [];
+				var files = this.getFiles();
+
+				for (var i = 0; i < files.length; i++) {
+					var file = files[i];
+					data.push({
+						name: file.name,
+						size: file.size
+					});
+				}
+				this.fireDataEvent("uploading", data);
+			}
+			else {
+				this.sendFiles();
+			}
+		},
+
+		/**
 		 * Uploads the selected files.
 		 */
-		__onUpload: function (e) {
+		sendFiles: function () {
 
 			// copy the value from the inner upload control, when in design mode.
 			if (wisej.web.DesignMode) {
@@ -607,7 +631,6 @@ qx.Class.define("wisej.web.Upload", {
 				return;
 
 			// send files back to this widget.
-			// submitUrl += "&v=" + Date.now();
 			var me = this;
 			this.__currentXhr = null;
 			var fileList = wisej.web.Upload.uploadFiles(

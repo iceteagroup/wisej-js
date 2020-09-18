@@ -147,8 +147,24 @@ qx.Class.define("wisej.web.DataGrid", {
 
 		/**
 		 * SelectionMode
+		 * 
+		 * "none" disables selection of cells, rows and columns.
+		 * "row" is the only selection currently supported: tapping a cell or a row header always selects the row.
+		 * "rowHeader" is a mix between "cell" and "row": the row is selected by tapping the row header otherwise the selection is "cell".
+		 * "cell" only selects a cell, tapping a row header is ignored.
+		 * "column" always selects the column, never selects a cell or a row.
+		 * "columnHeader" is a mix between "column" and "cell": tapping a column header selects the column, otherwise selects the cell.
+		 * "rowColumnHeader" is a mix between "rowHeader" and "columnHeader": tapping a column or a row header selects the column or the row, otherwise selects the cell.
+		 *
 		 */
-		selectionMode: { init: "single", check: ["none", "single", "multiSimple", "multiExtended", "multiToggle"], apply: "_applySelectionMode" },
+		selectionMode: { init: "row", check: ["none", "cell", "row", "column", "rowHeader", "columnHeader", "rowColumnHeader"], apply: "_applySelectionMode" },
+
+		/**
+		 * MultiSelect
+		 * 
+		 * Enables the multiple selection of cells, rows, and columns.
+		 */
+		multiSelect: { init: true, check: "Boolean", apply: "_applyMultiSelect" },
 
 		/**
 		 * AllowRowResize
@@ -288,6 +304,11 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * using the keyboard.
 		 */
 		selectionDelay: { init: 0, check: "PositiveInteger" },
+
+		/**
+		 * Enables automatic cell tooltips when the text overflows.
+		 */
+		showTooltips: { init: false, check: "Boolean" },
 
 		/**
 		 * Tools property.
@@ -615,7 +636,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				qx.ui.core.queue.Widget.add(this, "autoSizeRows");
 			}
 		},
-	
+
 		// overridden.
 		_applyBackgroundColor: function (value, old) {
 
@@ -756,7 +777,11 @@ qx.Class.define("wisej.web.DataGrid", {
 				if (target === cellEditor || (target != null && target.hasState("celleditor"))) {
 					this.focus();
 				}
-
+				else {
+					this.visualizeBlur();
+					this._onFocusChanged(e);
+					this.__showFocusIndicator(false);
+				}
 				return;
 			}
 
@@ -771,6 +796,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				this.visualizeBlur();
 				this._onFocusChanged(e);
 				this.__showFocusIndicator(false);
+				return;
 			}
 		},
 
@@ -1339,8 +1365,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		getSelectionRanges: function () {
 
-			var selectionModel = this.getSelectionModel();
-			return selectionModel.getSelectedRanges();
+			return this.getSelectionModel().getSelectionRanges();
 		},
 
 		/**
@@ -1349,23 +1374,31 @@ qx.Class.define("wisej.web.DataGrid", {
 		setSelectionRanges: function (ranges) {
 
 			var selectionModel = this.getSelectionModel();
+
+			selectionModel.setBatchMode(true);
 			selectionModel.resetSelection();
 
 			if (ranges) {
 
-				selectionModel.setBatchMode(true);
 				try {
 
 					for (var i = 0; i < ranges.length; i++) {
 						var range = ranges[i];
-						selectionModel._addSelectionInterval(range.minIndex, range.maxIndex);
+						selectionModel.addSelectionRange(range.minCol, range.minRow, range.maxCol, range.maxRow);
 					}
 				}
 				catch (ex) { }
-
-				selectionModel._fireChangeSelection();
-				selectionModel.setBatchMode(false);
 			}
+
+			selectionModel.setBatchMode(false);
+		},
+
+		/**
+		 * Applies the multiSelect property.
+		 */
+		_applyMultiSelect: function (value, old) {
+
+			this.getSelectionManager().setMultiSelect(value);
 		},
 
 		/**
@@ -1373,25 +1406,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		_applySelectionMode: function (value, old) {
 
-			var selectionModel = this.getSelectionModel();
-
-			switch (value) {
-				case "none":
-					selectionModel.setSelectionMode(qx.ui.table.selection.Model.NO_SELECTION);
-					break;
-				case "single":
-					selectionModel.setSelectionMode(qx.ui.table.selection.Model.SINGLE_SELECTION);
-					break;
-				case "multiSimple":
-					selectionModel.setSelectionMode(qx.ui.table.selection.Model.SINGLE_INTERVAL_SELECTION);
-					break;
-				case "multiExtended":
-					selectionModel.setSelectionMode(qx.ui.table.selection.Model.MULTIPLE_INTERVAL_SELECTION);
-					break;
-				case "multiToggle":
-					selectionModel.setSelectionMode(qx.ui.table.selection.Model.MULTIPLE_INTERVAL_SELECTION_TOGGLE);
-					break;
-			}
+			this.getSelectionManager().setSelectionMode(value);
 		},
 
 		// overridden
@@ -1530,6 +1545,9 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			if (jobs["updateColumnsPosition"])
 				this.updateColumnsPosition();
+
+			if (jobs["syncVerticalScrollBars"])
+				this.syncVerticalScrollBars();
 		},
 
 		/**
@@ -1674,6 +1692,14 @@ qx.Class.define("wisej.web.DataGrid", {
 		},
 
 		/**
+		 * Returns the index of the row header column.
+		 * It's either 0 or -1 if the row header column is not created.
+		 */
+		getRowHeaderIndex: function () {
+			return this._rowHeaderColIndex;
+		},
+
+		/**
 		 * Event handler. Called when a key is down.
 		 *
 		 * @param e {qx.event.type.KeySequence} the event.
@@ -1807,7 +1833,7 @@ qx.Class.define("wisej.web.DataGrid", {
 						}
 
 						// select/unselect the current row.
-						this.getSelectionManager().handleSelectKeyDown(focusedRow, e);
+						this.getSelectionManager().handleSelectKeyDown(focusedCol, focusedRow, e);
 						break;
 
 					case "Enter":
@@ -1820,11 +1846,14 @@ qx.Class.define("wisej.web.DataGrid", {
 
 					case "Escape":
 
-						// TODO: Check selection mode.
-						// pressing Esc when a cell is focused and not in edit mode selects the row.
-						if (focusedCol > this._rowHeaderColIndex && focusedRow >= 0) {
-							this.setFocusedCell(-1, focusedRow);
-							consumed = true;
+						switch (this.getSelectionMode()) {
+							case "row":
+							case "rowHeader":
+								// pressing Esc when a cell is focused and not in edit mode selects the row.
+								if (focusedCol > this._rowHeaderColIndex && focusedRow >= 0) {
+									this.setFocusedCell(-1, focusedRow);
+									consumed = true;
+								}
 						}
 						break;
 
@@ -1939,7 +1968,8 @@ qx.Class.define("wisej.web.DataGrid", {
 				case "PageDown":
 					{
 						focusedRow = this.getFocusedRow();
-						this.getSelectionManager().handleMoveKeyDown(focusedRow, e);
+						focusedCol = this.getFocusedColumn();
+						this.getSelectionManager().handleMoveKeyDown(focusedCol, focusedRow, e);
 					}
 					break;
 
@@ -1947,14 +1977,18 @@ qx.Class.define("wisej.web.DataGrid", {
 				case "End":
 					{
 						focusedRow = this.getFocusedRow();
-						this.getSelectionManager().handleMoveKeyDown(focusedRow, e);
+						focusedCol = this.getFocusedColumn();
+						this.getSelectionManager().handleMoveKeyDown(focusedCol, focusedRow, e);
 					}
 					break;
 
 				case "Tab":
 					{
-						focusedRow = this.getFocusedRow();
-						this.getSelectionModel().setSelectionInterval(focusedRow, focusedRow);
+						if (!this.isStandardTab()) {
+							focusedRow = this.getFocusedRow();
+							focusedCol = this.getFocusedColumn();
+							this.getSelectionManager().handleSelectKeyDown(focusedCol, focusedRow, e);
+						}
 					}
 					break;
 			}
@@ -2181,7 +2215,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				this.notifySelectionChanged(
 					this.getFocusedColumn(), this.getFocusedRow(),
-					this.getSelectionModel().getSelectedRanges());
+					this.getSelectionModel().getSelectionRanges());
 			}
 		},
 
@@ -2357,10 +2391,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			this.base(arguments);
 
-			if (!this.__internalChange) {
-
-				if (!this.getBounds())
-					return;
+			if (this.getBounds() && !this.__internalChange) {
 
 				qx.ui.core.queue.Widget.add(this, "autoSizeColumns");
 			}
@@ -2845,7 +2876,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				var rowInsets = rowRenderer.getInsets({ table: this, row: rowIndex, rowData: dataModel.getRowData(rowIndex) });
 
-				for (var i = colIndex; count > 0; i++) {
+				for (var i = colIndex; count-- > 0; i++) {
 
 					if (!columnModel.isColumnVisible(i))
 						continue;
@@ -2853,8 +2884,6 @@ qx.Class.define("wisej.web.DataGrid", {
 					newHeight = Math.max(newHeight, this.__getMaxCellSize(i, rowIndex, columnModel, dataModel).height);
 					if (newHeight)
 						newHeight += rowInsets.top + rowInsets.bottom + resizeData.extraSpace;
-
-					count--;
 				}
 
 				if (minRowHeight)
@@ -2886,7 +2915,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 						var rowInsets = rowRenderer.getInsets({ table: this, row: rowIndex, rowData: rowData });
 
-						for (var i = colIndex; count > 0; i++) {
+						for (var i = colIndex; count-- > 0; i++) {
 
 							if (!columnModel.isColumnVisible(i))
 								continue;
@@ -2894,8 +2923,6 @@ qx.Class.define("wisej.web.DataGrid", {
 							newHeight = Math.max(newHeight, this.__getMaxCellSize(i, rowIndex, columnModel, dataModel).height);
 							if (newHeight)
 								newHeight += rowInsets.top + rowInsets.bottom + resizeData.extraSpace;
-
-							count--;
 						}
 
 						if (minRowHeight)
@@ -3618,14 +3645,18 @@ qx.Class.define("wisej.web.DataGrid", {
 		// ----------------------------------------------------------------
 
 		/**
-		 * Binds the grid to the mainGrids to keep the columns and scrolling in sync.
+		 * Binds the grid to another to keep the columns and scrolling in sync.
 		 */
-		bindToMainGrid: function (mainGrid) {
+		bindToGrid: function (mainGrid, syncVerticalScrollbar) {
+
+			mainGrid = this._transformComponent(mainGrid);
+			if (!mainGrid)
+				return;
 
 			var updating = false;
 			var childGrid = this;
 
-			mainGrid = this._transformComponent(mainGrid);
+			mainGrid.setUserData("otherGrid", this);
 
 			// horizontal scrolling.
 			mainGrid.addListener("scroll", function (e) {
@@ -3634,6 +3665,20 @@ qx.Class.define("wisej.web.DataGrid", {
 					var data = e.getData();
 					if (childGrid && !childGrid.isDisposed() && data.scrollX !== undefined) {
 						var scrollers = childGrid._getPaneScrollerArr();
+						for (var i = 0; i < scrollers.length; i++) {
+							scrollers[i].setScrollX(data.scrollX);
+						}
+					}
+				}
+				catch (err) { }
+
+			});
+			childGrid.addListener("scroll", function (e) {
+
+				try {
+					var data = e.getData();
+					if (mainGrid && !mainGrid.isDisposed() && data.scrollX !== undefined) {
+						var scrollers = mainGrid._getPaneScrollerArr();
 						for (var i = 0; i < scrollers.length; i++) {
 							scrollers[i].setScrollX(data.scrollX);
 						}
@@ -3659,24 +3704,21 @@ qx.Class.define("wisej.web.DataGrid", {
 				catch (err) { }
 				updating = false;
 			});
-			if (position === "Top") {
-				// moving columns.
-				childGrid.addListener("columnPositionChanged", function (e) {
+			childGrid.addListener("columnPositionChanged", function (e) {
 
-					if (updating)
-						return;
+				if (updating)
+					return;
 
-					updating = true;
-					try {
-						var data = e.getData();
-						if (!mainGrid.isDisposed()) {
-							mainGrid.getTableColumnModel().moveColumn(data.oldPosition, data.position);
-						}
+				updating = true;
+				try {
+					var data = e.getData();
+					if (!mainGrid.isDisposed()) {
+						mainGrid.getTableColumnModel().moveColumn(data.oldPosition, data.position);
 					}
-					catch (err) { }
-					updating = false;
-				});
-			}
+				}
+				catch (err) { }
+				updating = false;
+			});
 
 			// resizing columns.
 			mainGrid.addListener("columnWidthChanged", function (e) {
@@ -3718,24 +3760,21 @@ qx.Class.define("wisej.web.DataGrid", {
 				catch (err) { }
 				updating = false;
 			});
-			if (position === "Top") {
-				// moving columns.
-				childGrid.addListener("columnVisibilityChanged", function (e) {
+			childGrid.addListener("columnVisibilityChanged", function (e) {
 
-					if (updating)
-						return;
+				if (updating)
+					return;
 
-					updating = true;
-					try {
-						var data = e.getData();
-						if (!mainGrid.isDisposed()) {
-							mainGrid.getTableColumnModel().setColumnVisible(data.col, data.visible);
-						}
+				updating = true;
+				try {
+					var data = e.getData();
+					if (!mainGrid.isDisposed()) {
+						mainGrid.getTableColumnModel().setColumnVisible(data.col, data.visible);
 					}
-					catch (err) { }
-					updating = false;
-				});
-			}
+				}
+				catch (err) { }
+				updating = false;
+			});
 
 			// selection and current cell.
 			mainGrid.addListener("selectionChanged", function (e) {
@@ -3768,7 +3807,66 @@ qx.Class.define("wisej.web.DataGrid", {
 				catch (err) { }
 				updating = false;
 			});
+
+			// vertical scrollbar visibility.
+			if (syncVerticalScrollbar) {
+				childGrid.addListener("verticalScrollBarChanged", function (e) {
+					mainGrid.setUserData("verNeeded", e.getData());
+					qx.ui.core.queue.Widget.add(mainGrid, "syncVerticalScrollBars");
+				});
+				mainGrid.addListener("verticalScrollBarChanged", function (e) {
+					childGrid.setUserData("verNeeded", e.getData());
+					qx.ui.core.queue.Widget.add(mainGrid, "syncVerticalScrollBars");
+				});
+				childGrid.addListener("horizontalScrollBarChanged", function (e) {
+					qx.ui.core.queue.Widget.add(mainGrid, "syncVerticalScrollBars");
+				});
+				mainGrid.addListener("horizontalScrollBarChanged", function (e) {
+					qx.ui.core.queue.Widget.add(mainGrid, "syncVerticalScrollBars");
+				});
+			}
 		},
+
+		/**
+		 * Shows the vertical scrollbar when the other grid also shows the vertical scrollbar.
+		 */
+		syncVerticalScrollBars: function () {
+
+			var otherGrid = this.getUserData("otherGrid");
+
+			if (otherGrid && !otherGrid.isDisposed()) {
+				var visible =
+					this.getUserData("verNeeded") === true ||
+					otherGrid.getUserData("verNeeded") === true;
+
+				this.setVerticalScrollBarVisible(visible);
+				otherGrid.setVerticalScrollBarVisible(visible);
+			}
+		},
+
+		/**
+		 * Returns whether the vertical scrollbar is visible.
+		 */
+		isVerticalScrollBarVisible: function () {
+
+			var scrollerArr = this._getPaneScrollerArr();
+			if (scrollerArr.length > 0)
+				return scrollerArr[scrollerArr.length - 1].getVerticalScrollBarVisible();
+
+			return false;
+		},
+
+		/**
+		 * Sets the visibility of the vertical scrollbar.
+		 */
+		setVerticalScrollBarVisible: function (visible) {
+
+			// the vertical scrollbar is shown only on the last pane.
+			var scrollerArr = this._getPaneScrollerArr();
+			if (scrollerArr.length > 0) {
+				scrollerArr[scrollerArr.length - 1].setVerticalScrollBarVisible(visible);
+			}
+		}
 	},
 
 	destruct: function () {

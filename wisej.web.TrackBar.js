@@ -468,7 +468,7 @@ qx.Class.define("wisej.web.TrackBar", {
 			}
 
 			return this.__getTickCssRule(pseudo);
-		},
+		}
 	},
 
 	destruct: function () {

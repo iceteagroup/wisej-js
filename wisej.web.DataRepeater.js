@@ -140,9 +140,6 @@ qx.Class.define("wisej.web.DataRepeater", {
 		// the selection manager instance.
 		__selectionManager: null,
 
-		// prefetch manager.
-		__prefetchManager: null,
-
 		// current number of rows and columns.
 		__rowCount: 0,
 		__colCount: 0,
@@ -154,9 +151,6 @@ qx.Class.define("wisej.web.DataRepeater", {
 		__internalChange: false,
 
 		// overridden
-		/**
-		 * @lint ignoreReferenceField(_forwardStates)
-		 */
 		_forwardStates: {
 			focused: true,
 			hovered: true,
@@ -259,6 +253,10 @@ qx.Class.define("wisej.web.DataRepeater", {
 		 */
 		_applySelectedIndex: function (value, old) {
 
+			var selection = this.__selectionManager.getSelection();
+			if (selection && selection.length == 1 && selection[0] == value)
+				return;
+
 			if (value > -1) {
 
 				qx.ui.core.queue.Widget.flush();
@@ -319,37 +317,13 @@ qx.Class.define("wisej.web.DataRepeater", {
 		 */
 		_applyPrefetchItems: function (value, old) {
 
-			if (value > 0) {
-
-				if (!this.__prefetchManager) {
-					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
-						minLeft: 0,
-						maxLeft: 0,
-						minRight: 0,
-						maxRight: 0,
-						minAbove: 0,
-						maxAbove: 0,
-						minBelow: 0,
-						maxBelow: 0
-					});
-				}
-
-				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
-				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
-
-				if (this.getOrientation() === "horizontal") {
-					var pixels = this.getItemSize().width * value;
-					this.__prefetchManager.setPrefetchX(pixels, pixels, pixels, pixels);
-				}
-				else {
-					var pixels = this.getItemSize().height * value;
-					this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
-				}
-
+			if (this.getOrientation() === "horizontal") {
+				var pixels = this.getItemSize().width * value;
+				this.getPane().prefetchX(pixels, pixels, pixels, pixels);
 			}
-			else if (this.__prefetchManager) {
-				this.__prefetchManager.dispose();
-				this.__prefetchManager = null;
+			else {
+				var pixels = this.getItemSize().height * value;
+				this.getPane().prefetchY(pixels, pixels, pixels, pixels);
 			}
 		},
 
@@ -443,11 +417,12 @@ qx.Class.define("wisej.web.DataRepeater", {
 		 */
 		_onChangeSelection: function (e) {
 
-
 			var index = -1;
 			var selection = this.__selectionManager.getSelection();
 			if (selection.length > 0)
 				index = selection[0];
+
+			this.setSelectedIndex(index);
 
 			this.fireDataEvent("selectionChanged", index);
 		},
@@ -484,7 +459,7 @@ qx.Class.define("wisej.web.DataRepeater", {
 			this.__updateTimeoutId = setTimeout(function () {
 				me.__updateVisibleWidgets();
 
-			}, 150);
+			}, 10);
 
 			// retrieve or create the cell widgets for the specified cell.
 			return this.__createCellWidget(cell);
@@ -493,12 +468,6 @@ qx.Class.define("wisej.web.DataRepeater", {
 		// overridden from IWidgetCellProvider.
 		// Release the given cell widget. Either pool or destroy the widget.
 		poolCellWidget: function (widget) {
-
-			// set the widget state to loading when it pooled.
-			// this widget will show when scrolled into view and it's not
-			// updated yet. the "loading" states allows us to indicate to the
-			// user that the particular cell is not updated yet.
-			widget.addState("loading");
 
 			this.__cellProvider.pool(widget);
 		},
@@ -693,13 +662,35 @@ qx.Class.define("wisej.web.DataRepeater", {
 				case "Delete":
 					this.fireDataEvent("deleteItem", target.getIndex());
 					break;
+
+				case "Tab":
+					this._focusCurrentItem();
+					e.stop();
+					break;
+			}
+		},
+
+		_focusCurrentItem: function () {
+
+			var index = this.getSelectedIndex();
+
+			// find the current item.
+			var widgets = this.getItemWidgets();
+			for (var i = 0; i < widgets.length; i++) {
+				var item = widgets[i].getItem();
+				if (item && item.getIndex() == index) {
+					var next = qx.ui.core.FocusHandler.getInstance().getNextWidget(item);
+					if (next) {
+						next.focus();
+						break;
+					}
+				}
 			}
 		}
-
 	},
 
 	destruct: function () {
-		this._disposeObjects("__layer", "__cellProvider", "__selectionManager", "__prefetchManager");
+		this._disposeObjects("__layer", "__cellProvider", "__selectionManager");
 
 	}
 });
@@ -808,17 +799,17 @@ qx.Class.define("wisej.web.dataRepeater.ItemCell", {
 		 */
 		setItem: function (item) {
 
-			if (this.__item
-				&& this._indexOf(this.__item) > -1) {
-
+			if (this.__item && this.__item !== item && this.__item.getLayoutParent() === this) {
 				this._remove(this.__item);
 			}
 
-			this.__item = item;
-
-			if (item) {
+			if (item && item.getLayoutParent() !== this) {
 				this._add(item);
 			}
+
+			this.__item = item;
+			this.removeState("loading");
+			item.getChildControl("pane").show();
 
 			if (this.hasState("selected")) {
 				item.addState("selected");
@@ -828,8 +819,6 @@ qx.Class.define("wisej.web.dataRepeater.ItemCell", {
 				item.removeState("selected");
 				this.resetBackgroundColor();
 			}
-
-			this.removeState("loading");
 		},
 
 		// overridden to forward the states to the item.
@@ -847,6 +836,16 @@ qx.Class.define("wisej.web.dataRepeater.ItemCell", {
 			if (this.__item)
 				this.__item.removeState(state);
 
+		},
+
+		// overridden
+		setLayoutParent: function (parent) {
+
+			this.base(arguments, parent);
+
+			if (!parent) {
+				this.addState("loading");
+			}
 		}
 	}
 });
@@ -868,6 +867,7 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 		this._createChildControl("header");
 
 		this.initOrientation();
+		this.initItemBorderStyle();
 		this.addListener("keypress", this._onKeyPress, this);
 		this.addListener("pointerdown", this._onPointerDown, this);
 
@@ -914,15 +914,26 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 		 * 
 		 * Sets the orientation of the item.
 		 */
-		orientation: { init: "vertical", check: ["vertical", "horizontal"], apply: "_applyOrientation" }
+		orientation: { init: "vertical", check: ["vertical", "horizontal"], apply: "_applyOrientation" },
+
+		/**
+		 * ItemSize property.
+		 * 
+		 * Sets the custom height or width for this item. Setting null resets the size to the default.
+		 */
+		itemSize: { init: null, check: "Integer", apply: "_applyItemSize", nullable: true },
+
+		/**
+		 * ItemBorderStyle property.
+		 * 
+		 * Defines the border style between items.
+		 */
+		itemBorderStyle: { init: "solid", check: ["none", "solid", "dashed", "dotted", "double"], apply: "_applyItemBorderStyle", nullable:true, themeable: true },
 	},
 
 	members: {
 
 		// overridden
-		/**
-		 * @lint ignoreReferenceField(_forwardStates)
-		 */
 		_forwardStates: {
 			hovered: true,
 			selected: true,
@@ -932,10 +943,7 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 		},
 
 		/**
-		 * Applies the HeaderVisible property.
-		 * 
-		 * @param {any} value New value.
-		 * @param {any} old Previous value.
+		 * Applies the Orientation property.
 		 */
 		_applyOrientation: function (value, old) {
 
@@ -947,9 +955,6 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 
 		/**
 		 * Applies the HeaderVisible property.
-		 * 
-		 * @param {any} value New value.
-		 * @param {any} old Previous value.
 		 */
 		_applyHeaderVisible: function (value, old) {
 
@@ -963,9 +968,6 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 
 		/**
 		 * Applies the HeaderSize property.
-		 * 
-		 * @param {any} value New value.
-		 * @param {any} old Previous value.
 		 */
 		_applyHeaderSize: function (value, old) {
 
@@ -978,10 +980,66 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 		},
 
 		/**
+		 * Applies the ItemSize property.
+		 */
+		_applyItemSize: function (value, old) {
+
+			var repeater = this._getDataRepeater();
+			if (repeater) {
+				var pane = repeater.getPane();
+				var itemSize = repeater.getItemSize();
+				if (repeater.getOrientation() === "horizontal") {
+					var config = pane.getColumnConfig();
+					if (itemSize && itemSize.width === value) {
+						// reset the size.
+						config.setItemSize(this.getIndex(), null);
+					}
+					else {
+						config.setItemSize(this.getIndex(), value);
+					}
+				}
+				else {
+					var config = pane.getRowConfig();
+					if (itemSize && itemSize.height === value) {
+						// reset the size.
+						config.setItemSize(this.getIndex(), null);
+					}
+					else {
+						config.setItemSize(this.getIndex(), value);
+					}
+				}
+			}
+		},
+
+		/**
+		 * Applies the ItemBorderStyle property.
+		 */
+		_applyItemBorderStyle: function (value, old) {
+
+			if (value == null) {
+				this.resetItemBorderStyle();
+				return;
+			}
+
+			if (old)
+				this.removeState("border" + qx.lang.String.firstUp(old));
+
+			if (value)
+				this.addState("border" + qx.lang.String.firstUp(value));
+		},
+
+		// overridden
+		setLayoutParent: function (parent) {
+
+			this.base(arguments, parent);
+
+			if (parent) {
+				this._applyItemSize(this.getItemSize());
+			}
+		},
+
+		/**
 		 * Applies the HeaderPosition property.
-		 * 
-		 * @param {any} value New value.
-		 * @param {any} old Previous value.
 		 */
 		_applyHeaderPosition: function (value, old) {
 
@@ -1053,6 +1111,17 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 				repeater.setSelectedIndex(index);
 		},
 
+		// handles clicks on the panel header button.
+		_onHeaderPointerDown: function (e) {
+
+			var index = this.getIndex();
+			var repeater = this._getDataRepeater();
+			if (repeater && index > -1) {
+				repeater.focus();
+				repeater.setSelectedIndex(index);
+			}
+		},
+
 		// handles tabs that bubble up before the
 		// FocusHandler can handle it to determine if the
 		// next panel is already loaded.
@@ -1060,8 +1129,11 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 
 			if (e.getKeyIdentifier() === "Tab") {
 
-				var index = this.getIndex();
 				var repeater = this._getDataRepeater();
+				if (!repeater)
+					return;
+
+				var index = this.getIndex();
 				var focusHandler = qx.ui.core.FocusHandler.getInstance();
 				var focusedWidget = focusHandler.getFocusedWidget();
 
@@ -1069,28 +1141,22 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 					var prev = focusHandler.getPrevWidget(focusedWidget);
 					var container = this._findContainer(prev);
 
-					// wrapping down/right? load the previous item unless we reached the top.
-					if (container && container.getIndex() > index) {
-
-						e.stop();
-
+					// reached the first visible item but not the first record?
+					if (!container && this.getIndex() > 0) {
 						index--;
-						if (repeater && index >= 0)
-							repeater.setSelectedIndex(index);
+						e.stop();
+						repeater.setSelectedIndex(index);
 					}
 				}
 				else {
 					var next = focusHandler.getNextWidget(focusedWidget);
 					var container = this._findContainer(next);
 
-					// wrapping up/left? load the next item unless we reached the last one.
-					if (container && container.getIndex() < index) {
-
-						e.stop();
-
+					// reached the last visible item but not the end of the records?
+					if (!container && this.getIndex() < repeater.getItemCount() - 1) {
 						index++;
-						if (repeater && index < repeater.getItemCount())
-							repeater.setSelectedIndex(index);
+						e.stop();
+						repeater.setSelectedIndex(index);
 					}
 				}
 			}
@@ -1102,7 +1168,7 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 		_findContainer: function (widget) {
 
 			while (widget && !(widget instanceof wisej.web.dataRepeater.ItemContent)) {
-				widget = widget.getParent();
+				widget = widget.getLayoutParent();
 			}
 
 			return widget;
@@ -1134,11 +1200,13 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 					});
 					this._add(control);
 					control._forwardStates.selected = true;
+					control._forwardStates.focused = true;
 					control._forwardStates.vertical = true;
 					control._forwardStates.horizontal = true;
 
 					control.addState("inner");
 					this._updateLayout(control);
+					control.addListener("pointerdown", this._onHeaderPointerDown, this);
 					break;
 			}
 

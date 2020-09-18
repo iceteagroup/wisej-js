@@ -161,6 +161,14 @@ qx.Class.define("wisej.web.LinkLabel", {
 			}
 		},
 
+		// overridden
+		_onChangeTheme: function () {
+
+			this.base(arguments);
+
+			this.__applyStyles();
+		},
+
 		/**
 		 * Creates the link element.
 		 */

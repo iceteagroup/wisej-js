@@ -113,6 +113,8 @@ qx.Class.define("wisej.web.extender.StyleSheet", {
 
 		dispose: function () {
 
+			this.base(arguments);
+
 			if (this.__stylesheet) {
 				qx.bom.Stylesheet.removeSheet(this.__stylesheet);
 				this.__stylesheet = null;

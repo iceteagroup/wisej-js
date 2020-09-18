@@ -51,10 +51,28 @@ qx.Class.define("wisej.web.Widget", {
 		options: { init: null, check: "Map", transform: "_transformOptions", apply: "_applyOptions" },
 
 		/**
+		 * Events property.
+		 * 
+		 * List of event names fired by the widget implementation.
+		 */
+		events: { init: null, check: "Array" },
+
+		/**
 		 * PostbackUrl property.
+		 * 
+		 * URL to use when a third party widget needs a to send a request to the server
+		 * component. The postbackUrl property can take additional arguments, i.e. this.getPostbackUrl() + "&param=value".
+		 * 
 		 */
 		postbackUrl: { init: "", check: "String" },
 
+		/**
+		 * ServiceUrl property.
+		 * 
+		 * URL to use when a third party widget needs to send a request to the server
+		 * component but cannot add an argument and it needs a service URL, i.e. this.getServiceUrl() + "/read/12".
+		 */
+		serviceUrl: { init: "", check: "String" }
 	},
 
 	construct: function () {
@@ -75,18 +93,6 @@ qx.Class.define("wisej.web.Widget", {
 
 		// the inner element used as the container for the widgets.
 		__containerEl: null,
-
-		/**
-		 * Fires a "widgetEvent" with the specified data.
-		 *
-		 * @param type {String} the event type.
-		 * @param data {Map} The event data map.
-		 */
-		fireWidgetEvent: function (type, data) {
-
-			this.fireDataEvent("widgetEvent", { type: type, data: data });
-
-		},
 
 		/**
 		 * Loads the packages asynchronously.
@@ -230,7 +236,7 @@ qx.Class.define("wisej.web.Widget", {
 		},
 
 		// fires the "render" event when in design mode to notify
-		// the html renderer that the widget has been initialized.
+		// the HTML renderer that the widget has been initialized.
 		//
 		// widgets may replace this function to fire the "render" event
 		// according to the widget's implementation.
@@ -239,6 +245,11 @@ qx.Class.define("wisej.web.Widget", {
 
 			if (wisej.web.DesignMode)
 				this.fireEvent("render");
+
+			// notify the server that the widget has loaded.
+			qx.event.Timer.once(function () {
+				this.fireEvent("loaded");
+			}, this, 1);
 		},
 
 		// overridden to prevent the "render" event.

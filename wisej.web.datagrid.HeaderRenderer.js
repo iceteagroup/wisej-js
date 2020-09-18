@@ -40,6 +40,21 @@ qx.Class.define("wisej.web.datagrid.HeaderRenderer", {
 			return widget;
 		},
 
+		// overridden
+		updateHeaderCell: function (cellInfo, cellWidget) {
+
+			this.base(arguments, cellInfo, cellWidget);
+
+			// add "sortable" state if the column is sortable and not yet sorted.
+			if (!cellInfo.sorted) {
+
+				var tableModel = cellInfo.table.getTableModel();
+				if (tableModel.isColumnSortable(cellInfo.col))
+					cellWidget.addState("sortable");
+				else
+					cellWidget.removeState("sortable");
+			}
+		}
 	},
 
 });

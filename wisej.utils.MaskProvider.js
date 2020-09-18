@@ -45,7 +45,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			textfield.addListener("keypress", this.processKeyPress, this);
 			textfield.addListener("keyinput", this.processKeyInput, this);
 
-			// attach clipboard handlers.
+			// attach clipboard handler.
 			textfield.addListener("input", this.processClipboard, this);
 
 			// detect when the field becomes read-only.
@@ -85,10 +85,10 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 * # = Digit or space or +- sign.
 		 * L = Letter, required. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z] in regular expressions.
 		 * ? = Letter or space. Restricts input to the ASCII letters a-z and A-Z. This mask element is equivalent to [a-zA-Z]? in regular expressions.
-		 * & = Character, required. If the AsciiOnly property is set to true, this element behaves like the "L" element.
-		 * C = Character or space. Any non-control character. If the AsciiOnly property is set to true, this element behaves like the "?" element.
-		 * A = Alphanumeric, required. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "a" element.
-		 * a = Alphanumeric or space. If the AsciiOnly property is set to true, the only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "A" element.
+		 * & = Character, required. This element behaves like the "L" element.
+		 * C = Character or space. Any non-control character. This element behaves like the "?" element.
+		 * A = Alphanumeric, required. The only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "a" element.
+		 * a = Alphanumeric or space. The only characters it will accept are the ASCII letters a-z and A-Z. This mask element behaves like the "A" element.
 		 * < = Shift down. Converts all characters that follow to lowercase.
 		 * > = Shift up. Converts all characters that follow to uppercase.
 		 * | = Disable a previous shift up or shift down.
@@ -115,7 +115,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 * 
 		 * Defines the group separator, decimal separator and currency symbol in a map: {group, decimal, currency}.
 		 */
-		localization: { init: null, check: "Map" }
+		localization: { init: null, check: "Map", apply: "_applyLocalization" }
 	},
 
 	members: {
@@ -131,6 +131,14 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 		// the mask split in a char array.
 		__maskChars: [],
+
+		// integer array of flags indicating when the character in __maskChar is:
+		//  0 = literal
+		//	1 = mask
+		//  2 = uppercase
+		//  4 = lowercase
+		__maskFlags: [],
+
 
 		// read-only flag.
 		__isReadOnly: false,
@@ -203,7 +211,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			var mask = this.__maskChars;
 			var text = value.substr(0, selection.start);
 			for (var i = selection.start + selection.length; i < value.length && i < mask.length; i++) {
-				if (this.__isMaskChar(mask[i]))
+				if (!this.__isLiteral(i))
 					text += value[i];
 			}
 
@@ -227,10 +235,11 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			if (this.__maskChars.length === 0 || this.__isReadOnly)
 				return;
 
-			var value = e.getData();
+			var pos = this.__textfield.getTextSelectionEnd();
+
 			qx.event.Timer.once(function () {
 
-				var pos = this.__textfield.getTextSelectionEnd();
+				var value = this._getValue();
 				this._setValue(this.mask(value));
 				pos = this.__getNextInsertPosition(pos);
 				this.__textfield.setTextSelection(pos, pos);
@@ -267,9 +276,8 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 			// mask the char before applying the mask to the full text to
 			// validate the single char.
-			var mask = this.__maskChars.filter(function(item) { return item !== "\\"; });
 			var prompt = this.getPrompt();
-			var mchar = this.__transformChar(char, mask[pos], prompt);
+			var mchar = this.__transformChar(char, pos, prompt);
 			if (!mchar) {
 
 				// compare if the typed char matches the literal in the mask, advance one position.
@@ -288,8 +296,8 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 			// insert the typed character at the caret position and the trailing characters without literals.
 			var text = value.substr(0, selection.start) + mchar;
-			for (var i = selection.start + selection.length; i < value.length && i < mask.length; i++) {
-				if (this.__isMaskChar(mask[i]))
+			for (var i = selection.start + selection.length; i < value.length && i < this.__maskChars.length; i++) {
+				if (!this.__isLiteral(i))
 					text += value[i];
 			}
 
@@ -316,7 +324,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 
 			// adjust the selection.
 			var start = this.__textfield.getTextSelectionStart();
-			var lenght = this.__textfield.getTextSelectionLength();
+			var length = this.__textfield.getTextSelectionLength();
 			var selection = this.__adjustTextSelection(start, length);
 			this.__textfield.setTextSelection(selection.start, selection.end);
 		},
@@ -346,41 +354,38 @@ qx.Class.define("wisej.utils.MaskProvider", {
 				return text;
 
 			var c = "",
-				mask = "",
+				pos = -1,
 				result = "",
 				literals = "",
-				isMask = false,
 				textLength = text.length,
-				prompt = this.getPrompt();
-
+				prompt = this.getPrompt(),
+				maskLength = this.__maskChars.length;
+	
 			keepPrompt = keepPrompt !== false;
 			keepLiterals = keepLiterals !== false;
 
-			mask = this.__getFirstMask();
-			for (var i = 0; i < textLength;) {
+			pos = 0;
+			text = text.substr(0, maskLength);
+			for (var i = 0; i < textLength && pos < maskLength;) {
 
 				c = text[i];
-				if (!mask)
-					break;
 
-				isMask = this.__isMaskChar(mask);
-				if (!isMask) {
+				if (this.__isLiteral(pos)) {
 
 					// if the mask is a literal, collect the literal to add it 
 					// as soon as we get a mask match.
 					if (keepLiterals)
-						literals += mask;
+						literals += this.__maskChars[pos];
 
-					// find the next matching character in the input to align the mask.
-					var skipTo = text.indexOf(mask, i);
-					if (skipTo > -1)
-						i = skipTo + 1;
+					if (c == this.__maskChars[pos])
+						i++;
 
-					mask = this.__getNextMask();
+					// advance the mask.
+					pos++;
 				}
 				else {
 
-					var mchar = this.__transformChar(c, mask, prompt);
+					var mchar = this.__transformChar(c, pos, prompt);
 					if (mchar) {
 
 						// add pending literals first.
@@ -397,7 +402,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 						i++;
 
 						// advance the mask.
-						mask = this.__getNextMask();
+						pos++;
 					}
 					else {
 
@@ -414,23 +419,24 @@ qx.Class.define("wisej.utils.MaskProvider", {
 							result += keepPrompt ? prompt : " ";
 
 							// advance the mask.
-							mask = this.__getNextMask();
+							pos++;
 						}
 						else {
 
 							// otherwise, see if the input char matches a mask literal
 							// ahead in the list.
-							if (this.__maskChars.indexOf(c, this.__maskIndex) > -1) {
+							var skipTo = this.__maskChars.indexOf(c, pos);
+							if (skipTo > -1 && this.__isLiteral(skipTo)) {
 
-								for (; mask !== c; mask = this.__getNextMask()) {
+								for (;pos > -1 && pos < skipTo; pos++) {
 
-									if (this.__isMaskChar(mask))
+									if (!this.__isLiteral(pos))
 										result += keepPrompt ? prompt : " ";
 								}
 
 								// add to the result and advance the mask.
 								result += c;
-								mask = this.__getNextMask();
+								pos++;
 							}
 						}
 					}
@@ -442,15 +448,14 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			result += literals;
 			literals = "";
 
-			for (; mask != null; mask = this.__getNextMask()) {
+			for (; pos < maskLength; pos++) {
 
-				if (mask) {
-					if (this.__isMaskChar(mask)) {
-						result += keepPrompt ? prompt : " ";
-					}
-					else if (keepLiterals) {
-						result += mask;
-					}
+				if (this.__isLiteral(pos)) {
+					if (keepLiterals)
+						result += this.__maskChars[pos];
+				}
+				else {
+					result += keepPrompt ? prompt : " ";
 				}
 			}
 
@@ -492,16 +497,88 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		},
 
 		/**
+		 * Applies the localization property.
+		 */
+		_applyLocalization: function (value, old) {
+
+			if (value || old)
+				this._applyMask(this.getMask());
+		},
+
+		/**
 		 * Applies the mask property.
 		 *
 		 * Splits the mask into an array of characters.
 		 */
 		_applyMask: function (value, old) {
 
-			// parse the mask.
-			this.__maskChars = value
-				? maskChars = value.split("")
-				: [];
+			// parse the mask and detect the literals.
+			var mask = [];
+			var flags = [];
+
+			if (value) {
+
+				var flag = 0;
+				var literal = false;
+				var localization = this.getLocalization();
+
+				for (var i = 0; i < value.length; i++) {
+
+					var c = value[i];
+
+					switch (c) {
+
+						case "\\": // escape next char into a literal.
+							if (literal)
+								break;
+
+							literal = true;
+							continue;
+
+						case ">": // start uppercase mode
+							flag = 2; // uppercase
+							continue;
+
+						case "<": // start lowercase mode.
+							flag = 4; // uppercase
+							continue;
+
+						case "|": // end lower or upper case mode.
+							flag = 0;
+							continue;
+
+						case ".":
+							literal = true;
+							c = localization
+								? localization.decimal
+								: qx.locale.Number.getDecimalSeparator();
+							break;
+
+						case ",":
+							literal = true;
+							c = localization
+								? localization.group
+								: qx.locale.Number.getGroupSeparator();
+							break;
+
+						case "$":
+							literal = true;
+							c = localization
+								? localization.currency
+								: qx.locale.Number.getCurrencySymbol();
+							break;
+					}
+
+					var isMaskChar = (!literal && this.__regexp[c] != null)
+					literal = false;
+
+					mask.push(c);
+					flags.push(flag | isMaskChar ? 1 : 0);
+				}
+			}
+
+			this.__maskChars = mask;
+			this.__maskFlags = flags;
 		},
 
 		// returns the value from the input element.
@@ -526,11 +603,12 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		// returns the next valid insert position in the mask.
 		__getNextInsertPosition: function (pos) {
 
-			// don't count escaped characters when looking for the next insert position.
-			var filteredMask = this.__maskChars.filter(function(item) { return item !== "\\"; });
-			for (var mask = filteredMask[pos];
-					mask != null && !this.__isMaskChar(mask);
-						mask = filteredMask[++pos]);
+			for (var i = pos; i < this.__maskChars.length; i++) {
+				if (!this.__isLiteral(i)) {
+					pos = i;
+					break;
+				}
+			}
 
 			return pos;
 		},
@@ -545,7 +623,7 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			var pos = start;
 			if (pos === 0) {
 				for (var mask = this.__maskChars[pos];
-					mask != null && (!this.__isMaskChar(mask) || text[pos] !== prompt);
+					mask != null && (this.__isLiteral(pos) || text[pos] !== prompt);
 					mask = this.__maskChars[++pos]);
 
 				length = Math.max(0, length - (pos - length));
@@ -557,109 +635,56 @@ qx.Class.define("wisej.utils.MaskProvider", {
 			};
 		},
 
-		// resets all mask related state vars and
-		// return the first mask character.
-		__getFirstMask: function () {
-
-			this.__maskIndex = -1;
-			this.__escape = false;
-			this.__uppercase = false;
-			this.__lowercase = false;
-
-			return this.__getNextMask();
-
-		},
-
-		// returns the next mask in the mask array and, if necessary, it changes
-		// the case transformation state.
-		__getNextMask: function () {
-
-			if ((this.__maskIndex + 1) >= this.__maskChars.length)
-				return null;
-
-			var mask = this.__maskChars[++this.__maskIndex];
-
-			// process the case and escape state.
-			if (!this.__escape) {
-				switch (mask) {
-
-					case "<":
-						this.__lowercase = true;
-						this.__uppercase = false;
-						return this.__getNextMask();
-
-					case ">":
-						this.__lowercase = false;
-						this.__uppercase = true;
-						return this.__getNextMask();
-
-					case "|":
-						this.__lowercase = false;
-						this.__uppercase = false;
-						return this.__getNextMask();
-
-					case "\\":
-						this.__escape = true;
-						return this.__getNextMask();
-
-					case ".":
-						return this.getLocalization()
-							? this.getLocalization().decimal
-							: qx.locale.Number.getDecimalSeparator();
-
-					case ",":
-						return this.getLocalization()
-							? this.getLocalization().group
-							: qx.locale.Number.getGroupSeparator();
-
-					case "$":
-						return this.getLocalization()
-							? this.getLocalization().currency
-							: qx.locale.Number.getCurrencySymbol();
-				}
-			} else {
-				// reset the escape character.
-				this.__escape = false;
-			}
-
-			return mask;
-		},
-
 		// applies the current mask transformation to the char.
-		__transformChar: function (c, mask, prompt) {
+		__transformChar: function (c, index, prompt) {
 
-			if (!c || c === prompt)
+			if (!c || c === prompt || c === " " || index >= this.__maskChars.length)
 				return null;		
 
-			if (this.__lowercase)
-				c = c.toLowerCase();
-			else if (this.__uppercase)
-				c = c.toUpperCase();
-
-			if (!this.__escape) {
-				var rx = this.__regexp[mask];
+			if (this.__isLiteral(index)) {
+				c = this.__maskChars[index];
+			}
+			else {
+				var rx = this.__regexp[this.__maskChars[index]];
 				if (rx) {
-
 					// test the input char against the mask char. 
 					if (!rx.test(c))
-						return null;
-					else
-						return c;
+						c = null;
 				}
 			}
-			this.__escape = false;
 
-			// test the literal.
-			if (c !== mask)
-				return null;
+			if (c != null) {
+				if (this.__isLowercase(index))
+					c = c.toLowerCase();
+				else if (this.__isUppercase(index))
+					c = c.toUpperCase();
+			}
 
 			return c;
 		},
 
-		// checks if the character is a mask or a literal.
-		__isMaskChar: function (c) {
+		// checks if the mask character at index is a mask.
+		__isMask: function (index) {
 
-			return !!(this.__regexp[c]);
+			return (this.__maskFlags[index] & 1) === 1;
+		},
+
+		// checks if the mask character at index is a literal.
+		__isLiteral: function (index) {
+
+			return (this.__maskFlags[index] & 1) !== 1;
+		},
+
+		// checks if the mask character at index must be converted to uppercase.
+		__isUppercase: function (index) {
+
+			return (this.__maskFlags[index] & 2) === 2;
+		},
+
+		// checks if the mask character at index must be converted to lowercase.
+		__isLowercase: function (index) {
+
+			return (this.__maskFlags[index] & 4) === 4;
 		},
 
 		// handles changes to the readOnly property

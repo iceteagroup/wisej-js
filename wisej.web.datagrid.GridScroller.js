@@ -350,6 +350,10 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		 */
 		_onTapHeader: function (e) {
 
+			var table = this.getTable();
+			if (!table.isEnabled())
+				return;
+
 			// let embedded widgets handle their own events.
 			var target = e.getTarget();
 			if (target) {
@@ -357,6 +361,25 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				if (parent instanceof wisej.web.datagrid.HeaderCell) {
 					if (parent.getCellWidget() == target)
 						return;
+				}
+			}
+
+			var pageX = e.getDocumentLeft();
+			var col = this._getColumnForPageX(pageX);
+			if (col != null) {
+				var tableModel = table.getTableModel();
+				if (!tableModel.isColumnSortable(col)) {
+
+					switch (table.getSelectionMode()) {
+						case "column":
+						case "columnHeader":
+							if (col != table.getFocusedColumn()) {
+								table.setFocusedCell(col, 0, true /*scrollVisible*/, true);
+							}
+							break;
+					}
+
+					table.getSelectionManager().handleTap(col, -1, e);
 				}
 			}
 
@@ -371,7 +394,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		_onTapPane: function (e) {
 
 			var table = this.getTable();
-
 			if (!table.isEnabled())
 				return;
 
@@ -389,24 +411,33 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 				// stop here if it was a tap to open or close the parent row.
 				if (isParentRowTap) {
-					table.getSelectionManager().handleTap(row, e);
+					table.getSelectionManager().handleTap(col, row, e);
 					return;
 				}
-
-				var prevRow = table.getFocusedRow();
-				var prevCol = table.getFocusedColumn();
 
 				// the pointer is over the data -> update the focus cell.
 				// notify the server only when the row is unchanged and the column has changed
 				// when the row changed we fire "selectionChanged" which will also update
 				// the current cell.
-				// NOTE: this will change when the selection model will support cell and column selection.
+
+				var prevRow = table.getFocusedRow();
+				var prevCol = table.getFocusedColumn();
+
+				switch (table.getSelectionMode()) {
+					case "cell":
+					case "column":
+					case "columnHeader":
+						if (col <= table.getRowHeaderIndex())
+							return;
+						break;
+				}
+
 				var notify = (prevRow == row) && (prevCol != col);
 				table.setFocusedCell(col, row, true /*scrollVisible*/, notify);
 
 				// update the selection.
 				// chances are it has already changed on the server through the "selectionChanged" event.
-				table.getSelectionManager().handleTap(row, e);
+				table.getSelectionManager().handleTap(col, row, e);
 
 				if (this.__focusIndicator.isHidden()
 					|| (this.__lastPointerDownCell
@@ -414,10 +445,12 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 						&& !this.isEditing()
 						&& row == this.__lastPointerDownCell.row
 						&& col == this.__lastPointerDownCell.col)) {
+
 					this.fireEvent("cellTap",
 						qx.ui.table.pane.CellEvent,
 						[this, e, row, col],
 						true);
+
 					this.__firedTapEvent = true;
 				}
 
@@ -522,7 +555,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			var wasFrozenPane = this.__isFrozenPane;
 
 			this.__isRowHeader = model
-				? model.getMaxColumnCount() > -1 && model.getFirstColumnX() == table._rowHeaderColIndex && table.getRowHeadersVisible()
+				? model.getMaxColumnCount() > -1 && model.getFirstColumnX() == table.getRowHeaderIndex() && table.getRowHeadersVisible()
 				: false;
 
 			this.__isFrozenPane = model
@@ -711,7 +744,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 						// the pointer is over a resize region -> start resizing the row.
 						this._startResizeRow(resizeRow, pageY);
-						e.stop();
+						e.stopPropagation();
 
 						return;
 					}

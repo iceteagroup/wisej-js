@@ -323,6 +323,14 @@ qx.Class.define("wisej.web.Form", {
 			}
 		},
 
+		// overridden
+		_onChangeTheme: function () {
+
+			this.base(arguments);
+
+			this._applyHeaderBackgroundColor(this.getHeaderBackgroundColor());
+		},
+
 		/** 
 		 * Applies the tools property.
 		 */

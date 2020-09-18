@@ -500,23 +500,28 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 			if (roller.states.default != null)
 				this.__apply(style, roller.states.default.properties);
 
-			// merge the properties that match the state in the order they are declared.
-			for (var state in roller.states) {
+			// get the order of the states.
+			var $order = roller.states.$order || Object.keys(roller.states);
 
-				if (state == "default")
+			// merge the properties that match the state in the order they are declared.
+			for (var i = 0, l = $order.length; i < l; i++) {
+
+				var state = $order[i];
+
+				if (state === "default")
 					continue;
 
 				if (states[state]) {
 
 					this.__apply(style, roller.states[state].properties);
 				}
-				else if (state.indexOf("-") > -1) {
+				else if (state.indexOf("-") > 1) {
 
 					// process the composite state that matches the combination of the active states.
 					var override = true;
 					var parts = state.split("-");
-					for (var i = 0; i < parts.length; i++) {
-						if (!states[parts[i]]) {
+					for (var j = 0; j < parts.length; j++) {
+						if (!states[parts[j]]) {
 							override = false;
 							break;
 						}
@@ -548,9 +553,11 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 
 			// build the decorator name by concatenating the status name(s).
 			for (var state in states) {
-				name += "-" + state;
-				if (roller.states[state] && roller.states[state].styles) {
-					applyDecorator = true;
+				if (states[state]) {
+					name += "-" + state;
+					if (roller.states[state] && roller.states[state].styles) {
+						applyDecorator = true;
+					}
 				}
 			}
 
@@ -600,23 +607,28 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 			if (states == null)
 				return decorator;
 
+			// get the order of the states.
+			var $order = roller.states.$order || Object.keys(roller.states);
+
 			// build the decorator styles, by applying the styles defined in the roller
 			// in order of declaration in the states collection.
-			for (var state in roller.states) {
+			for (var i = 0, l = $order.length; i < l; i++) {
 
-				if (state == "default")
+				var state = $order[i];
+
+				if (state === "default")
 					continue;
 
 				if (states[state]) {
 					this.__apply(decorator.style, roller.states[state].styles);
 				}
-				else if (state.indexOf("-") > -1) {
+				else if (state.indexOf("-") > 1) {
 
 					// apply the styles with the composite state that matches the combination of the active states.
 					var override = true;
 					var parts = state.split("-");
-					for (var i = 0; i < parts.length; i++) {
-						if (!states[parts[i]]) {
+					for (var j = 0; j < parts.length; j++) {
+						if (!states[parts[j]]) {
 							override = false;
 							break;
 						}

@@ -267,8 +267,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideLeftIn: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-out",
 				origin: "bottom center",
 				keep: 100,
 				keyFrames: {
@@ -278,8 +278,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideRightIn: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-out",
 				origin: "bottom center",
 				keep: 100,
 				keyFrames: {
@@ -289,8 +289,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideLeftOut: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-in",
 				origin: "bottom center",
 				keep: 0,
 				keyFrames: {
@@ -300,8 +300,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideRightOut: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-out",
 				origin: "bottom center",
 				keep: 0,
 				keyFrames: {
@@ -312,7 +312,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			popIn: {
 				duration: 350,
-				timing: "linear",
+				timing: "ease-out",
 				origin: "center",
 				keep: 100,
 				keyFrames: {
@@ -323,7 +323,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			popOut: {
 				duration: 350,
-				timing: "linear",
+				timing: "ease-in",
 				origin: "center",
 				keep: 0,
 				keyFrames: {
@@ -334,7 +334,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			shrinkHeight: {
 				duration: 400,
-				timing: "linear",
+				timing: "ease-in",
 				origin: "top center",
 				keep: 0,
 				keyFrames: {
@@ -345,7 +345,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			growHeight: {
 				duration: 400,
-				timing: "linear",
+				timing: "ease-out",
 				origin: "top center",
 				keep: 100,
 				keyFrames: {
@@ -356,7 +356,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			shrinkWidth: {
 				duration: 400,
-				timing: "linear",
+				timing: "ease-in",
 				origin: "left center",
 				keep: 0,
 				keyFrames: {
@@ -367,7 +367,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			growWidth: {
 				duration: 400,
-				timing: "linear",
+				timing: "ease-out",
 				origin: "left center",
 				keep: 100,
 				keyFrames: {
@@ -378,7 +378,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			shrink: {
 				duration: 400,
-				timing: "linear",
+				timing: "ease-in",
 				origin: "left top",
 				keep: 0,
 				keyFrames: {
@@ -389,7 +389,7 @@ qx.Class.define("wisej.web.Animation", {
 
 			grow: {
 				duration: 400,
-				timing: "linear",
+				timing: "ease-out",
 				origin: "left top",
 				keep: 100,
 				keyFrames: {
@@ -399,8 +399,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideUpIn: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-out",
 				origin: "center",
 				keep: 100,
 				keyFrames: {
@@ -410,8 +410,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideUpOut: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-in",
 				origin: "center",
 				keep: 0,
 				keyFrames: {
@@ -421,8 +421,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideDownIn: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-out",
 				origin: "center",
 				keep: 100,
 				keyFrames: {
@@ -432,8 +432,8 @@ qx.Class.define("wisej.web.Animation", {
 			},
 
 			slideDownOut: {
-				duration: 350,
-				timing: "linear",
+				duration: 250,
+				timing: "ease-in",
 				origin: "center",
 				keep: 0,
 				keyFrames: {

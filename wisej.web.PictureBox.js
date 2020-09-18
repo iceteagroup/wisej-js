@@ -48,6 +48,13 @@ qx.Class.define("wisej.web.PictureBox", {
 		appearance: { refine: true, init: "picturebox" },
 
 		/**
+		 * Filter property.
+		 * 
+		 * Sets the CSS filter over the image: https://developer.mozilla.org/en-US/docs/Web/CSS/filter.
+		 */
+		filter: { init: "", check: "String", apply: "_applyFilter" },
+
+		/**
 		 * SizeMode property.
 		 */
 		sizeMode: { init: "normal", check: "String", apply: "_applySizeMode" },
@@ -98,9 +105,17 @@ qx.Class.define("wisej.web.PictureBox", {
 			elem.setStyles({
 				backgroundSize: size,
 				backgroundPosition: position,
-				backgroundOrigin: "content-box"
+				backgroundOrigin: "content-box",
 			});
+		},
 
+
+		/**
+		 * Applies the filter property.
+		 */
+		_applyFilter: function (value, old) {
+
+			qx.ui.core.queue.Widget.add(this, "filter");
 		},
 
 		/**
@@ -113,6 +128,23 @@ qx.Class.define("wisej.web.PictureBox", {
 				this.resetWidth();
 				this.resetHeight();
 				this.invalidateLayoutCache();
+			}
+
+			// apply filters.
+			if (this.getFilter())
+				qx.ui.core.queue.Widget.add(this, "filter");
+		},
+
+		syncWidget: function (jobs) {
+
+			this.base(arguments, jobs);
+
+			if (jobs && jobs["filter"]) {
+				qx.event.Timer.once(function () {
+					var el = this.__getContentElement();
+					if (el)
+						el.setStyle("filter", this.getFilter());
+				}, this, 0);
 			}
 		},
 

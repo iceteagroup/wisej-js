@@ -131,6 +131,14 @@ qx.Class.define("wisej.web.Shape", {
 			panelEl.setStyles(style);
 		},
 
+		// overridden
+		_onChangeTheme: function () {
+
+			this.base(arguments);
+
+			qx.ui.core.queue.Widget.add(this);
+		},
+
 		/**
 		 * Overridden to create the inner div with the line style
 		 * preserving the inner padding.

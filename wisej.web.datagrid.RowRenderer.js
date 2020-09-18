@@ -237,13 +237,12 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 
 			// focused?
 			if (rowInfo.focusedRow && this.getHighlightFocusRow()) {
-
 				state.focused = true;
 			}
 
 			// selected?
 			if (rowInfo.selected) {
-				state.selected = true;
+				state.selected = rowInfo.selected;
 			}
 
 			// even or odd...

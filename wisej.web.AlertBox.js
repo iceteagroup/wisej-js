@@ -229,7 +229,7 @@ qx.Class.define("wisej.web.AlertBox", {
 			var me = this;
 			var delay = this.getAutoCloseDelay();
 
-			if (delay > 100) {
+			if (delay > 0) {
 
 				this.__autoCloseTimer = setTimeout(function () {
 

@@ -32,8 +32,7 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 
 		this.base(arguments);
 
-		var tooltip = this.__getToolTip();
-		tooltip.setRich(true);
+		this.__getToolTip().setRich(true);
 	},
 
 	properties: {
@@ -51,6 +50,18 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 		 * Indicates the default icon to show in the tooltip.
 		 */
 		icon: { init: null, check: "String", nullable: true, apply: "_applyIcon" },
+
+		/**
+		 * IconSource property.
+		 *
+		 * Indicates the default icon to show in the tooltip.
+		 */
+		iconSource: { init: null, check: "String", nullable: true, apply: "_applyIconSource" },
+
+		/**
+		 * TextColor property.
+		 */
+		textColor: { init: null, nullable: true, check: "Color", apply: "_applyTextColor" },
 
 		/**
 		 * PopDelay property.
@@ -92,9 +103,6 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 
 	members: {
 
-		/** the tooltip icon name. */
-		_tooltipIcon: null,
-
 		_applyIcon: function (value, old) {
 
 			var icon = null;
@@ -105,10 +113,30 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 				default: icon = "icon-" + value; break;
 			}
 
-			this._tooltipIcon = icon;
+			this.setIconSource(icon);
+		},
+
+		_applyIconSource: function (value, old) {
 
 			// update all tooltips.
 			this._applyTooltips(this.getTooltips());
+
+			// update the shared tooltips.
+			this.__getToolTip().setIcon(value);
+		},
+
+		/**
+		 * Applies the textColor property.
+		 */
+		_applyTextColor: function (value, old) {
+
+			var tooltip = this.__getToolTip().getChildControl("atom");
+			if (value) {
+				tooltip.setTextColor(value);
+			}
+			else {
+				tooltip.resetTextColor();
+			}
 		},
 
 		_applyPopDelay: function (value, old) {
@@ -158,12 +186,12 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 					var target = this.__getToolTipTarget(value[i].id);
 					if (target) {
 						target.setToolTipText(value[i].text);
-						target.setToolTipIcon(this._tooltipIcon);
+						target.setToolTipIcon(this.getIconSource());
 
 						// update the live tooltip widget.
 						var tooltip = target.getToolTip() || manager.getSharedTooltip();
 						tooltip.setLabel(value[i].text);
-						tooltip.setIcon(this._tooltipIcon);
+						tooltip.setIcon(this.getIconSource());
 					}
 				}
 			}
@@ -207,7 +235,7 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 			manager.setCurrent(null);
 
 			tooltip.setLabel(text);
-			tooltip.setIcon(this._tooltipIcon);
+			tooltip.setIcon(this.getIconSource());
 
 			// placement?
 			if (target) {

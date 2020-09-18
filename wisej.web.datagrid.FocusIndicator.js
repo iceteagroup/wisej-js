@@ -118,10 +118,10 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 			}
 			else {
 
-				var rowData = tableModel.getRowData(row);
-				if (!rowData)
-					// the row is not loaded yet.
-					return;
+				//var rowData = tableModel.getRowData(row);
+				//if (!rowData)
+				//	// the row is not loaded yet.
+				//	return;
 
 				var columnModel = table.getTableColumnModel();
 				var cellRenderer = columnModel.getDataCellRenderer(col);

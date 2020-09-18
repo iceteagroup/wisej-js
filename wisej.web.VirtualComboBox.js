@@ -96,6 +96,8 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 
 				this._suspendEvents = false;
 			}
+
+			this.fireEvent("changeItems");
 		},
 
 		/**
@@ -429,9 +431,6 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 		// keeps the largest width calculated.
 		__maxItemWidth: 0,
 
-		// prefetch manager.
-		__prefetchManager: null,
-
 		/**
 		 * Adds, removes, updates the items in the data model.
 		 * 
@@ -545,32 +544,8 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 		 */
 		_applyPrefetchItems: function (value, old) {
 
-			if (value > 0) {
-
-				if (!this.__prefetchManager) {
-					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
-						minLeft: 0,
-						maxLeft: 0,
-						minRight: 0,
-						maxRight: 0,
-						minAbove: 0,
-						maxAbove: 0,
-						minBelow: 0,
-						maxBelow: 0
-					});
-				}
-
-				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
-				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
-
-				var pixels = this.getItemHeight() * value;
-				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
-
-			}
-			else if (this.__prefetchManager) {
-				this.__prefetchManager.dispose();
-				this.__prefetchManager = null;
-			}
+			var pixels = this.getItemHeight() * value;
+			this.getPane().prefetchY(pixels, pixels, pixels, pixels);
 		},
 
 		/**
@@ -952,8 +927,6 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 			model.setAutoDisposeItems(true);
 			model.dispose();
 		}
-
-		this._disposeObjects("__prefetchManager");
 
 		this._layer.removeListener("updated", this._onUpdated, this);
 

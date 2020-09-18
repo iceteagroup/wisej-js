@@ -56,6 +56,20 @@ qx.Class.define("wisej.web.ListBox", {
 		this.addState("multiline");
 	},
 
+	events:
+	{
+		/**
+		 * Fired when LazyLoading is true and the control needs load
+		 * the items from the server.
+		 */
+		"load": "qx.event.type.Event",
+
+		/**
+		 * Fired when the items collection changes.
+		 */
+		"changeItems": "qx.event.type.Event"
+	},
+
 	properties: {
 
 		/**
@@ -295,6 +309,8 @@ qx.Class.define("wisej.web.ListBox", {
 				this.__suspendEvents = false;
 				this.__lazySelectedIndices = null;
 			}
+
+			this.fireEvent("changeItems");
 		},
 
 		/**

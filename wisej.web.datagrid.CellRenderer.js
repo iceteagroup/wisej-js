@@ -371,14 +371,9 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 			// selected?
 			if (cellInfo.selected) {
-
 				state.selected = true;
-			}
-			else {
-
-				// use the selected flag from the owning column.
-				if (cellInfo.columnModel.getColumnSelected(cellInfo.col))
-					state.selected = true;
+			} else if (cellInfo.selectionModel) {
+				state.selected = cellInfo.selectionModel.isCellSelected(cellInfo.col, cellInfo.row);
 			}
 
 			// even or odd?
@@ -1278,7 +1273,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 			// content element.
 			this._contentClassName = styleMgr.getCssClass(appearance + "/content", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";word-wrap:normal");
-			this._contentMiddleClassName = styleMgr.getCssClass(appearance + "/content/middle", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:50%;transform:translateY(-46%);-webkit-transform:translateY(-46%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
+			this._contentMiddleClassName = styleMgr.getCssClass(appearance + "/content/middle", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:50%;transform:translateY(-50%);-webkit-transform:translateY(-50%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
 			this._contentBottomClassName = styleMgr.getCssClass(appearance + "/content/bottom", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:100%;transform:translateY(-100%);-webkit-transform:translateY(-100%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
 			this._contentSpacerClassName = styleMgr.getCssClass(appearance + "/spacer", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
 			this._contentButtonSpacerClassName = styleMgr.getCssClass(appearance + "/open", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
@@ -1309,7 +1304,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.CheckBoxCell", {
 
 	statics: {
 
-		DEFAULT_CHECKBOX_CSS: "display:inline-block;background-repeat:no-repeat",
+		DEFAULT_CHECKBOX_CSS: "display:inline-block;background-repeat:no-repeat;vertical-align:top",
 
 	},
 	members: {
@@ -1689,7 +1684,6 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.RowHeader", {
 
 			// focused?
 			if (cellInfo.focusedRow) {
-
 				state.focused = true;
 			}
 

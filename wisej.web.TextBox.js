@@ -756,6 +756,9 @@ qx.Class.define("wisej.web.TextBox", {
 
 	members: {
 
+		/** listener for the native "change" event. */
+		__onNativeChangeListener: null,
+
 		/**
 		 * Applies the inputType property.
 		 */
@@ -767,12 +770,12 @@ qx.Class.define("wisej.web.TextBox", {
 
 			if (old) {
 
-				if (this.__onCheckTextBoxChangeListener)
-					qx.bom.Event.removeNativeListener(dom, "change", this.__onCheckTextBoxChangeListener);
+				if (this.__onNativeChangeListener)
+					qx.bom.Event.removeNativeListener(dom, "change", this.__onNativeChangeListener);
 
 				this.removeState(old.type);
 				this.setAllowTextSelection(true);
-				this.__onCheckTextBoxChangeListener = null;
+				this.__onNativeChangeListener = null;
 			}
 
 			if (value) {
@@ -784,17 +787,27 @@ qx.Class.define("wisej.web.TextBox", {
 
 				this.addState(value.type);
 
-				if (value.type === "checkbox" || value.type === "radio") {
+				switch (value.type) {
 
-					this.setAllowTextSelection(false);
+					case "radio":
+					case "checkbox":
+					case "date":
+					case "color":
+					case "button":
+					case "month":
+					case "range":
+					case "time":
+					case "datetimeLocal":
+						this.setAllowTextSelection(false);
 
-					this.__onCheckTextBoxChangeListener =
-						this.__onCheckTextBoxChangeListener || qx.lang.Function.listener(this.__onCheckTextBoxChange, this);
+						this.__onNativeChangeListener =
+							this.__onNativeChangeListener || qx.lang.Function.listener(this.__onNativeChange, this);
 
-					if (dom)
-						qx.bom.Event.addNativeListener(target, "change", this.__onCheckTextBoxChangeListener);
-					else
-						this.addListenerOnce("appear", this.__onCheckTextBoxAppear, this);
+						if (dom)
+							qx.bom.Event.addNativeListener(target, "change", this.__onNativeChangeListener);
+						else
+							this.addListenerOnce("appear", this.__onCheckTextBoxAppear, this);
+						break;
 				}
 			}
 		},
@@ -804,15 +817,20 @@ qx.Class.define("wisej.web.TextBox", {
 			// sync the checked status of the native checkbox or radio input.
 			var textField = this.getChildControl("textfield");
 			var dom = textField.getContentElement().getDomElement();
-			if (dom) {
+			if (dom && this.__onNativeChangeListener) {
 				dom.checked = this.isChecked();
-				qx.bom.Event.addNativeListener(dom, "change", this.__onCheckTextBoxChangeListener);
+				qx.bom.Event.addNativeListener(dom, "change", this.__onNativeChangeListener);
 			}
 		},
 
-		__onCheckTextBoxChange: function (e) {
+		__onNativeChange: function (e) {
+
+			this.setDirty(true);
+			this.fireDataEvent("changeValue", this.getValue());
+
 			// update the checked property when the user checks the native checkbox or radio input.
 			var textField = this.getChildControl("textfield");
+
 			var dom = textField.getContentElement().getDomElement();
 			if (dom) {
 				this.setChecked(dom.checked);

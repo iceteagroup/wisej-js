@@ -75,6 +75,20 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		this.addState("multiline");
 	},
 
+	events:
+	{
+		/**
+		 * Fired when LazyLoading is true and the control needs load
+		 * the items from the server.
+		 */
+		"load": "qx.event.type.Event",
+
+		/**
+		 * Fired when the items collection changes.
+		 */
+		"changeItems": "qx.event.type.Event"
+	},
+
 	properties: {
 
 		// overridden
@@ -186,9 +200,6 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		// keeps the largest width calculated.
 		__maxItemWidth: 0,
 
-		// prefetch manager.
-		__prefetchManager: null,
-
 		// delayed selection when lazy loading is on.
 		__lazySelectedIndices: null,
 
@@ -275,32 +286,8 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		 */
 		_applyPrefetchItems: function (value, old) {
 
-			if (value > 0) {
-
-				if (!this.__prefetchManager) {
-					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
-						minLeft: 0,
-						maxLeft: 0,
-						minRight: 0,
-						maxRight: 0,
-						minAbove: 0,
-						maxAbove: 0,
-						minBelow: 0,
-						maxBelow: 0
-					});
-				}
-
-				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
-				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
-
-				var pixels = this.getItemHeight() * value;
-				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
-
-			}
-			else if (this.__prefetchManager) {
-				this.__prefetchManager.dispose();
-				this.__prefetchManager = null;
-			}
+			var pixels = this.getItemHeight() * value;
+			this.getPane().prefetchY(pixels, pixels, pixels, pixels);
 		},
 
 		/**
@@ -427,6 +414,8 @@ qx.Class.define("wisej.web.VirtualListBox", {
 
 				this.__suspendEvents = false;
 			}
+
+			this.fireEvent("changeItems");
 		},
 
 		// overridden.
@@ -987,8 +976,6 @@ qx.Class.define("wisej.web.VirtualListBox", {
 			model.setAutoDisposeItems(true);
 			model.dispose();
 		}
-
-		this._disposeObjects("__prefetchManager");
 
 		this._layer.removeListener("updated", this._onUpdated, this);
 

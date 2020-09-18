@@ -229,9 +229,6 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		// keep track if the nodes are being selected from the _applySelectedNodes method.
 		__inApplySelectedNodes: false,
 
-		// prefetch manager.
-		__prefetchManager: null,
-
 		/**
 		 * Scrolls the node into view.
 		 * 
@@ -474,32 +471,8 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 */
 		_applyPrefetchItems: function (value, old) {
 
-			if (value > 0) {
-
-				if (!this.__prefetchManager) {
-					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
-						minLeft: 0,
-						maxLeft: 0,
-						minRight: 0,
-						maxRight: 0,
-						minAbove: 0,
-						maxAbove: 0,
-						minBelow: 0,
-						maxBelow: 0
-					});
-				}
-
-				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
-				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
-
-				var pixels = this.getItemHeight() * value;
-				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
-
-			}
-			else if (this.__prefetchManager) {
-				this.__prefetchManager.dispose();
-				this.__prefetchManager = null;
-			}
+			var pixels = this.getItemHeight() * value;
+			this.getPane().prefetchY(pixels, pixels, pixels, pixels);
 		},
 
 		/**
@@ -1173,8 +1146,10 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 	destruct: function () {
 
-		this._disposeObjects("__prefetchManager");
-
+		var model = this.getModel();
+		if (model) {
+			model.dispose();
+		}
 	}
 });
 
@@ -1419,7 +1394,7 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 			if (value == old)
 				return;
 
-			if (old)
+			if (old && old.getChildren())
 				old.getChildren().remove(this);
 
 			if (value) {
@@ -1427,7 +1402,7 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 				var parentChildren = value.getChildren();
 
 				// different parent?
-				if (!parentChildren.contains(this)) {
+				if (parentChildren && !parentChildren.contains(this)) {
 					var index = this.getIndex();
 					if (index > -1)
 						parentChildren.insertAt(index, this);
@@ -1463,6 +1438,16 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 			this.setParentNode(null);
 
 			this.base(arguments);
+		}
+	},
+
+	destruct: function () {
+
+		var children = this.getChildren();
+		if (children) {
+			this.setChildren(null);
+			children.setAutoDisposeItems(true);
+			children.dispose();
 		}
 	}
 

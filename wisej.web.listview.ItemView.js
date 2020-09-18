@@ -146,9 +146,6 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		// suppresses firing server events.
 		__internalChange: false,
 
-		// prefetch manager.
-		__prefetchManager: null,
-
 		/**
 		 * Returns all the currently rendered widgets.
 		 */
@@ -356,35 +353,11 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		_applyPrefetchItems: function (value, old) {
 
-			if (value > 0) {
+			var pixels = this.getItemSize().width * value;
+			this.getPane().prefetchX(pixels, pixels, pixels, pixels);
 
-				if (!this.__prefetchManager) {
-					this.__prefetchManager = new qx.ui.virtual.behavior.Prefetch(this, {
-						minLeft: 0,
-						maxLeft: 0,
-						minRight: 0,
-						maxRight: 0,
-						minAbove: 0,
-						maxAbove: 0,
-						minBelow: 0,
-						maxBelow: 0
-					});
-				}
-
-				this.__prefetchManager.setPrefetchX(0, 0, 0, 0);
-				this.__prefetchManager.setPrefetchY(0, 0, 0, 0);
-
-				var pixels = this.getItemSize().width * value;
-				this.__prefetchManager.setPrefetchX(pixels, pixels, pixels, pixels);
-
-				var pixels = this.getItemSize().height * value;
-				this.__prefetchManager.setPrefetchY(pixels, pixels, pixels, pixels);
-			}
-			else if (this.__prefetchManager) {
-
-				this.__prefetchManager.dispose();
-				this.__prefetchManager = null;
-			}
+			var pixels = this.getItemSize().height * value;
+			this.getPane().prefetchY(pixels, pixels, pixels, pixels);
 		},
 
 		/**
@@ -502,7 +475,6 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			var itemSize = this.getItemSize();
 			pane.getRowConfig().setDefaultItemSize(itemSize.height);
 			pane.getColumnConfig().setDefaultItemSize(itemSize.width);
-
 
 			var paneWidth = bounds.width;
 			var itemCount = this.__itemCount;
@@ -1050,7 +1022,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 	destruct: function()
 	{
 		this.getDataModel().dispose();
-		this._disposeObjects("__layer", "__cellProvider", "__selectionManager", "__prefetchManager");
+		this._disposeObjects("__layer", "__cellProvider", "__selectionManager");
 
 	}
 });

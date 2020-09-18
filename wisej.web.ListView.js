@@ -331,8 +331,32 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applySelectionMode: function (value, old) {
 
-			this.itemView.setSelectionMode(value);
-			this.gridView.setSelectionMode(value);
+			switch (value) {
+
+				case "none":
+					this.itemView.setSelectionMode(value);
+					this.gridView.setSelectionMode(value);
+					this.gridView.setMultiSelect(false);
+					break;
+
+				case "one":
+					this.itemView.setSelectionMode(value);
+					this.gridView.setSelectionMode("row");
+					this.gridView.setMultiSelect(false);
+					break;
+
+				case "multiSimple":
+					this.itemView.setSelectionMode(value);
+					this.gridView.setSelectionMode("row");
+					this.gridView.setMultiSelect(true);
+					break;
+
+				case "multiExtended":
+					this.itemView.setSelectionMode(value);
+					this.gridView.setSelectionMode("row");
+					this.gridView.setMultiSelect(true);
+					break;
+			}
 		},
 
 		/**
@@ -588,7 +612,7 @@ qx.Class.define("wisej.web.ListView", {
 		/**
 		 * Updates the selection.
 		 *
-		 * @param ranges {Array} array of range objects: {minIndex, maxIndex}.
+		 * @param ranges {Array} array of range objects: {minRow, maxRow}.
 		 */
 		setSelectionRanges: function (ranges) {
 

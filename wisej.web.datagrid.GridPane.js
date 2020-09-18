@@ -38,6 +38,16 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 		this.addListener("paneUpdated", this._onPaneUpdated, this);
 	},
 
+	events: {
+		/**
+		 * The event is fired when the pane has created all the cells and the DOM is ready.
+		 *
+		 * The method {@link qx.event.type.Data#getData} returns {pane, rows} where pane is
+		 * this widget and rows of the collection of row DOM elements.
+		 */
+		"paneRendered": "qx.event.type.Data",
+	},
+
 	properties: {
 
 		/** 
@@ -115,9 +125,10 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 
 			// @ITG:Wisej: Added reference to the current scroller, column model and data model to simplify the life of cell renderers.
 			cellInfo.tableModel = tableModel;
-			cellInfo.scroller = this.getPaneScroller();
-			cellInfo.columnModel = table.getTableColumnModel();
 			cellInfo.rightToLeft = table.getRtl();
+			cellInfo.scroller = this.getPaneScroller();
+			cellInfo.selectionModel = selectionModel
+			cellInfo.columnModel = table.getTableColumnModel();
 
 			// We don't want to execute the row loop below more than necessary. If
 			// onlyRow is not null, we want to do the loop only for that row.
@@ -149,7 +160,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 
 			for (; y < end; y++, row++) {
 				cellInfo.row = row;
-				cellInfo.selected = selectionModel.isSelectedIndex(row);
+				cellInfo.selected = selectionModel.isRowSelected(row);
 				cellInfo.focusedRow = (this.__focusedRow == row);
 				cellInfo.rowData = tableModel.getRowData(row);
 
@@ -187,9 +198,9 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			// @ITG:Wisej: RightToLeft support.
 			// precompute column properties
 			for (var x =
-			  rtl ? (colCount - 1) : (0) ;
-			  rtl ? (x > -1) : (x < colCount) ;
-			  rtl ? (x--) : (x++)) {
+				rtl ? (colCount - 1) : (0);
+				rtl ? (x > -1) : (x < colCount);
+				rtl ? (x--) : (x++)) {
 
 				var col = paneModel.getColumnAtX(x);
 				var cellWidth = columnModel.getColumnWidth(col);
@@ -230,11 +241,12 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			for (var row = firstRow, maxRow = firstRow + rowCount; row < maxRow; row++) {
 
 				var focusedRow = (this.__focusedRow == row);
-				var selected = selectionModel.isSelectedIndex(row);
+				var rowSelected = selectionModel.isRowSelected(row);
+				var anyCellSelected = rowSelected || selectionModel.isAnyCellSelected(row);
 
 				// don't retrieve offset rows from the cache.
 				if (row >= topVisibleRow) {
-					var cachedRow = this.__rowCacheGet(row, selected, focusedRow);
+					var cachedRow = this.__rowCacheGet(row, anyCellSelected, focusedRow);
 					if (cachedRow) {
 						rowsArr.push(cachedRow);
 						continue;
@@ -249,11 +261,12 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				// @ITG:Wisej: Added reference to the current scroller, column model and data model to simplify the life of cell renderers.
 				cellInfo.tableModel = tableModel;
 				cellInfo.columnModel = columnModel;
+				cellInfo.selectionModel = selectionModel;
 				cellInfo.scroller = this.getPaneScroller();
 				cellInfo.rightToLeft = rtl;
 
 				cellInfo.row = row;
-				cellInfo.selected = selected;
+				cellInfo.selected = rowSelected;
 				cellInfo.focusedRow = focusedRow;
 				cellInfo.rowData = tableModel.getRowData(row);
 
@@ -319,7 +332,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 					//
 					// Tested with http://tinyurl.com/333hyhv
 					stopLoop =
-					  cellRenderer.createDataCellHtml(cellInfo, rowHtml) || false;
+						cellRenderer.createDataCellHtml(cellInfo, rowHtml) || false;
 				}
 				rowHtml.push('</div>');
 
@@ -327,7 +340,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 
 				// don't cache offset rows.
 				if (row >= topVisibleRow) {
-					this.__rowCacheSet(row, rowString, selected, focusedRow);
+					this.__rowCacheSet(row, rowString, anyCellSelected, focusedRow);
 				}
 
 				rowsArr.push(rowString);
@@ -390,6 +403,52 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 
 			// re-bind custom widgets to their cells.
 			this.__bindWidgetsToCells(rowNodes);
+
+			// add tooltip text for overflowing cells.
+			this.__addCellTooltips(rowNodes);
+
+			// notify the parent table that we have all the elements created.
+			this.getTable().fireDataEvent("paneRendered", { pane: this, rows: rowNodes });
+		},
+
+		// add tooltip text for overflowing cells.
+		__addCellTooltips: function (rowNodes) {
+
+			if (!rowNodes || rowNodes.length == 0)
+				return;
+
+			if (!this.getTable().getShowTooltips())
+				return;
+
+			var rowElem = null;
+			var cellElem = null;
+			var cellNodes = null;
+
+			for (var r = 0; r < rowNodes.length; r++) {
+				rowElem = rowNodes[r];
+
+				if (rowElem) {
+
+					cellNodes = rowElem.childNodes;
+					for (var c = 0; c < cellNodes.length; c++) {
+
+						cellElem = cellNodes[c];
+
+						// find the content cell.
+						var contentEl = cellElem.querySelector("[role=content]");
+						contentEl = contentEl.firstElementChild || contentEl;
+
+						if (contentEl && cellElem.getAttribute("title") == null) {
+
+							// add the title attribute when the content doesn't fit the cell.
+							if (contentEl.scrollWidth > cellElem.offsetWidth ||
+								contentEl.scrollHeight > cellElem.offsetHeight) {
+								cellElem.setAttribute("title", contentEl.innerText);
+							}
+						}
+					}
+				}
+			}
 		},
 
 		// binds the custom widgets associated to cells to the
@@ -430,7 +489,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				return;
 
 			var widget = Wisej.Core.getComponent(cellElem.getAttribute("qx-widget-id"));
-			if (widget) {
+			if (widget && !widget.isDisposed()) {
 
 				var table = this.getTable();
 				var repository = this.__widgetRepository;
@@ -546,7 +605,13 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 						anyRemoved = true;
 					}
 					else if (root.__elem.offsetWidth == 0) {
-						root.removeAll();
+
+						try {
+							root.removeAll();
+						} catch (error) {
+							// ignore.
+						}
+
 						root.destroy();
 						anyRemoved = true;
 						repository[i] = null;
