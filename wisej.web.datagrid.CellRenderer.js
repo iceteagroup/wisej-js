@@ -1273,8 +1273,8 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 
 			// content element.
 			this._contentClassName = styleMgr.getCssClass(appearance + "/content", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";word-wrap:normal");
-			this._contentMiddleClassName = styleMgr.getCssClass(appearance + "/content/middle", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:50%;transform:translateY(-50%);-webkit-transform:translateY(-50%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
-			this._contentBottomClassName = styleMgr.getCssClass(appearance + "/content/bottom", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:100%;transform:translateY(-100%);-webkit-transform:translateY(-100%);max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
+			this._contentMiddleClassName = styleMgr.getCssClass(appearance + "/content/middle", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:50%;transform:translateY(-50%);-webkit-transform:translateY(-50%);padding-bottom:1px;max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
+			this._contentBottomClassName = styleMgr.getCssClass(appearance + "/content/bottom", {}, wisej.web.datagrid.CellRenderer.DEFAULT_CONTENT_CSS + ";height:auto;top:100%;transform:translateY(-100%);-webkit-transform:translateY(-100%);padding-bottom:1px;max-height:100%;white-space:inherit;word-wrap:inherit;text-overflow:inherit");
 			this._contentSpacerClassName = styleMgr.getCssClass(appearance + "/spacer", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
 			this._contentButtonSpacerClassName = styleMgr.getCssClass(appearance + "/open", {}, wisej.web.datagrid.CellRenderer.DEFAULT_SPACER_CSS);
 			this._contentExpandedClassName = styleMgr.getCssClass(appearance + "/open", { expanded: true }, wisej.web.datagrid.CellRenderer.DEFAULT_OPEN_CSS);

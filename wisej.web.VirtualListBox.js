@@ -724,6 +724,18 @@ qx.Class.define("wisej.web.VirtualListBox", {
 			}
 		},
 
+		// overridden.
+		_updateScrollAreaLayout: function (paneCell, controls) {
+
+			// change the layout of the scroll area when we have a tools container.
+			if (this.getChildControl("tools", true)) {
+				this.base(arguments, { row: 1, column: 0 }, controls);
+			}
+			else {
+				this.base(arguments, paneCell, controls);
+			}
+		},
+
 		// overridden
 		_createChildControlImpl: function (id, hash) {
 			var control;

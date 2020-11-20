@@ -399,7 +399,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			// detect if the tap landed on the open/close icons
 			// of a parent row.
-			var role = wisej.utils.Widget.getTargetRole(e.getOriginalTarget());
+			var role = wisej.utils.Widget.getTargetRole(e);
 			var isParentRowTap = (role === "open" || role === "close");
 
 			var pageX = e.getDocumentLeft();
@@ -1598,7 +1598,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				return;
 			}
 
-			var role = wisej.utils.Widget.getTargetRole(e.getOriginalTarget());
+			var role = wisej.utils.Widget.getTargetRole(e);
 
 			switch (e.getType()) {
 
@@ -1671,7 +1671,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				}
 			}
 
-			var role = wisej.utils.Widget.getTargetRole(e.getOriginalTarget());
+			var role = wisej.utils.Widget.getTargetRole(e);
 
 			switch (e.getType()) {
 

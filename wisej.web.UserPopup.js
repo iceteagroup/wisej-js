@@ -264,7 +264,6 @@ qx.Class.define("wisej.web.UserPopup", {
 				case "popup":
 					control = new wisej.web.userPopup.Popup();
 					control.getContentElement().setStyle("overflow", "visible");
-					control.add(this);
 					this.__updatePopupResizableEdges(control);
 					break;
 			}

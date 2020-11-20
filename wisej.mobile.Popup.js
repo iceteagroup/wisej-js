@@ -53,6 +53,8 @@ qx.Class.define("wisej.mobile.Popup", {
 			}
 		}
 
+		this.setDomMove(true);
+
 		this.base(arguments, layout);
 	},
 

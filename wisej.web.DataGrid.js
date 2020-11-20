@@ -1789,15 +1789,14 @@ qx.Class.define("wisej.web.DataGrid", {
 							break;
 
 						case "Left":
-							if (this.__canMoveEditingCell(e.getTarget(), "Left")) {
+							if (this._canMoveEditingCell(target, "Left")) {
 								this.moveFocusedCell(-1, 0);
 								consumed = true;
 							}
 							break;
 
 						case "Right":
-							var editor = e.getTarget();
-							if (this.__canMoveEditingCell(e.getTarget(), "Right")) {
+							if (this._canMoveEditingCell(target, "Right")) {
 								this.moveFocusedCell(1, 0);
 								consumed = true;
 							}
@@ -1999,7 +1998,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 		// Determines whether the editor wants the Left or Right keys
 		// or the datagrid can move the current cell.
-		__canMoveEditingCell: function (editor, key) {
+		_canMoveEditingCell: function (editor, key) {
 
 			// verify that the editor allows for text selection methods.
 			if (!(editor.getValue

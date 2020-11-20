@@ -135,7 +135,7 @@ qx.Class.define("wisej.web.TreeView", {
 		 * 
 		 * Determines whether a right click event ("contextmenu") selects the node under the pointer.
 		 */
-		rightClickSelection: {init:false, check:"Boolean",apply:"_applyRightClickSelection"},
+		rightClickSelection: { init: false, check: "Boolean", apply: "_applyRightClickSelection" },
 
 		// Node Icons.
 

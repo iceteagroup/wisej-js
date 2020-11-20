@@ -28,6 +28,16 @@ qx.Class.define("wisej.web.ScrollablePage", {
 
 		this.base(arguments);
 
+		// fire the "created" event asynchronously to let creators subscribe.
+		qx.event.Timer.once(function () { this.fireEvent("created") }, this, 0);
+	},
+
+	events: {
+
+		/**
+		 * Fired when the page is created.
+		 */
+		created: "qx.event.type.Event"
 	},
 
 	properties: {

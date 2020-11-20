@@ -49,6 +49,17 @@ qx.Class.define("wisej.web.Desktop", {
 
 		this.__taskbar = this.getChildControl("taskbar");
 		this.__workspace = this.getChildControl("workspace");
+
+		// fire the "created" event asynchronously to let creators subscribe.
+		qx.event.Timer.once(function () { this.fireEvent("created") }, this, 0);
+	},
+
+	events: {
+
+		/**
+		 * Fired when the page is created.
+		 */
+		created: "qx.event.type.Event"
 	},
 
 	events: {
@@ -203,6 +214,7 @@ qx.Class.define("wisej.web.Desktop", {
 
 			this.getChildControl("taskbar").setAutoHide(value);
 		},
+
 		/**
 		 * Applies the taskbarPosition property.
 		 */

@@ -105,7 +105,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 					switch (animation.event)
 					{
 						case "close":
-							component.destroy();
+							animation.destroyComponent.call(component);
 							break;
 
 						case "disappear":
@@ -205,13 +205,17 @@ qx.Class.define("wisej.web.extender.Animation", {
 		__registerCloseAnimation: function (animation, component) {
 
 			var me = this;
-			component.addListenerOnce("close", function (e) {
 
-				me.run(animation, component);
+			// override the qx.ui.core.Widget.destroy() method to
+			// run the animation before the component is destroyed.
+			if (!animation.destroyComponent) {
 
-				// stop the component from getting destroyed only once.
-				e.preventDefault();
-			});
+				// override and restore the hide method as soon as it's called.
+				animation.destroyComponent = component.destroy;
+				component.destroy = function () {
+					me.run(animation, component);
+				};
+			}
 		},
 
 		__registerDisappearAnimation: function (animation, component) {
@@ -249,6 +253,11 @@ qx.Class.define("wisej.web.extender.Animation", {
 			{
 				el.hide = animation.hideElement;
 				delete animation.hideElement;
+			}
+
+			if (animation.destroyComponent) {
+				component.destroy = animation.destroyComponent;
+				delete animation.destroyComponent;
 			}
 
 			// try to stop the animation.

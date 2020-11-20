@@ -125,15 +125,13 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 
 			var selectionModel = this.getSelectionModel();
 
-			if (!this.isMultiSelect())
-				selectionModel.resetSelection();
-
 			col = this.__adjustColIndex(col);
 			row = this.__adjustRowIndex(row);
 			if (col == null || row == null)
 				return;
 
 			switch (e.getModifiers()) {
+
 				case 0:
 					selectionModel.setSelectionRange(col, row);
 					break;
@@ -168,18 +166,16 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 
 			var selectionModel = this.getSelectionModel();
 
-			if (!this.isMultiSelect())
-				selectionModel.resetSelection();
-
 			col = this.__adjustColIndex(col);
 			row = this.__adjustRowIndex(row);
 			if (col == null || row == null)
 				return;
 
+			var multi = this.isMultiSelect();
 			var lead = selectionModel.getLead();
 			var anchor = selectionModel.getAnchor();
 
-			if (e.isShiftPressed()) {
+			if (multi && e.isShiftPressed()) {
 
 				if (selectionModel.isSelectionEmpty() || (col != lead.col || row != lead.row)) {
 
@@ -200,7 +196,8 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 					}
 				}
 			}
-			else if (e.isCtrlOrCommandPressed()) {
+			else if (multi && e.isCtrlOrCommandPressed()) {
+
 				if (selectionModel.isCellSelected(col, row)) {
 					selectionModel.removeSelectionRange(col, row);
 				} else {
@@ -208,6 +205,7 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 				}
 			}
 			else {
+
 				selectionModel.setSelectionRange(col, row);
 			}
 		},

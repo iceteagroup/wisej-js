@@ -37,7 +37,7 @@ qx.Class.define("wisej.utils.Loader", {
 		 *
 		 * Loads the packages synchronously in the order they are defined.
 		 *
-		 * Each package has a unique name and a url: i.e. {id:"jQuery", url:"..."}.
+		 * Each package has a unique name and a url: i.e. {id:"jQuery", url:"...", integrity:""}.
 		 *
 		 * The callback method is invoked when all the packages are loaded, the function
 		 * takes one result argument that receives the value "complete" or "error".
@@ -63,7 +63,7 @@ qx.Class.define("wisej.utils.Loader", {
 				var pkg = list[index];
 				if (pkg && pkg.id && pkg.url) {
 
-					wisej.utils.Loader.__load(pkg.id, pkg.url, function (result) {
+					wisej.utils.Loader.__load(pkg.id, pkg.url, pkg.integrity, function (result) {
 
 						index++;
 						if (result == "error")
@@ -97,7 +97,7 @@ qx.Class.define("wisej.utils.Loader", {
 		/**
 		 * Loads the specified script.
 		 */
-		__load: function (id, url, callback) {
+		__load: function (id, url, integrity, callback) {
 
 			if (!id || !url)
 				return;
@@ -125,7 +125,7 @@ qx.Class.define("wisej.utils.Loader", {
 			}
 
 			var callbacks = [];
-			var pkg = new qx.io.part.Package([url], id);
+			var pkg = new qx.io.part.Package([url], id, false, [integrity]);
 
 			cache[id] = {
 				package: pkg,

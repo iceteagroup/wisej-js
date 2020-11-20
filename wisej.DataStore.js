@@ -138,7 +138,7 @@ qx.Class.define("wisej.DataStore", {
 							}
 						}
 
-						// if not found, still callback with en empty data set.
+						// if not found, still callback with an empty data set.
 						if (callback)
 							callback.call(context, null);
 					}

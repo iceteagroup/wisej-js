@@ -157,6 +157,46 @@ qx.Class.define("wisej.web.listview.GridView", {
 		},
 
 		/**
+		 * Returns the selected items in a collection of ranges.
+		 */
+		getSelectionRanges: function () {
+
+			var ranges = this.base(arguments);
+
+			if (ranges != null && ranges.length > 0) {
+				ranges = ranges.map(function (r) {
+					return {
+						minIndex: r.minRow,
+						maxIndex: r.maxRow
+					};
+				});
+			}
+			return ranges;
+		},
+
+		/**
+		 * Updates the selected items.
+		 */
+		setSelectionRanges: function (ranges) {
+
+			// convert the incoming selection ranges into
+			// the ranges usable by the base wisej.web.DataGrid.
+
+			if (ranges != null && ranges.length > 0) {
+				ranges = ranges.map(function (r) {
+					return {
+						minCol: -1,
+						maxCol: -1,
+						minRow: r.minIndex,
+						maxRow: r.maxIndex
+					};
+				});
+			}
+
+			this.base(arguments, ranges);
+		},
+
+		/**
 		 * Returns the number of rows currently loaded.
 		 */
 		_getRowCount: function () {
@@ -185,6 +225,10 @@ qx.Class.define("wisej.web.listview.GridView", {
 						return;
 
 					this.__owner.fireItemEvent(e, "gridCellRightClick", e.getData());
+					break;
+
+				case "selectionChanged":
+					this.__owner.fireDataEvent("selectionChanged", this.getSelectionRanges());
 					break;
 
 				default:

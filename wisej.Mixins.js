@@ -722,7 +722,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 
 					// detect the role of the element that caused the event.
 					if (e.getNativeEvent) {
-						var role = wisej.utils.Widget.getTargetRole(e.getOriginalTarget());
+						var role = wisej.utils.Widget.getTargetRole(e);
 						if (role) {
 							args = args || {};
 							args.role = role;
@@ -1380,10 +1380,9 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 
 		// unregister from parent and clear the parent reference.
 		var parent = this.getParent();
-		if (parent) {
-			this.core.unregisterComponent(this, parent);
+		this.core.unregisterComponent(this, parent);
+		if (parent)
 			qx.util.PropertyUtil.setUserValue(this, "parent", null);
-		}
 
 		// release related objects.
 		this._disposeObjects("__blocker");

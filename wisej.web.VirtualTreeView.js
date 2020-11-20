@@ -599,8 +599,23 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			try {
 
 				this.getSelection().removeAll();
-				if (value && value.length > 0)
+				if (value && value.length > 0) {
+
+					// expand all parents.
+					var selected = value;
+					for (var i = 0; i < selected.length; i++) {
+						var folder = selected[i];
+						// go up all parents and open them
+						while (folder.getParentNode() != null) {
+							folder = folder.getParentNode();
+							folder.setExpanded(true);
+						}
+					}
+
+					this.buildLookupTable();
+
 					this.getSelection().append(value);
+				}
 
 			} finally {
 
@@ -1080,10 +1095,8 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 				editor.endEdit(true);
 			}
 
-			item.removeState("opened");
 			item.removeState("hovered");
 			item.removeState("selected");
-			item.removeState("disabled");
 			item.removeState("editing");
 			item.showLoader(false);
 		},

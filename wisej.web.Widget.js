@@ -107,7 +107,7 @@ qx.Class.define("wisej.web.Widget", {
 
 				var pkg = packages[index];
 				if (pkg.name && pkg.source) {
-					list.push({ id: pkg.name, url: pkg.source });
+					list.push({ id: pkg.name, url: pkg.source, integrity: pkg.integrity });
 				}
 			}
 
@@ -176,15 +176,6 @@ qx.Class.define("wisej.web.Widget", {
 				this.__renderWidget();
 			});
 
-		},
-
-		// overridden
-		destroy: function () {
-
-			this.base(arguments);
-
-			if (this._onDestroyed)
-				this._onDestroyed();
 		},
 
 		// overridden

@@ -408,7 +408,6 @@ qx.Class.define("wisej.web.ComboBox", {
 
 				// clear?
 				if (items.clear) {
-					selectedIndex = -1;
 					this.destroyChildren();
 				}
 
@@ -1049,8 +1048,11 @@ qx.Class.define("wisej.web.ComboBox", {
 					this.focus();
 			}
 
-			// notify the server the drop down list was opened or closed.
-			this.fireEvent(opened ? "open" : "close");
+			// notify the server the drop down list was opened or closed
+			// after the selection events have fired.
+			qx.event.Timer.once(function () {
+				this.fireEvent(opened ? "open" : "close");
+			}, this, 0);
 
 			if (opened && this.getDropDownStyle() !== "dropDownList") {
 

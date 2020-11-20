@@ -417,19 +417,31 @@ qx.Class.define("wisej.utils.Widget", {
 		/**
 		 * Returns the value of the "role" attribute of the closest containing element up to the widget container.
 		 *
-		 * @param el {HTMLElement} the target element from where to retrieve the role.
+		 * @param e {qx.event.type.Event} the event data from where to retrieve the role of the clicked element.
 		 */
-		getTargetRole: function (el) {
+		getTargetRole: function (e) {
 
+			var el = e.getOriginalTarget();
 			if (!el || !el.nodeType)
+				return null;
+
+			var containerEl = e.getTarget().getContentElement().getDomElement();
+			if (!containerEl || !containerEl.nodeType)
 				return null;
 
 			var role = null;
 			for (var node = el; node != null; node = node.parentNode) {
 
 				role = node.getAttribute ? node.getAttribute("role") : null;
-				if (role != null)
+				if (role != null || node === containerEl)
 					break;
+			}
+
+			// try with the name of the child component.
+			if (!role) {
+				var child = qx.ui.core.Widget.getWidgetByElement(el);
+				if (child)
+					role = child.$$subcontrol;
 			}
 
 			return role;

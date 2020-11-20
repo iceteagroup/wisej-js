@@ -49,6 +49,14 @@ qx.Class.define("wisej.web.TabControl", {
 		this.addListener("focus", this._updateFocusedButton);
 		this.addListener("blur", this._updateFocusedButton);
 
+		// add local state properties.
+		this.setStateProperties(this.getStateProperties().concat(["scrollX", "scrollY"]));
+
+		// handle scroll events to set the state dirty.
+		this.__scrollPane = this.getChildControl("bar").getChildControl("scrollpane");
+		this.__scrollPane.addListener("scrollX", function () { this.setDirty(true); }, this);
+		this.__scrollPane.addListener("scrollY", function () { this.setDirty(true); }, this);
+
 		// enable null selection for when all tabs are hidden.
 		this.__radioGroup.setAllowEmptySelection(true);
 	},
@@ -150,6 +158,9 @@ qx.Class.define("wisej.web.TabControl", {
 		// suspends sending some events back to the server.
 		__suspendEvents: false,
 
+		// tab buttons scroller.
+		__scrollPane: null,
+
 		/**
 		 * getTabRects
 		 *
@@ -158,7 +169,10 @@ qx.Class.define("wisej.web.TabControl", {
 		getTabRects: function () {
 
 			// add the bounds of the tab-buttons container.
-			var barBounds = this.getChildControl("bar").getBounds();
+			var tabBar = this.getChildControl("bar");
+			var tabScroller = tabBar.getChildControl("scrollpane");
+			var tabBarBounds = tabBar.getBounds();
+			var tabScrollerBounds = tabScroller.getBounds();
 
 			var rects = [], bounds;
 			var pages = this.getChildren();
@@ -173,8 +187,8 @@ qx.Class.define("wisej.web.TabControl", {
 				}
 				else {
 					rects.push({
-						top: bounds.top + barBounds.top,
-						left: bounds.left + barBounds.left,
+						top: bounds.top + tabBarBounds.top + tabScrollerBounds.top,
+						left: bounds.left + tabBarBounds.left + tabScrollerBounds.left,
 						width: bounds.width,
 						height: bounds.height
 					});
@@ -182,6 +196,18 @@ qx.Class.define("wisej.web.TabControl", {
 			}
 
 			return rects;
+		},
+
+		/**
+		 * getTabRect
+		 * 
+		 * Returns  the bounding rectangle for the tab button of the tab page at the specified index.
+		 * 
+		 * @param index {Integer} Index of the tab page.
+		 */
+		getTabRect: function (index) {
+
+			return this.getTabRects()[index];
 		},
 
 		/**
@@ -226,6 +252,22 @@ qx.Class.define("wisej.web.TabControl", {
 				tabRects: this.getTabRects(),
 				pageInsets: this.getPageInsets()
 			};
+		},
+
+		/**
+		 * Returns the horizontal scrolling position of the tab bar.
+		 */
+		getScrollX: function () {
+
+			return this.__scrollPane.getScrollX();
+		},
+
+		/**
+		 * Returns the vertical scrolling position of the tab bar.
+		 */
+		getScrollY: function () {
+
+			return this.__scrollPane.getScrollY();
 		},
 
 		/**
@@ -556,9 +598,12 @@ qx.Class.define("wisej.web.TabControl", {
 					page._setOrientation(orientation);
 					this._updateTabButtonSize(button);
 				}
+
+				qx.ui.core.queue.Widget.add(this, "updateMetrics");
 			}
 
 			if (jobs["updateMetrics"]) {
+
 				// update the metrics on the server
 				this.__updateMetrics();
 			}
@@ -586,6 +631,8 @@ qx.Class.define("wisej.web.TabControl", {
 				this.setSelection([page]);
 				this.__suspendEvents = false;
 			}
+
+			qx.ui.core.queue.Widget.add(this, "updateMetrics");
 		},
 
 		// overridden to propagate the orientation.
@@ -610,6 +657,8 @@ qx.Class.define("wisej.web.TabControl", {
 				this.setSelection([page]);
 				this.__suspendEvents = false;
 			}
+
+			qx.ui.core.queue.Widget.add(this, "updateMetrics");
 		},
 
 		// overridden to suppress "beforeChange".
@@ -620,6 +669,7 @@ qx.Class.define("wisej.web.TabControl", {
 			this.__suspendEvents = false;
 
 			this.getChildControl("bar").resetVisibilityMenu();
+			qx.ui.core.queue.Widget.add(this, "updateMetrics");
 		},
 
 		/**
@@ -737,13 +787,14 @@ qx.Class.define("wisej.web.TabControl", {
 				if (selected)
 					pageToMove.show();
 
-				// update the swapped tab buttons on the server, including the
-				// new tab rectamgles.
+				// update the swapped tab buttons on the server.
 				this.fireDataEvent("tabIndexChanged", {
 					oldIndex: oldIndex,
-					newIndex: newIndex,
-					tabRects: this.getTabRects()
+					newIndex: newIndex
 				});
+
+				// update the new bounds of all the tabs on the server.
+				this.__updateMetrics();
 
 			}
 			finally {
@@ -762,15 +813,6 @@ qx.Class.define("wisej.web.TabControl", {
 
 			var page = e.getTarget();
 			this.fireDataEvent("close", page);
-		},
-
-		// overridden to update the page metrics on the server.
-		renderLayout: function (left, top, width, height) {
-			var changes = this.base(arguments, left, top, width, height);
-
-			if (changes)
-				// schedule the updateMetrics callback.
-				qx.ui.core.queue.Widget.add(this, "updateMetrics");
 		},
 
 		// overridden
@@ -823,12 +865,19 @@ qx.Class.define("wisej.web.TabControl", {
 
 			if (!wisej.web.DesignMode) {
 
-				var insets = this.getPageInsets();
-				if (insets) {
-					this.fireDataEvent("updateMetrics", {
-						pageInsets: insets
-					});
+				if (this.getBounds() == null) {
+					this.addListenerOnce("appear", function () {
+						qx.ui.core.queue.Widget.add(this, "updateMetrics");
+					}, this);
+					return;
 				}
+
+				qx.ui.core.queue.Layout.flush();
+
+				this.fireDataEvent("updateMetrics", {
+					tabRects: this.getTabRects(),
+					pageInsets: this.getPageInsets()
+				});
 			}
 		}
 	}
@@ -1062,6 +1111,10 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 				this.getButton().show();
 			}
+
+			var tabControl = this.getTabControl();
+			if (tabControl)
+				qx.ui.core.queue.Widget.add(tabControl, "updateMetrics");
 		},
 
 		/**
@@ -1208,7 +1261,6 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		__onButtonResize: function (e) {
 
 			if (!wisej.web.DesignMode) {
-
 				this.fireDataEvent("resizeTabButton", e.getData());
 			}
 		},

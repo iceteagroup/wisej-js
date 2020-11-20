@@ -76,6 +76,13 @@ qx.Class.define("wisej.web.SplitButton", {
 		iconSize: { init: null, nullable: true, check: "Map", apply: "_applyIconSize", themeable: true },
 
 		/**
+		 * IconSpacing property.
+		 * 
+		 * Gets or sets the spacing between the icon and the label.
+		 */
+		iconSpacing: { init: 10, check: "Integer", apply: "_applyIconSpacing", themeable: true },
+
+		/**
 		 * IconAlign property.
 		 *
 		 * Gets or sets the alignment of the icon.
@@ -245,6 +252,15 @@ qx.Class.define("wisej.web.SplitButton", {
 		_applyIconSize: function (value, old) {
 
 			this.getChildControl("button").setIconSize(value);
+		},
+
+
+		/**
+		 * Applies the IconSpacing property.
+		 */
+		_applyIconSpacing: function (value, old) {
+
+			this.getChildControl("button").setIconSpacing(value);
 		},
 
 		/**

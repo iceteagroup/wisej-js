@@ -485,11 +485,12 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 			switch (id) {
 				case "textfield":
-					control = this.__createInnerTextField();
-					control.setFocusable(false);
+					control = this.__createInnerTextField().set({
+						focusable: false,
+						minWidth: 1,
+						minHeight: 1
+					});
 					control.addState("inner");
-					control.setMinWidth(1);
-					control.setMinHeight(1);
 
 					this._add(control, { flex: 1 });
 					break;

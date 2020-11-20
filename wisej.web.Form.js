@@ -57,9 +57,18 @@ qx.Class.define("wisej.web.Form", {
 		// block "contextmenu" from bubbling up to the Page or Desktop.
 		this.addListener("longtap", function (e) { e.stopPropagation(); }, this);
 		this.addListener("contextmenu", function (e) { e.stopPropagation(); }, this);
+
+
+		// fire the "created" event asynchronously to let creators subscribe.
+		qx.event.Timer.once(function () { this.fireEvent("created") }, this, 0);
 	},
 
 	events: {
+
+		/**
+		 * Fired when the form is created.
+		 */
+		created: "qx.event.type.Event",
 
 		/** 
 		 * Fired on scrollbar movements.

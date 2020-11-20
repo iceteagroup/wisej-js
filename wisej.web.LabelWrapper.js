@@ -149,6 +149,32 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		},
 
 		/**
+		 * Applies the font property.
+		 */
+		_applyFont: function (value, old) {
+
+			var label = this.getLabel();
+			var editor = this.getEditor();
+
+			// if the font being set is null:
+			if (!value) {
+
+				// use the font set in the theme.
+				label.syncAppearance();
+				value = qx.util.PropertyUtil.getThemeValue(label, "font");
+
+				// otherwise use the font set on the wrapped editor.
+				if (!value && editor)
+					value = editor.getFont();
+			}
+
+			if (!value)
+				this.resetFont();
+			else
+				label.setFont(value);
+		},
+
+		/**
 		 * Applies the TextAlign property.
 		 */
 		_applyTextAlign: function (value, old) {

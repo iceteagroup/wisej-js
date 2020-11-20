@@ -453,7 +453,6 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 
 				// clear?
 				if (items.clear && model.getLength() > 0) {
-					selectedIndex = -1;
 					model.setAutoDisposeItems(true);
 					model.dispose();
 					model = new qx.data.Array();

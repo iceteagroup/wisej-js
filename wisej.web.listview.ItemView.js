@@ -227,6 +227,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		setFocusedItem: function (index) {
 
 			this.scrollIntoView(index);
+			this.__selectionManager.setLeadItem(index);
 			this.__selectionManager.replaceSelection([index]);
 		},
 
@@ -767,7 +768,13 @@ qx.Class.define("wisej.web.listview.ItemView", {
 					this.__internalChange = true;
 
 				try {
+					var leadItem = this.__selectionManager.getLeadItem();
+
 					this.__selectionManager.replaceSelection(items);
+
+					// preserve the focused item.
+					if (leadItem != null)
+						this.__selectionManager.setLeadItem(leadItem);
 				}
 				finally {
 					if (internal === true)
@@ -1013,9 +1020,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			// each selected item in the selection array is a map indicting
 			// the select row and column.
 			var selectionRanges = this.getSelectionRanges(e.getData());
-			this.__owner.fireDataEvent("selectionChanged", {
-				ranges: selectionRanges
-			});
+			this.__owner.fireDataEvent("selectionChanged", selectionRanges);
 		},
 	},
 

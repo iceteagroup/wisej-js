@@ -96,6 +96,13 @@ qx.Class.define("wisej.web.Button", {
 		iconSize: { init: null, nullable: true, check: "Map", apply: "_applyIconSize", themeable: true },
 
 		/**
+		 * IconSpacing property.
+		 * 
+		 * Gets or sets the spacing between the icon and the label.
+		 */
+		iconSpacing: { init: 10, check: "Integer", apply: "_applyIconSpacing", themeable: true },
+
+		/**
 		 * IconAlign property.
 		 *
 		 * Gets or sets the alignment of the icon.
@@ -383,6 +390,43 @@ qx.Class.define("wisej.web.Button", {
 		},
 
 		/**
+		 * Applies the IconSpacing property.
+		 */
+		_applyIconSpacing: function (value, old) {
+
+			if (value == null) {
+				this.resetIconSpacing();
+				return;
+			}
+
+			var icon = this.getChildControl("icon");
+			var label = this.getChildControl("label");
+
+			icon.resetMargin(0);
+
+			if (icon.isVisible() && label.isVisible())
+
+				switch (this.getTextIconRelation()) {
+
+					case "imageAboveText":
+						icon.setMarginBottom(value);
+						break;
+
+					case "textAboveImage":
+						icon.setMarginTop(value);
+						break;
+
+					case "imageBeforeText":
+						icon.setMarginRight(value);
+						break;
+
+					case "textBeforeImage":
+						icon.setMarginLeft(value);
+						break;
+				}
+		},
+
+		/**
 		 * Applies the IconAlign property.
 		 *
 		 * Changes the position of the icon child widget.
@@ -433,6 +477,10 @@ qx.Class.define("wisej.web.Button", {
 
 				icon.setAlignX(alignX);
 				icon.setAlignY(alignY);
+
+				// update the label cell in the grid layout when then
+				// icon is shown or hidden.
+				this._applyTextIconRelation(this.getTextIconRelation());
 			}
 
 			if (this.getTextIconRelation() == "overlay")
@@ -495,6 +543,10 @@ qx.Class.define("wisej.web.Button", {
 				label.setAlignX(alignX);
 				label.setAlignY(alignY);
 				label.setTextAlign(textAlign);
+
+				// update the label cell in the grid layout when then
+				// icon is shown or hidden.
+				this._applyTextIconRelation(this.getTextIconRelation());
 			}
 		},
 
@@ -510,6 +562,8 @@ qx.Class.define("wisej.web.Button", {
 			var icon = this.getChildControl("icon");
 			var label = this.getChildControl("label");
 			var arrow = this.getChildControl("arrow", true);
+			var textAlign = this.getTextAlign();
+			var iconAlign = this.getIconAlign();
 
 			// NOTE: when the relation is overlay, the icon is not set here, it is set
 			// as an additional background image.
@@ -525,6 +579,9 @@ qx.Class.define("wisej.web.Button", {
 				this._updateBackgroundImages();
 			}
 
+			layout.setRowFlex(0, 1);
+			layout.setRowFlex(1, 1);
+			layout.setColumnFlex(1, 1);
 			layout.setColumnFlex(0, icon.isVisible() ? 1 : 0);
 
 			if (!icon.isVisible()) {
@@ -551,6 +608,13 @@ qx.Class.define("wisej.web.Button", {
 					label.setLayoutProperties({ row: 1, column: 0 });
 					if (arrow) arrow.setLayoutProperties({ row: 0, column: 2, rowSpan: 2 });
 
+					if (icon.isVisible()) {
+						if (textAlign.startsWith("top") && iconAlign.startsWith("top"))
+							layout.setRowFlex(0, 0);
+						else if (textAlign.startsWith("bottom") && iconAlign.startsWith("bottom"))
+							layout.setRowFlex(1, 0);
+					}
+
 					break;
 
 				case "textAboveImage":
@@ -559,6 +623,13 @@ qx.Class.define("wisej.web.Button", {
 					icon.setLayoutProperties({ row: 1, column: 0 });
 					label.setLayoutProperties({ row: 0, column: 0 });
 					if (arrow) arrow.setLayoutProperties({ row: 0, column: 2, rowSpan: 2 });
+
+					if (icon.isVisible()) {
+						if (textAlign.startsWith("top") && iconAlign.startsWith("top"))
+							layout.setRowFlex(0, 0);
+						else if (textAlign.startsWith("bottom") && iconAlign.startsWith("bottom"))
+							layout.setRowFlex(1, 0);
+					}
 
 					break;
 
@@ -569,6 +640,13 @@ qx.Class.define("wisej.web.Button", {
 					label.setLayoutProperties({ row: 0, column: 1 });
 					if (arrow) arrow.setLayoutProperties({ row: 0, column: 2, rowSpan: 1 });
 
+					if (icon.isVisible()) {
+						if (textAlign.endsWith("Left") && iconAlign.endsWith("Left"))
+							layout.setColumnFlex(0, 0);
+						else if (textAlign.endsWith("Right") && iconAlign.endsWith("Right"))
+							layout.setColumnFlex(1, 0);
+					}
+
 					break;
 
 				case "textBeforeImage":
@@ -578,8 +656,17 @@ qx.Class.define("wisej.web.Button", {
 					label.setLayoutProperties({ row: 0, column: 0 });
 					if (arrow) arrow.setLayoutProperties({ row: 0, column: 2, rowSpan: 1 });
 
+					if (icon.isVisible()) {
+						if (textAlign.endsWith("Left") && iconAlign.endsWith("Left"))
+							layout.setColumnFlex(0, 0);
+						else if (textAlign.endsWith("Right") && iconAlign.endsWith("Right"))
+							layout.setColumnFlex(1, 0);
+					}
+
 					break;
 			}
+
+			this._applyIconSpacing(this.getIconSpacing());
 		},
 
 		// returns the list of background images overriding the

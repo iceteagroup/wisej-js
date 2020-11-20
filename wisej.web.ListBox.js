@@ -239,7 +239,6 @@ qx.Class.define("wisej.web.ListBox", {
 
 				// clear?
 				if (items.clear) {
-					this.resetSelection();
 					this.destroyChildren();
 				}
 
