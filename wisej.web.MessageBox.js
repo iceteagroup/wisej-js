@@ -57,7 +57,7 @@ qx.Class.define("wisej.web.MessageBox", {
 
 		/**
 		 * List of buttons to show in the messagebox.
-		 * This property is a map where he fields id the button id and the value is the localized text.
+		 * This property is a map where the field name is the button id and the value is the localized text.
 		 */
 		buttons: { init: { "ok": "OK" }, check: "Map" },
 

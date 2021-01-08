@@ -863,7 +863,7 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			// update the label when the combobox is not editable (DropDownList)
 			// and the selection is empty.
-			if (this.getSelectedIndex() === -1) {
+			if (this.getSelectedIndex() === -1 && value || old) {
 
 				var labelField = this.getChildControl("labelfield");
 				labelField.setValue(value);
@@ -1170,7 +1170,6 @@ qx.Class.define("wisej.web.ComboBox", {
 			try {
 				var current = e.getData();
 				var icon = this.getChildControl("icon");
-				var labelfield = this.getChildControl("labelfield");
 
 				if (current && current.length > 0) {
 
@@ -1202,7 +1201,7 @@ qx.Class.define("wisej.web.ComboBox", {
 				}
 				else {
 
-					// update the textfield only if the combobox
+					// update the text only if the combobox
 					// is not editable ("dropDownList") otherwise
 					// simply set the selected index to -1 and 
 					// keep the invalid text.
@@ -1210,10 +1209,6 @@ qx.Class.define("wisej.web.ComboBox", {
 						this.setSelectedIndex(-1);
 					else
 						this.setValue("");
-
-					// update the labelfield.
-					labelfield.setValue(this.getPlaceholder());
-					labelfield.setTextColor("text-placeholder");
 
 					// update the icon.
 					icon.exclude();
@@ -1801,9 +1796,18 @@ qx.Class.define("wisej.web.ComboBox", {
 			value = this._applyTextTransform(value);
 
 			var labelField = this.getChildControl("labelfield");
-			if (labelField.isVisible()) {
-				labelField.resetTextColor();
+
+			if (!value
+				&& this.getPlaceholder()
+				&& this.getSelectedIndex() == -1
+				&& this.getListSelectedItem() == null) {
+
+				labelField.setValue(this.getPlaceholder());
+				labelField.setTextColor("text-placeholder");
+			}
+			else {
 				labelField.setValue(value);
+				labelField.resetTextColor();
 			}
 
 			var textField = this.getChildControl("textfield");
@@ -2127,16 +2131,6 @@ qx.Class.define("wisej.web.UserComboBox", {
 	},
 
 	members: {
-
-		// interface implementation
-		setValue: function (value) {
-
-			this.base(arguments, value);
-
-			var labelField = this.getChildControl("labelfield");
-			labelField.setValue(value);
-			labelField.resetTextColor();
-		},
 
 		/**
 		 * Applies the readOnly property.

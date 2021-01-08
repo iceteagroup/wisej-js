@@ -248,13 +248,11 @@ qx.Class.define("wisej.web.extender.ToolTip", {
 					target = target.getButton();
 
 				tooltip.setOpener(target);
-				tooltip.resetPlaceMethod();
 				tooltip.placeToWidget(target);
 				manager.setCurrent(tooltip);
 			}
 			else {
 				tooltip.setOpener(null);
-				tooltip.setPlaceMethod("pointer");
 				tooltip.placeToPoint({ left: location.x, top: location.y });
 				manager.setCurrent(tooltip);
 			}

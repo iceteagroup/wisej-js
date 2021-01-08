@@ -986,7 +986,6 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 				// resolve the image aliases and
 				// wait for the images to be loaded before updating the control.
-				var me = this;
 				for (var i = 0; i < images.length; i++) {
 
 					var item = images[i];
@@ -997,12 +996,19 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 						var imageColor = imageUtils.resolveImage(item.image, this.getTextColor());
 
 						if (imageColor.source) {
+
 							item.image = imageColor.source;
 							imageLoader.load(item.image, function (url, entry) {
 
 								count--;
 
 								if (entry.loaded) {
+
+									// update the color in case the app or the theme changed it and it
+									// was not specified in the image URL.
+									if (imageColor.color == null) {
+										imageColor.color = qx.theme.manager.Color.getInstance().resolve(this.getTextColor());
+									}
 
 									// change the svg image color, if specified either in the image source url or as the widget's text color.
 									if (imageColor.color) {
@@ -1015,8 +1021,8 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 								// update the css rules once all images have been loaded.
 								if (count === 0)
-									me.__updateBackgroundCssRule(images);
-							});
+									this.__updateBackgroundCssRule(images);
+							}, this);
 						}
 					}
 					else {

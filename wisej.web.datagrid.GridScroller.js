@@ -1242,7 +1242,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			var paneModel = this.getTablePaneModel();
 			var xPos = paneModel.getX(col);
-
 			if (xPos != -1) {
 
 				var clipperSize = this.__getPaneClipperSize();
@@ -1277,35 +1276,35 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				}
 				if (newScrollX != scrollX)
 					this.setScrollX(newScrollX);
+			}
 
-				// determine the Y scroll. the vertical scrollbar uses the number of rows instead of the pixels.
-				var scrollY = this.getScrollY();
-				var topRow = this.__getFirstVisibleRow();
-				var visibleRows = this.__getVisibleRowCount();
-				var bottomRow = topRow + visibleRows - 1;
+			// determine the Y scroll. the vertical scrollbar uses the number of rows instead of the pixels.
+			var scrollY = this.getScrollY();
+			var topRow = this.__getFirstVisibleRow();
+			var visibleRows = this.__getVisibleRowCount();
+			var bottomRow = topRow + visibleRows - 1;
 
-				if (topRow != null && topRow >= 0 && bottomRow != null && bottomRow >= 0) {
+			if (topRow != null && topRow >= 0 && bottomRow != null && bottomRow >= 0) {
 
-					var newScrollY = scrollY;
-					switch (alignY) {
-						case "top":
+				var newScrollY = scrollY;
+				switch (alignY) {
+					case "top":
+						newScrollY = row;
+						break;
+
+					case "bottom":
+						newScrollY = Math.max(0, row - visibleRows + 1);
+						break;
+
+					default:
+						if (row < topRow)
 							newScrollY = row;
-							break;
-
-						case "bottom":
+						else if (row > bottomRow)
 							newScrollY = Math.max(0, row - visibleRows + 1);
-							break;
-
-						default:
-							if (row < topRow)
-								newScrollY = row;
-							else if (row > bottomRow)
-								newScrollY = Math.max(0, row - visibleRows + 1);
-							break;
-					}
-					if (newScrollY != scrollY)
-						this.setScrollY(newScrollY, true);
+						break;
 				}
+				if (newScrollY != scrollY)
+					this.setScrollY(newScrollY, true);
 			}
 		},
 

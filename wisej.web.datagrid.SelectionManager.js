@@ -92,12 +92,7 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 
 			} else if (e.isRightPressed() && e.getModifiers() == 0) {
 
-				var selectionModel = this.getSelectionModel();
-				if (!selectionModel.isCellSelected(col, row)) {
-
-					// the cell is not selected -> set the selection to the specified cell.
-					selectionModel.setSelectionRange(col, row);
-				}
+				this._handleSelectEvent(col, row, e);
 			}
 		},
 

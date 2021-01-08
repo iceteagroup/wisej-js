@@ -59,6 +59,9 @@ qx.Class.define("wisej.web.TabControl", {
 
 		// enable null selection for when all tabs are hidden.
 		this.__radioGroup.setAllowEmptySelection(true);
+
+		// update the tab pages metrics when the dom elements are finally created.
+		this.addListenerOnce("appear", this._updateMetrics);
 	},
 
 	events: {
@@ -542,9 +545,12 @@ qx.Class.define("wisej.web.TabControl", {
 
 			// set the show property on all child tab pages.
 			var pages = this.getChildren();
-			for (var i = 0; i < pages.length; i++)
+			for (var i = 0; i < pages.length; i++) {
 				this.__applyDisplayToPage(pages[i], value);
+			}
 
+			// update the new bounds of all the tabs on the server.
+			this._updateMetrics();
 		},
 
 		// updates the page to reflect the display property value.
@@ -561,8 +567,9 @@ qx.Class.define("wisej.web.TabControl", {
 			// block/unblock tooltips on all child tab pages.
 			var block = !value;
 			var pages = this.getChildren();
-			for (var i = 0; i < pages.length; i++)
+			for (var i = 0; i < pages.length; i++) {
 				pages[i].getButton().setBlockToolTip(block);
+			}
 		},
 
 		/**
@@ -599,13 +606,13 @@ qx.Class.define("wisej.web.TabControl", {
 					this._updateTabButtonSize(button);
 				}
 
-				qx.ui.core.queue.Widget.add(this, "updateMetrics");
+				this._updateMetrics();
 			}
 
 			if (jobs["updateMetrics"]) {
 
 				// update the metrics on the server
-				this.__updateMetrics();
+				this.__performUpdateMetrics();
 			}
 		},
 
@@ -632,7 +639,7 @@ qx.Class.define("wisej.web.TabControl", {
 				this.__suspendEvents = false;
 			}
 
-			qx.ui.core.queue.Widget.add(this, "updateMetrics");
+			this._updateMetrics();
 		},
 
 		// overridden to propagate the orientation.
@@ -658,7 +665,7 @@ qx.Class.define("wisej.web.TabControl", {
 				this.__suspendEvents = false;
 			}
 
-			qx.ui.core.queue.Widget.add(this, "updateMetrics");
+			this._updateMetrics();
 		},
 
 		// overridden to suppress "beforeChange".
@@ -669,7 +676,7 @@ qx.Class.define("wisej.web.TabControl", {
 			this.__suspendEvents = false;
 
 			this.getChildControl("bar").resetVisibilityMenu();
-			qx.ui.core.queue.Widget.add(this, "updateMetrics");
+			this._updateMetrics();
 		},
 
 		/**
@@ -782,8 +789,6 @@ qx.Class.define("wisej.web.TabControl", {
 
 				this.addAt(pageToMove, newIndex);
 
-				qx.ui.core.queue.Layout.flush();
-
 				if (selected)
 					pageToMove.show();
 
@@ -794,7 +799,7 @@ qx.Class.define("wisej.web.TabControl", {
 				});
 
 				// update the new bounds of all the tabs on the server.
-				this.__updateMetrics();
+				this._updateMetrics();
 
 			}
 			finally {
@@ -859,18 +864,19 @@ qx.Class.define("wisej.web.TabControl", {
 		},
 
 		/**
+		 * Schedules a deferred call to the __updateMetrics method.
+		 */
+		_updateMetrics: function () {
+
+			qx.ui.core.queue.Widget.add(this, "updateMetrics");
+		},
+
+		/**
 		 * Updates the metrics on the server.
 		 */
-		__updateMetrics: function () {
+		__performUpdateMetrics: function () {
 
 			if (!wisej.web.DesignMode) {
-
-				if (this.getBounds() == null) {
-					this.addListenerOnce("appear", function () {
-						qx.ui.core.queue.Widget.add(this, "updateMetrics");
-					}, this);
-					return;
-				}
 
 				qx.ui.core.queue.Layout.flush();
 
@@ -1114,7 +1120,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			var tabControl = this.getTabControl();
 			if (tabControl)
-				qx.ui.core.queue.Widget.add(tabControl, "updateMetrics");
+				tabControl._updateMetrics();
 		},
 
 		/**

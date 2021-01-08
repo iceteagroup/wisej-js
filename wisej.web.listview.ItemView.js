@@ -1765,7 +1765,7 @@ qx.Class.define("wisej.web.listview.ItemDataModel", {
 		*/
 		_loadRowCount: function () {
 
-			if (this.__listview) {
+			if (this.__listview && this._getDataStore()) {
 				this._getDataStore().getRowCount(
 					this._onRowCountLoaded, this);
 			}
@@ -1776,7 +1776,7 @@ qx.Class.define("wisej.web.listview.ItemDataModel", {
 		 */
 		_loadRowData: function (firstRow, lastRow) {
 
-			if (this.__listview) {
+			if (this.__listview && this._getDataStore()) {
 				var args = {
 					first: firstRow,
 					last: lastRow,

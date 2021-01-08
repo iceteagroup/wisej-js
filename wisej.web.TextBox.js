@@ -179,7 +179,7 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 *
 		 * Enables or disables the browser's autocomplete feature.
 		 */
-		autoComplete: { init: "default", check: ["default", "on", "off"], apply: "_applyAutoComplete" },
+		autoComplete: { init: "default", check: "String", apply: "_applyAutoComplete" },
 
 		/**
 		 * AutoCompleteList property.
@@ -281,9 +281,9 @@ qx.Class.define("wisej.web.TextBoxBase", {
 			var textField = this.getChildControl("textfield");
 			textField.getContentElement().setAttribute(
 				"autocomplete",
-				value === "default"
-					? wisej.web.TextBoxBase.getAutoCompleteDefault()
-					: value);
+				value !== "default"
+					? qx.lang.String.hyphenate(value)
+					: wisej.web.TextBoxBase.getAutoCompleteDefault());
 		},
 
 		/**
@@ -947,11 +947,13 @@ qx.Class.define("wisej.web.TextArea", {
 
 			if (old) {
 				qx.event.Registration.removeListener(document.body, "keydown", this.__onDocumentAcceptsReturn, this, true);
+				qx.event.Registration.removeListener(document.body, "keypress", this.__onDocumentAcceptsReturn, this, true);
 			}
 
 			if (value) {
 				// register the document level handlers to override shortcuts.
 				qx.event.Registration.addListener(document.body, "keydown", this.__onDocumentAcceptsReturn, this, true);
+				qx.event.Registration.addListener(document.body, "keypress", this.__onDocumentAcceptsReturn, this, true);
 			}
 		},
 
@@ -972,7 +974,7 @@ qx.Class.define("wisej.web.TextArea", {
 			}
 		},
 
-		// handles "keydown" to stop Enter from adding newlines to the text area.
+		// handles "keypress" to stop Enter from adding newlines to the text area.
 		_onKeyPress: function (e) {
 
 			switch (e.getKeyIdentifier()) {
@@ -1001,7 +1003,12 @@ qx.Class.define("wisej.web.TextArea", {
 
 				case "Enter":
 					if (this.getAcceptsReturn() && e.getModifiers() === 0) {
-						this.__insert("\r\n");
+
+						// insert a newline.
+						if (e.getType() === "keydown") {
+							this.__insert("\n");
+						}
+
 						e.stop();
 					}
 					break;

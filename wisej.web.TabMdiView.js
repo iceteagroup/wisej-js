@@ -20,10 +20,10 @@
 /**
  * wisej.web.TabMdiView
  *
- * The tabbed mdi view inside an mdi parent form.
+ * The tabbed MDI view inside an MDI parent form.
  * This widget extends the standard wisej.web.TabControl class
  * by adding a right docked themed button that shows a thumbnail view of the 
- * mdi child forms.
+ * MDI child forms.
  *
  */
 qx.Class.define("wisej.web.TabMdiView", {
@@ -105,10 +105,6 @@ qx.Class.define("wisej.web.TabMdiView", {
 		add: function (page) {
 
 			this.base(arguments, page);
-
-			// hide the thumbnails page when adding an mdi tab page.
-			//if (!this.__inShowThumbnails && !this.__inHidingThumbnails)
-			//	this.__hideThumbnails();
 
 			if (this.getShowThumbnails())
 				this.getChildControl("bar").setShowPreviewButton(true);
@@ -319,7 +315,7 @@ qx.Class.define("wisej.web.TabMdiView", {
 /**
  * wisej.web.tabmdiview.SlideBar
  *
- * Extends the standard qx.ui.container.SlideBar to add the mdi child window preview
+ * Extends the standard qx.ui.container.SlideBar to add the MDI child window preview
  * button after the button-forward widget used to scroll the tabs that are outside the
  * viewport.
  */

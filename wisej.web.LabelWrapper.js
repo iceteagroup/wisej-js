@@ -111,6 +111,13 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		sizeType: { check: ["absolute", "autoSize", "percent"], apply: "_applySizeType" },
 
 		/**
+		 * LabelFont property.
+		 * 
+		 * Applies the font to the label only, without affecting child widgets.
+		 */
+		labelFont: { init: null, nullable: true, check: "Font", apply: "_applyLabelFont" }
+
+		/**
 		 * Wrapped editor.
 		 * 
 		 * Represent the wrapper editor widget. It takes a JSON definition
@@ -151,7 +158,7 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		/**
 		 * Applies the font property.
 		 */
-		_applyFont: function (value, old) {
+		_applyLabelFont: function (value, old) {
 
 			var label = this.getLabel();
 			var editor = this.getEditor();

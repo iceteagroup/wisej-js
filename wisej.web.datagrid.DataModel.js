@@ -435,7 +435,7 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		 */
 		_loadRowCount: function () {
 
-			if (this.__table) {
+			if (this.__table && this._getDataStore()) {
 				this._getDataStore().getRowCount(
 					this._onRowCountLoaded, this);
 			}
@@ -463,7 +463,7 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		 */
 		_loadRowData: function (firstRow, lastRow) {
 
-			if (this.__table) {
+			if (this.__table && this._getDataStore()) {
 				var args = {
 					first: firstRow,
 					last: lastRow,

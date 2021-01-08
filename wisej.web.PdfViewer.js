@@ -59,7 +59,7 @@ qx.Class.define("wisej.web.PdfViewer", {
 		/**
 		 * ViewerType property.
 		 */
-		viewerType: { init: "auto", check: ["auto", "google", "mozilla"], apply: "_applyProperty" },
+		viewerType: { init: "auto", check: ["auto", "google", "mozilla", "custom"], apply: "_applyProperty" },
 
 		/**
 		 * ViewerURL property.

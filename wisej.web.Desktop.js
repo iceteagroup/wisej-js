@@ -598,30 +598,69 @@ qx.Class.define("wisej.web.DesktopTaskBarItemDateTime", {
 		// start the timer when it becomes visible.
 		this.addListenerOnce("appear", function () {
 
-			this.__updateDateTime();
+			this._updateDateTime();
 
-			if (!wisej.web.DesignMode)
-				setInterval(this.__updateDateTime.bind(this), 1000 * 60);
+			if (!wisej.web.DesignMode) {
+				this.__timer = new qx.event.Timer(1000 * 60);
+				this.__timer.start();
+				this.__timer.addListener("interval", this._updateDateTime, this);
+			}
 
 		}, this);
 	},
+
 	members: {
 
-		__updateDateTime: function () {
+		__timer: null,
+		__dateFormatter: null,
+		__timeFormatter: null,
+
+		/**
+		 * Updates the displayed date/time.
+		 */
+		_updateDateTime: function () {
 
 			var now = new Date();
-
-			var time = "";
-			var date = now.toLocaleDateString();
-			try {
-				time = now.toLocaleTimeString(navigator.language, { hour: "2-digit", minute: "2-digit" });
-			} catch (er) {
-				time = now.toLocaleTimeString();
-			}
+			var time = this._formatTime(now);
+			var date = this._formatDate(now);
 			this.setLabel("<center>" + time + "<br/>" + date + "</center>");
-		}
-	}
+		},
 
+		_getDateFormatter: function () {
+
+			var locale = qx.locale.Manager.getInstance().getLocale();
+			if (!this.__dateFormatter || this.__dateFormatter.getLocale() != locale) {
+				this._disposeObjects("__dateFormatter");
+				this.__dateFormatter = new qx.util.format.DateFormat(qx.locale.Date.getDateFormat("short", locale));
+			}
+			return this.__dateFormatter;
+		},
+
+		_getTimeFormatter: function () {
+
+			var locale = qx.locale.Manager.getInstance().getLocale();
+			if (!this.__timeFormatter || this.__timeFormatter.getLocale() != locale) {
+				this._disposeObjects("__timeFormatter");
+				this.__timeFormatter = new qx.util.format.DateFormat(qx.locale.Date.getTimeFormat("short", locale));
+			}
+			return this.__timeFormatter;
+		},
+
+		_formatDate: function (value) {
+
+			return this._getDateFormatter().format(value);
+		},
+
+		_formatTime: function (value) {
+
+			return this._getTimeFormatter().format(value);
+		}
+	},
+
+	destruct: function () {
+
+		this._disposeObjects("__timer", "__dateFormatter", "__timeFormatter");
+	}
 });
 
 

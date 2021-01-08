@@ -504,16 +504,23 @@ qx.Class.define("wisej.web.DataRepeater", {
 
 			this.setDirty(true);
 
-			// collect the indexes to bind to panel items.
-			var indexes = [], widget, item, index;
+			// collect the indexes and locations of 
+			// the displayed items to ask the server to bind
+			// the item templates to each widget.
+			var indexes = [];
+			var positions = [];
+			var widget, bounds;
 			var widgets = this.getItemWidgets();
+			var horizontal = this.getOrientation() === "horizontal";
+			var scroll = horizontal ? this.getScrollX() : this.getScrollY();
+
 			for (var i = 0; i < widgets.length; i++) {
 
 				widget = widgets[i];
-				item = widget.getItem();
-				index = this.__getWidgetIndex(widget);
+				bounds = widget.getBounds();
 
-				indexes.push(index);
+				indexes.push(this.__getWidgetIndex(widget));
+				positions.push(scroll + (horizontal ? bounds.left : bounds.top));
 			}
 
 			// ask the server to update the content items with the
@@ -526,7 +533,10 @@ qx.Class.define("wisej.web.DataRepeater", {
 
 			if (indexes.length > 0) {
 				this.core.logInfo("Requesting indexes ", JSON.stringify(indexes));
-				this.fireDataEvent("update", indexes);
+				this.fireDataEvent("update", {
+					indexes: indexes,
+					positions: positions
+				});
 			}
 		},
 

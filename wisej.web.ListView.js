@@ -197,9 +197,26 @@ qx.Class.define("wisej.web.ListView", {
 		/**
 		 * PrefetchItems property.
 		 * 
-		 * Indicates the number of items to prefetch outside of the visible range.
+		 * Indicates the number of items to prefetch outside of the visible range
+		 * when the property {@link #view} is not "details".
 		 */
 		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" },
+
+		/**
+		 * BlockSize property.
+		 * 
+		 * Sets the number or rows kept in the each cache block when the
+		 * property {@link #view} is "details".
+		 */
+		blockSize: { init: 50, check: "PositiveInteger", apply: "_applyBlockSize" },
+
+		/**
+		 * MaxCachedBlocks property.
+		 * 
+		 * Sets the maximum number of blocks kept in the cache when the
+		 * property {@link #view} is "details".
+		 */
+		maxCachedBlocks: { init: 100, check: "PositiveInteger", apply: "_applyMaxCachedBlocks" },
 
 		/**
 		 * Tools property.
@@ -431,7 +448,32 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyPrefetchItems: function (value, old) {
 
+			if (wisej.web.DesignMode)
+				return;
+
 			this.itemView.setPrefetchItems(value);
+		},
+
+		/**
+		 * Applies the BlockSize property.
+		 */
+		_applyBlockSize: function (value, old) {
+
+			if (wisej.web.DesignMode)
+				return;
+
+			this.gridView.setBlockSize(value);
+		},
+
+		/**
+		 * Applies the MaxCachedBlocks property.
+		 */
+		_applyMaxCachedBlocks: function (value, old) {
+
+			if (wisej.web.DesignMode)
+				return;
+
+			this.gridView.setMaxCachedBlockCount(value);
 		},
 
 		/**

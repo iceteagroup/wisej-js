@@ -104,6 +104,9 @@ qx.Class.define("wisej.web.DataGrid", {
 		// remove the focus/blur handlers, we don't need to refresh the rows on focus changes.
 		this.removeListener("focus", this._onFocusChanged);
 		this.removeListener("blur", this._onFocusChanged);
+
+		// rightToLeft support.
+		this.addListener("changeRtl", this.reloadData);
 	},
 
 	properties: {
@@ -309,6 +312,21 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * Enables automatic cell tooltips when the text overflows.
 		 */
 		showTooltips: { init: false, check: "Boolean" },
+
+		/**
+		 * HTML text to display when the grid is empty.
+		 */
+		noDataMessage: { init: "", check: "String", apply: "_applyNoDataMessage" },
+
+		/**
+		 * Sets the number or rows kept in the each cache block.
+		 */
+		blockSize: { init: 50, check: "PositiveInteger", apply: "_applyBlockSize" },
+
+		/**
+		 * Sets the maximum number of blocks kept in the cache.
+		 */
+		maxCachedBlocks: { init: 100, check: "PositiveInteger", apply: "_applyMaxCachedBlocks" },
 
 		/**
 		 * Tools property.
@@ -678,6 +696,14 @@ qx.Class.define("wisej.web.DataGrid", {
 			var model = this.getTableModel();
 			if (model.getRowData(data.firstRow))
 				this.__executePendingCalls();
+
+			// show the no-data message if set.
+			var message = this.getChildControl("no-data", true);
+			if (message) {
+				model.getRowCount() == 0
+					? message.show()
+					: message.hide();
+			}
 		},
 
 		// Executes pending calls.
@@ -1269,6 +1295,47 @@ qx.Class.define("wisej.web.DataGrid", {
 			this._onTableModelRowHeightChanged();
 		},
 
+		/**
+		 * Applies the noDataMessage property.
+		 */
+		_applyNoDataMessage: function (value, old) {
+
+			var message = this.getChildControl("no-data", true);
+
+			if (!value) {
+				if (message) {
+					message.hide();
+					message.setLabel("");
+				}
+			}
+			else {
+				message = message || this.getChildControl("no-data");
+				message.setLabel(value);
+			}
+		},
+
+		/**
+		 * Applies the BlockSize property.
+		 */
+		_applyBlockSize: function (value, old) {
+
+			if (wisej.web.DesignMode)
+				return;
+
+			this.getTableModel().setBlockSize(value);
+		},
+
+		/**
+		 * Applies the MaxCachedBlocks property.
+		 */
+		_applyMaxCachedBlocks: function (value, old) {
+
+			if (wisej.web.DesignMode)
+				return;
+
+			this.getTableModel().setMaxCachedBlockCount(value);
+		},
+
 		/** 
 		 * Applies the tools property.
 		 */
@@ -1418,6 +1485,16 @@ qx.Class.define("wisej.web.DataGrid", {
 				case "tools":
 					control = new wisej.web.toolContainer.ToolPanel();
 					control.addListener("resize", this.__onToolsResize, this);
+					break;
+
+				case "no-data":
+					control = new qx.ui.basic.Atom().set({
+						rich: true,
+						center: true,
+						visibility: "hidden"
+					});
+					control.setUserBounds(0, 0, 0, 0);
+					this._add(control);
 					break;
 
 				case "resize-line":
@@ -1932,8 +2009,14 @@ qx.Class.define("wisej.web.DataGrid", {
 					default:
 						if (editMode === "editOnKeystroke" || editMode === "editOnKeystrokeOrF2" || editMode === "editOnEnter") {
 
-							// start editing on keystroke.
-							if (identifier.length === 1 && e.isPrintable() && e.getModifiers() === 0 && !e.getDefaultPrevented()) {
+							// start editing on valid keystroke.
+							if (identifier.length === 1
+								&& e.isPrintable()
+								&& !e.getDefaultPrevented()
+								&& !e.isCtrlPressed()
+								&& !e.isMetaPressed()
+								&& !e.isAltPressed()) {
+
 								consumed = true;
 
 								var keyCode = e.getKeyCode();
@@ -3321,6 +3404,12 @@ qx.Class.define("wisej.web.DataGrid", {
 			var focusedRow = this.getFocusedRow();
 			var focusedColumn = this.getFocusedColumn();
 
+			if (row < 0)
+				row = null;
+
+			if (col <= this._rowHeaderColIndex)
+				col = null;
+
 			if (col === focusedColumn && row === focusedRow) {
 				if (scrollVisible && row != null) {
 					setTimeout(function () {
@@ -3336,12 +3425,6 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (this.isEditing()) {
 				this.stopEditing(false /*notify*/);
 			}
-
-			if (row < 0)
-				row = null;
-
-			if (col <= this._rowHeaderColIndex)
-				col = null;
 
 			// defer the call after the data is loaded.
 			if (row != null && col != null && row >= this.getRowCount()) {
@@ -3555,6 +3638,29 @@ qx.Class.define("wisej.web.DataGrid", {
 				child.removeState("inner");
 			}
 		},
+
+		// overridden
+		renderLayout: function (left, top, width, height) {
+
+			this.base(arguments, left, top, width, height);
+
+			// if the no-data message is visible, locate exactly
+			// under the column headers to fill the row area.
+			var message = this.getChildControl("no-data", true);
+			if (message) {
+
+				top = 0;
+				left = 0;
+
+				if (this.isHeaderCellsVisible()) {
+					var headerHeight = this.getHeaderCellHeight();
+					top += headerHeight;
+					height -= headerHeight;
+				}
+				message.setUserBounds(left, top, width, height);
+			}
+		},
+
 
 		// overridden: display the grid's context menu
 		// all the times, on any right-click or long-tap.

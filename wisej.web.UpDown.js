@@ -469,12 +469,12 @@ qx.Class.define("wisej.web.NumericUpDown", {
 		/**
 		 * DecimalPlaces property.
 		 */
-		decimalPlaces: { init: 0, check: "Integer", apply: "_applyDecimalPlaces" },
+		decimalPlaces: { init: 0, check: "Integer", apply: "_applyFormat" },
 
 		/**
 		 * ThousandsSeparator property.
 		 */
-		thousandsSeparator: { init: false, check: "Boolean", apply: "_applyThousandsSeparator" },
+		thousandsSeparator: { init: false, check: "Boolean", apply: "_applyFormat" },
 
 		/**
 		 * Hexadecimal property.
@@ -482,38 +482,36 @@ qx.Class.define("wisej.web.NumericUpDown", {
 		 * Displays the value as an hexadecimal number.
 		 */
 		hexadecimal: { init: false, check: "Boolean", apply: "_applyHexadecimal" },
+
+		/**
+		 * Prefix property.
+		 * 
+		 * Displays a string before the value.
+		 */
+		prefix: { init: "", check: "String", apply: "_applyFormat" },
+
+		/**
+		 * Postfix property.
+		 * 
+		 * Displays a string after the value.
+		 */
+		postfix: { init: "", check: "String", apply: "_applyFormat" }
 	},
 
 	members: {
 
 		/**
-		 * Applies the decimalPlaces property.
+		 * Updates the qx.util.format.NumberFormat used to display and parse the text,
 		 */
-		_applyDecimalPlaces: function (value, old) {
-
-			this.__setFormat(value, this.getThousandsSeparator());
-
-		},
-
-		/**
-		 * Applies the thousandsSeparator property.
-		 */
-		_applyThousandsSeparator: function (value, old) {
-
-			this.__setFormat(this.getDecimalPlaces(), value);
-
-		},
-
-		/**
-		 * Assigns the property format object.
-		 */
-		__setFormat: function (decimalDigits, thousandsSeparator) {
+		_applyFormat: function (value, old, name) {
 
 			var format = this.getNumberFormat() || new qx.util.format.NumberFormat();
 
-			format.setMinimumFractionDigits(decimalDigits);
-			format.setMaximumFractionDigits(decimalDigits);
-			format.setGroupingUsed(thousandsSeparator);
+			format.setPrefix(this.getPrefix());
+			format.setPostfix(this.getPostfix());
+			format.setGroupingUsed(this.getThousandsSeparator());
+			format.setMinimumFractionDigits(this.getDecimalPlaces());
+			format.setMaximumFractionDigits(this.getDecimalPlaces());
 
 			this.setNumberFormat(format);
 		},
