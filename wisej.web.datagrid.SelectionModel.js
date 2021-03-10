@@ -135,9 +135,8 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 			return retval;
 		},
 
-
 		/**
-		  * Returns the first argument of the last call to {@link #setSelectionRange()},
+		  * Returns the starting {col, row} arguments of the last call to {@link #setSelectionRange()},
 		  * {@link #addSelectionRange()} or {@link #removeSelectionRange()}.
 		  *
 		  * @return {Map} the anchor selection.
@@ -147,7 +146,7 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 		},
 
 		/**
-		 * Returns the second argument of the last call to {@link #setSelectionRange()},
+		 * Returns the ending {col, row} arguments of the last call to {@link #setSelectionRange()},
 		 * {@link #addSelectionRange()} or {@link #removeSelectionRange()}.
 		 *
 		 * @return {Map} the lead selection index.
@@ -174,6 +173,22 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 		 */
 		isSelectionEmpty: function () {
 			return this.__selectionRanges.length == 0;
+		},
+
+		/**
+		 * Returns whether more than 1 element (row, col or cell) is currently selected.
+		 */
+		isMultipleSelection: function () {
+
+			if (this.__selectionRanges.length == 0)
+				return false;
+
+			if (this.__selectionRanges.length > 1)
+				return true;
+
+			var range = this.__selectionRanges[0];
+
+			return range.maxCol - range.minCol > 1 || range.maxRow - range.minRow > 1;
 		},
 
 		/**
@@ -221,6 +236,7 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 		 * @param fromRow {Integer} the last row of the selection (including); -1 = all rows.
 		 * @param toCol {Integer?} the last column of the selection (including); optional.
 		 * @param toRow {Integer?} the last row of the selection (including); optional.
+		 * @returns {Boolean} True if the selection has changed.
 		 */
 		setSelectionRange: function (fromCol, fromRow, toCol, toRow) {
 
@@ -233,11 +249,12 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 				var current = this.__selectionRanges[0];
 				if (current.minCol == fromCol && current.minRow == fromRow &&
 					current.maxCol == toCol && current.maxRow == toRow)
-					return;
+					return false;
 			}
 
 			this._resetSelection();
 			this.addSelectionRange(fromCol, fromRow, toCol, toRow);
+			return true;
 		},
 
 		/**
@@ -247,6 +264,7 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 		 * @param fromRow {Integer} the last row of the selection (including); -1 = all rows.
 		 * @param toCol {Integer?} the last column of the selection (including); optional.
 		 * @param toRow {Integer?} the last row of the selection (including); optional.
+		 * @returns {Boolean} Always true.
 		 */
 		addSelectionRange: function (fromCol, fromRow, toCol, toRow) {
 
@@ -263,21 +281,17 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 			var maxCol = Math.max(fromCol, toCol);
 			var maxRow = Math.max(fromRow, toRow);
 
-			var range = null;
-
 			// insert the new range.
 			var i = 0;
-
 			for (var l = this.__selectionRanges.length; i < l; i++) {
 
-				range = this.__selectionRanges[i];
+				var range = this.__selectionRanges[i];
 
 				if (range.maxCol === minCol && range.maxRow > minRow)
 					break
 				if (range.maxRow === minRow && range.maxCol > minCol)
 					break
 			}
-
 			this.__selectionRanges.splice(i, 0, {
 				minCol: minCol, minRow: minRow,
 				maxCol: maxCol, maxRow: maxRow
@@ -287,11 +301,13 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 			var lastRange = this.__selectionRanges[0];
 			for (var i = 1; i < this.__selectionRanges.length; i++) {
 
-				range = this.__selectionRanges[i];
+				var range = this.__selectionRanges[i];
 
 				// extend rows?
 				if (lastRange.minCol === range.minCol && lastRange.maxCol === range.maxCol) {
 					if (lastRange.maxRow + 1 >= range.minRow) {
+
+						lastRange.minRow = Math.min(lastRange.minRow, range.minRow);
 						lastRange.maxRow = Math.max(lastRange.maxRow, range.maxRow);
 						this.__selectionRanges.splice(i, 1);
 						i--;
@@ -301,6 +317,8 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 				// extend columns?
 				else if (lastRange.minRow === range.minRow && lastRange.maxRow === range.maxRow) {
 					if (lastRange.maxCol + 1 >= range.minCol) {
+
+						lastRange.minCol = Math.min(lastRange.minCol, range.minCol);
 						lastRange.maxCol = Math.max(lastRange.maxCol, range.maxCol);
 						this.__selectionRanges.splice(i, 1);
 						i--;
@@ -311,7 +329,9 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 				else if (lastRange.minCol <= range.minCol && lastRange.maxCol >= range.maxCol
 					&& lastRange.minRow <= range.minRow && lastRange.maxRow >= range.maxRow) {
 
+					lastRange.minRow = Math.min(lastRange.minRow, range.minRow);
 					lastRange.maxRow = Math.max(lastRange.maxRow, range.maxRow);
+					lastRange.minCol = Math.min(lastRange.minCol, range.minCol);
 					lastRange.maxCol = Math.max(lastRange.maxCol, range.maxCol);
 					this.__selectionRanges.splice(i, 1);
 					i--;
@@ -322,6 +342,7 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 			}
 
 			this.fireChangeSelection();
+			return true;
 		},
 
 		/**
@@ -331,6 +352,7 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 		 * @param fromRow {Integer} the last row of the selection (including); -1 = all rows.
 		 * @param toCol {Integer?} the last column of the selection (including); optional.
 		 * @param toRow {Integer?} the last row of the selection (including); optional.
+		 * @returns {Boolean} True if the selection has changed.
 		 */
 		removeSelectionRange: function (fromCol, fromRow, toCol, toRow) {
 
@@ -347,12 +369,11 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 			var maxCol = Math.max(fromCol, toCol);
 			var maxRow = Math.max(fromRow, toRow);
 
-			var range = null;
 			var changed = false;
 
 			for (var i = 0; i < this.__selectionRanges.length; i++) {
 
-				range = this.__selectionRanges[i];
+				var range = this.__selectionRanges[i];
 
 				// range included in the removal?
 				if (minCol <= range.minCol && maxCol >= range.maxCol &&
@@ -368,12 +389,12 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 				if (range.minCol === minCol && range.maxCol === maxCol) {
 					// crop bottom.
 					if (minRow <= range.maxRow && maxRow >= range.maxRow) {
-						range.maxRow = minRow;
+						range.maxRow = minRow - 1;
 						changed = true;
 					}
 					// crop top.
 					if (minRow <= range.minRow && maxRow >= range.minRow) {
-						range.minRow = maxRow;
+						range.minRow = maxRow + 1;
 						changed = true;
 					}
 					// split
@@ -398,12 +419,12 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 				if (range.minRow === minRow && range.maxRow === maxRow) {
 					// crop right.
 					if (minCol <= range.maxCol && maxCol >= range.maxCol) {
-						range.maxCol = minCol;
+						range.maxCol = minCol - 1;
 						changed = true;
 					}
 					// crop left.
 					if (minCol <= range.minCol && maxCol >= range.minCol) {
-						range.minCol = maxCol;
+						range.minCol = maxCol + 1;
 						changed = true;
 					}
 					// split
@@ -427,6 +448,38 @@ qx.Class.define("wisej.web.datagrid.SelectionModel", {
 
 			if (changed)
 				this.fireChangeSelection();
+
+			return changed;
+		},
+
+		/**
+		 * Changes the selection state of the specified column.
+		 * 
+		 * @param col {Integer} column to select or deselect.
+		 * @param selected {Boolean} True to select and False to deselect the column.
+		 */
+		setColumnSelected: function (col, selected) {
+
+			// preserve the lead and anchor.
+			var leadCol, anchorCol;
+			if (this.__leadSelection)
+				leadCol = this.__leadSelection.col;
+			if (this.__anchorSelection)
+				anchorCol = this.__anchorSelection.col;
+
+			try {
+
+				if (selected)
+					this.addSelectionRange(col, -1);
+				else
+					this.removeSelectionRange(col, -1);
+
+			} finally {
+				if (this.__leadSelection)
+					this.__leadSelection.col = leadCol;
+				if (this.__anchorSelection)
+					this.__anchorSelection.col = anchorCol;
+			}
 		},
 
 		/**

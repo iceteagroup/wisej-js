@@ -109,6 +109,28 @@ qx.Class.define("wisej.web.DataGrid", {
 		this.addListener("changeRtl", this.reloadData);
 	},
 
+	statics: {
+
+		/**
+		 * @type {Integer} The time in milliseconds before a focused cell enters edit mode.
+		 */
+		STARTEDITING_DELAY: 250
+	},
+
+	events: {
+
+		/**
+		 * Fired when the table data changed (the stuff shown in the table body).
+		 * The data property of the event will be a map having the following
+		 * attributes:
+		 * <ul>
+		 *   <li>firstRow: The index of the first row that has changed.</li>
+		 *   <li>lastRow: The index of the last row that has changed.</li>
+		 * </ul>
+		 */
+		dataUpdated: "qx.event.type.Data",
+	},
+
 	properties: {
 
 		// overridden.
@@ -168,6 +190,13 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * Enables the multiple selection of cells, rows, and columns.
 		 */
 		multiSelect: { init: true, check: "Boolean", apply: "_applyMultiSelect" },
+
+		/**
+		 * RightClickSelection property.
+		 * 
+		 * Determines whether a right click event ("contextmenu") selects the row under the pointer.
+		 */
+		rightClickSelection: { init: false, check: "Boolean" },
 
 		/**
 		 * AllowRowResize
@@ -306,7 +335,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		 * Milliseconds to wait before sending selection events to the server when the selection
 		 * using the keyboard.
 		 */
-		selectionDelay: { init: 0, check: "PositiveInteger" },
+		selectionDelay: { init: 150, check: "PositiveInteger" },
 
 		/**
 		 * Enables automatic cell tooltips when the text overflows.
@@ -653,6 +682,9 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (sizeMode !== "none" && sizeMode !== "doubleClick") {
 				qx.ui.core.queue.Widget.add(this, "autoSizeRows");
 			}
+
+			// notify the server that the grid rows have been updated.
+			this.fireDataEvent("dataUpdated", { firstRow: firstRow, lastRow: lastRow });
 		},
 
 		// overridden.
@@ -713,26 +745,25 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				if (this.getRowCount() > 0) {
 
-					var me = this;
 					var pendingCalls = this.__pendingCellCalls;
-					setTimeout(function () {
+					qx.event.Timer.once(function () {
 
 						try {
-							me.__processingPendingCalls = true;
+							this.__processingPendingCalls = true;
 							for (var name in pendingCalls) {
 								var call = pendingCalls[name];
-								call.func.apply(me, call.args);
+								call.func.apply(this, call.args);
 							}
 						}
 						catch (error) {
 
-							me.core.logError(error);
+							this.core.logError(error);
 						}
 						finally {
-							me.__processingPendingCalls = false;
+							this.__processingPendingCalls = false;
 						}
 
-					}, 1);
+					}, this, 1);
 				}
 
 				this.__pendingCellCalls = null;
@@ -814,7 +845,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (cellEditor && qx.ui.core.Widget.contains(cellEditor, related))
 				return;
 
-			if (related && related.isWisejComponent && !related.getTopLevelContainer())
+			if (related && wisej.utils.Widget.isInsidePopup(related))
 				return;
 
 			if (related !== cellEditor && !qx.ui.core.Widget.contains(this, related)) {
@@ -1491,8 +1522,10 @@ qx.Class.define("wisej.web.DataGrid", {
 					control = new qx.ui.basic.Atom().set({
 						rich: true,
 						center: true,
+						anonymous: true,
 						visibility: "hidden"
 					});
+					control.getContentElement().setAttribute("role", "no-data");
 					control.setUserBounds(0, 0, 0, 0);
 					this._add(control);
 					break;
@@ -2026,21 +2059,27 @@ qx.Class.define("wisej.web.DataGrid", {
 						}
 						break;
 				}
-			}
 
-			// fire "gridCellKeyPress" when the "keypress" event is not wired.
-			switch (identifier) {
-				case "Space":
-				case "Enter":
-					if (!this.isWired("keypress"))
-						this.fireEvent("gridCellKeyPress");
 
-					break;
+				// fire "gridCellKeyPress" when the "keypress" event is not wired
+				// to let special cells handle the space and enter and to allow the
+				// grid to expand collapse hierarchical rows.
+				switch (identifier) {
+					case "Space":
+					case "Enter":
+						if (!this.isWired("keypress"))
+							this.fireEvent("gridCellKeyPress");
+
+						break;
+				}
+
 			}
 
 			// update the selection/focused-cell depending on the keyboard key
 			// that may have caused the change.
 			//
+			var notify = false;
+			var newFocusedRow, newFocusedCol;
 			switch (identifier) {
 				case "Up":
 				case "Down":
@@ -2049,31 +2088,33 @@ qx.Class.define("wisej.web.DataGrid", {
 				case "PageUp":
 				case "PageDown":
 					{
-						focusedRow = this.getFocusedRow();
-						focusedCol = this.getFocusedColumn();
-						this.getSelectionManager().handleMoveKeyDown(focusedCol, focusedRow, e);
+						newFocusedRow = this.getFocusedRow();
+						newFocusedCol = this.getFocusedColumn();
+						notify = !this.getSelectionManager().handleMoveKeyDown(newFocusedCol, newFocusedRow, e);
 					}
 					break;
 
 				case "Home":
 				case "End":
 					{
-						focusedRow = this.getFocusedRow();
-						focusedCol = this.getFocusedColumn();
-						this.getSelectionManager().handleMoveKeyDown(focusedCol, focusedRow, e);
+						newFocusedRow = this.getFocusedRow();
+						newFocusedCol = this.getFocusedColumn();
+						notify = !this.getSelectionManager().handleMoveKeyDown(newFocusedCol, newFocusedRow, e);
 					}
 					break;
 
 				case "Tab":
 					{
 						if (!this.isStandardTab()) {
-							focusedRow = this.getFocusedRow();
-							focusedCol = this.getFocusedColumn();
-							this.getSelectionManager().handleSelectKeyDown(focusedCol, focusedRow, e);
+							newFocusedRow = this.getFocusedRow();
+							newFocusedCol = this.getFocusedColumn();
+							notify = !this.getSelectionManager().handleSelectKeyDown(newFocusedCol, newFocusedRow, e);
 						}
 					}
 					break;
 			}
+			if (notify && (newFocusedCol != focusedCol || newFocusedRow != focusedRow))
+				this.notifyFocusCellChanged(newFocusedCol, newFocusedRow);
 
 			if (consumed)
 				e.stop();
@@ -2249,19 +2290,21 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		notifyFocusCellChanged: function (col, row) {
 
-			var me = this;
 			var data = { col: col, row: row };
 
 			// use the selection delay only when the selection changed
 			// in a keyboard event, otherwise it changes the pointer, selection sequence.
 			if (this.getSelectionDelay() > 0 && window.event instanceof KeyboardEvent) {
+
 				clearTimeout(this.__focusChangedDelayTimer);
+
+				var me = this;
 				this.__focusChangedDelayTimer = setTimeout(function () {
 					me.fireDataEvent("focusCellChanged", data);
 				}, this.getSelectionDelay());
 			}
 			else {
-				me.fireDataEvent("focusCellChanged", data);
+				this.fireDataEvent("focusCellChanged", data);
 			}
 		},
 
@@ -2274,17 +2317,20 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		notifySelectionChanged: function (col, row, ranges) {
 
-			var me = this;
 			var data = { ranges: ranges, focusCell: { col: col, row: row } };
 
 			if (this.getSelectionDelay() > 0 && window.event instanceof KeyboardEvent) {
+
 				clearTimeout(this.__selectionDelayTimer);
+
+				var me = this;
 				this.__selectionDelayTimer = setTimeout(function () {
 					me.fireDataEvent("selectionChanged", data);
 				}, this.getSelectionDelay());
+
 			}
 			else {
-				me.fireDataEvent("selectionChanged", data);
+				this.fireDataEvent("selectionChanged", data);
 			}
 		},
 
@@ -2694,13 +2740,11 @@ qx.Class.define("wisej.web.DataGrid", {
 				return;
 			}
 
+			qx.event.Timer.once(function () {
 
-			var me = this;
-			setTimeout(function () {
-
-				me.syncAppearance();
-				var oldHeight = me.getHeaderCellHeight();
-				var newHeight = qx.util.PropertyUtil.getThemeValue(me, "headerCellHeight") || 0;
+				this.syncAppearance();
+				var oldHeight = this.getHeaderCellHeight();
+				var newHeight = qx.util.PropertyUtil.getThemeValue(this, "headerCellHeight") || 0;
 
 				for (var i = 0; i < columns.length; i++) {
 
@@ -2709,15 +2753,15 @@ qx.Class.define("wisej.web.DataGrid", {
 					if (!columns[i].isVisible())
 						continue;
 
-					newHeight = Math.max(newHeight, me.__getColumnHeaderSizeHint(columns[i]).height || 0);
+					newHeight = Math.max(newHeight, this.__getColumnHeaderSizeHint(columns[i]).height || 0);
 				}
 
 				if (newHeight > 0 && newHeight !== oldHeight) {
-					me.setHeaderCellHeight(newHeight);
-					me.fireDataEvent("rowHeightChanged", { row: -1, height: newHeight });
+					this.setHeaderCellHeight(newHeight);
+					this.fireDataEvent("rowHeightChanged", { row: -1, height: newHeight });
 				}
 
-			}, 1);
+			}, this, 1);
 		},
 
 		/**
@@ -2791,6 +2835,8 @@ qx.Class.define("wisej.web.DataGrid", {
 			// we auto resize non-frozen columns in the main pane only.
 			var scrollerArr = this._getPaneScrollerArr();
 			var mainPane = scrollerArr[scrollerArr.length - 1];
+			var firstColX = mainPane.getTablePaneModel().getFirstColumnX();
+			var firstColIndex = columnModel.getVisibleColumnAtX(firstColX);
 
 			// get the width of the header pane. that's the width we have to fill.
 			var mainPaneSize = mainPane._paneClipper.getInnerSize();
@@ -2800,11 +2846,11 @@ qx.Class.define("wisej.web.DataGrid", {
 			// calculate the total fill weight of the "fill" columns and collect the columns to auto fill and the ones to auto size.
 			var otherColumns = [];
 			var autoFillColumns = [];
-			for (var i = this._rowHeaderColIndex + 1, length = columns.length; i < length; i++) {
+			for (var i = firstColIndex, length = columns.length; i < length; i++) {
 
 				var column = columns[i];
 
-				if (column.isVisible() && !column.isFrozen()) {
+				if (column.isVisible()) {
 
 					switch (column.getSizeMode()) {
 						case "fill":
@@ -3326,13 +3372,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (row < 0 || row == null)
 				return;
 
-			// notify the server only when the row is unchanged and the column has changed.
-			// when the row changes we fire "selectionChanged" which will also update
-			// the current cell.
-			// NOTE: this will change when the selection model will support cell and column selection.
-			var notify = (prevRow == row) && (prevCol != col);
-
-			this.setFocusedCell(col, row, true /*scrollVisible*/, notify);
+			this.setFocusedCell(col, row, true /*scrollVisible*/, false);
 		},
 
 		/**
@@ -3375,12 +3415,13 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (col === null || col < 0 || col >= columnModel.getOverallColumnCount())
 				return;
 
-			var x = columnModel.getVisibleX(col);
-			var metaColumn = this._getMetaColumnAtColumnX(x);
-
-			if (metaColumn != -1) {
-				this.getPaneScroller(metaColumn).scrollCellVisible(col, row, alignX, alignY);
-			}
+			qx.event.Timer.once(function () {
+				var x = columnModel.getVisibleX(col);
+				var metaColumn = this._getMetaColumnAtColumnX(x);
+				if (metaColumn != -1) {
+					this.getPaneScroller(metaColumn).scrollCellVisible(col, row, alignX, alignY);
+				}
+			}, this, 1);
 		},
 
 		/**
@@ -3400,7 +3441,6 @@ qx.Class.define("wisej.web.DataGrid", {
 			// default to true.
 			notify = notify === false ? false : true;
 
-			var me = this;
 			var focusedRow = this.getFocusedRow();
 			var focusedColumn = this.getFocusedColumn();
 
@@ -3412,9 +3452,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			if (col === focusedColumn && row === focusedRow) {
 				if (scrollVisible && row != null) {
-					setTimeout(function () {
-						me.scrollCellVisible(col || 0, row);
-					}, 1);
+					this.scrollCellVisible(col || 0, row);
 				}
 				return;
 			}
@@ -3440,9 +3478,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			this.base(arguments, col, row, false /* scrollVisible */);
 
 			if (scrollVisible && row != null) {
-				setTimeout(function () {
-					me.scrollCellVisible(col || 0, row);
-				}, 1);
+				this.scrollCellVisible(col || 0, row);
 			}
 
 			if (this.__canFireServerEvent() && notify) {
@@ -3457,6 +3493,7 @@ qx.Class.define("wisej.web.DataGrid", {
 				// generating a train of events when the user rapidly
 				// moves from cell to cell.
 
+				var me = this;
 				clearTimeout(this.__startEditingTimer);
 				this.__startEditingTimer = setTimeout(function () {
 
@@ -3466,7 +3503,7 @@ qx.Class.define("wisej.web.DataGrid", {
 						me.startEditing();
 					}
 
-				}, 250);
+				}, wisej.web.DataGrid.STARTEDITING_DELAY);
 			}
 		},
 

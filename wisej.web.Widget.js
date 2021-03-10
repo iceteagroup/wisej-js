@@ -223,6 +223,9 @@ qx.Class.define("wisej.web.Widget", {
 					this.container.innerText = e.message;
 			}
 
+			if (wisej.web.DesignMode)
+				this.$$rendered = true;
+
 			this._onInitialized();
 		},
 
@@ -246,6 +249,11 @@ qx.Class.define("wisej.web.Widget", {
 		// overridden to prevent the "render" event.
 		// it will be fired in the onLoaded handler.
 		_onDesignRender: function () {
+
+			// allow the designer to wait for this widget to render
+			// when it's created as a child of user control at design time.
+			if (wisej.web.DesignMode)
+				this.$$rendered = false;
 
 			this.__loadPackages(function (result) {
 				this.__renderWidget();

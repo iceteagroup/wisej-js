@@ -82,10 +82,9 @@ qx.Class.define("wisej.mobile.Popup", {
 
 				this.show();
 			}
-			else if (qx.core.Environment.get("os.name") == "android") {
+			else if (qx.core.Environment.get("os.name") === "android") {
 
-				this.setHeight(wisej.mobile.Popup.DEFAULT_HEIGHT);
-				this.setLayoutProperties({ left: "10%", right: "10%", top: (screen.height - wisej.mobile.Popup.DEFAULT_HEIGHT) / 2 });
+				this.setLayoutProperties({ edge: "10%" });
 				wisej.web.Animation.animate(this, "popIn", {
 					timing: "ease",
 					duration: wisej.mobile.Popup.ANIMATION_DURATION
@@ -96,6 +95,7 @@ qx.Class.define("wisej.mobile.Popup", {
 				this.addListenerOnce("disappear", function () { Wisej.Platform.blockRoot(false) });
 			}
 			else {
+
 				this.setHeight(wisej.mobile.Popup.DEFAULT_HEIGHT);
 				this.setLayoutProperties({ bottom: 0, left: 0, right: 0 });
 				wisej.web.Animation.animate(this, "slideUpIn", {

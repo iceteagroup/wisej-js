@@ -83,30 +83,39 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 		 * @param col {Integer} the index the column under the pointer.
 		 * @param row {Integer} the index the row under the pointer.
 		 * @param e {qx.event.type.Tap} the pointer event.
+		 * @returns {Boolean} True if the selection has changed.
 		 */
 		handleTap: function (col, row, e) {
 
 			if (e.isLeftPressed()) {
 
-				this._handleSelectEvent(col, row, e);
+				return this._handleSelectEvent(col, row, e);
 
-			} else if (e.isRightPressed() && e.getModifiers() == 0) {
+			} else if (e.isRightPressed() && this.table.isRightClickSelection()) {
 
-				this._handleSelectEvent(col, row, e);
+				var selectionModel = this.getSelectionModel();
+
+				if ((e.isShiftPressed() || e.isCtrlPressed()) || !selectionModel.isCellSelected(col, row)) {
+
+					return this._handleSelectEvent(col, row, e);
+				}
 			}
+
+			return false;
 		},
 
 		/**
-		   * Handles the key down event that is used as replacement for pointer taps
-		   * (Normally space).
-		   *
-		   * @param col {Integer} the index of the columns that is currently focused.
-		   * @param row {Integer} the index of the row that is currently focused.
-		   * @param e {Map} the key event.
-		   */
+		 * Handles the key down event that is used as replacement for pointer taps
+		 * (Normally space).
+		 *
+		 * @param col {Integer} the index of the columns that is currently focused.
+		 * @param row {Integer} the index of the row that is currently focused.
+		 * @param e {Map} the key event.
+		 * @returns {Boolean} True if the selection has changed.
+		 */
 		handleSelectKeyDown: function (col, row, e) {
 
-			this._handleSelectEvent(col, row, e);
+			return this._handleSelectEvent(col, row, e);
 		},
 
 		/**
@@ -115,20 +124,23 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 		 * @param col {Integer} the index of the columns that is currently focused.
 		 * @param row {Integer} the index of the row that is currently focused.
 		 * @param e {Map} the key event.
+		 * @returns {Boolean} True if the selection has changed.
 		 */
 		handleMoveKeyDown: function (col, row, e) {
 
+			var changed = false;
 			var selectionModel = this.getSelectionModel();
 
 			col = this.__adjustColIndex(col);
 			row = this.__adjustRowIndex(row);
 			if (col == null || row == null)
-				return;
+				return false;
 
 			switch (e.getModifiers()) {
 
 				case 0:
-					selectionModel.setSelectionRange(col, row);
+				case qx.event.type.Dom.CTRL_MASK:
+					changed = selectionModel.setSelectionRange(col, row);
 					break;
 
 				case qx.event.type.Dom.SHIFT_MASK:
@@ -137,13 +149,15 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 					var anchor = selectionModel.getAnchor();
 
 					if (anchor == null) {
-						selectionModel.setSelectionRange(col, row);
+						changed = selectionModel.setSelectionRange(col, row);
 					} else {
-						selectionModel.setSelectionRange(anchor.col, anchor.row, col, row);
+						changed = selectionModel.setSelectionRange(anchor.col, anchor.row, col, row);
 					}
 
 					break;
 			}
+
+			return changed;
 		},
 
 		// *****************************************************************************
@@ -156,9 +170,11 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 		 * @param col {Integer} the index the column under the pointer.
 		 * @param row {Integer} the index the row under the pointer.
 		 * @param evt {Map} the pointer event.
+		 * @returns {Boolean} True if the selection has changed.
 		 */
 		_handleSelectEvent: function (col, row, e) {
 
+			var changed = false;
 			var selectionModel = this.getSelectionModel();
 
 			col = this.__adjustColIndex(col);
@@ -177,16 +193,16 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 					if (anchor == null) {
 
 						if (e.isCtrlOrCommandPressed()) {
-							selectionModel.addSelectionRange(col, row);
+							changed = selectionModel.addSelectionRange(col, row);
 						} else {
-							selectionModel.setSelectionRange(col, row);
+							changed = selectionModel.setSelectionRange(col, row);
 						}
 					}
 					else {
 						if (e.isCtrlOrCommandPressed()) {
-							selectionModel.addSelectionRange(anchor.col, anchor.row, col, row);
+							changed = selectionModel.addSelectionRange(anchor.col, anchor.row, col, row);
 						} else {
-							selectionModel.setSelectionRange(anchor.col, anchor.row, col, row);
+							changed = selectionModel.setSelectionRange(anchor.col, anchor.row, col, row);
 						}
 					}
 				}
@@ -194,15 +210,17 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 			else if (multi && e.isCtrlOrCommandPressed()) {
 
 				if (selectionModel.isCellSelected(col, row)) {
-					selectionModel.removeSelectionRange(col, row);
+					changed = selectionModel.removeSelectionRange(col, row);
 				} else {
-					selectionModel.addSelectionRange(col, row);
+					changed = selectionModel.addSelectionRange(col, row);
 				}
 			}
 			else {
 
-				selectionModel.setSelectionRange(col, row);
+				changed = selectionModel.setSelectionRange(col, row);
 			}
+
+			return changed;
 		},
 
 		__adjustRowIndex: function (row) {
@@ -255,7 +273,7 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 
 				case "none":
 					col = null;
-					breakk;
+					break;
 
 				case "cell":
 					if (isRowHeader)

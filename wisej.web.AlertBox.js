@@ -302,14 +302,37 @@ qx.Class.define("wisej.web.alertbox.Manager", {
 		 */
 		add: function (alertBox) {
 
-			var pane = this.__getDockingPane(alertBox.getAlignment());
+			var alignment = alertBox.getAlignment();
+
+			// adjust for mobile.
+			if (Wisej.Platform.isMobileMode()) {
+				switch (alignment) {
+					case "topLeft":
+					case "topCenter":
+					case "topRight":
+						alignment = "topCenter";
+						break;
+					case "middleLeft":
+					case "middleCenter":
+					case "middleRight":
+						alignment = "middleCenter";
+						break;
+					case "bottomLeft":
+					case "bottomCenter":
+					case "bottomRight":
+						alignment = "bottomCenter";
+						break;
+				}
+			}
+
+			var pane = this.__getDockingPane(alignment);
 			if (pane) {
 
 				var edge = "north";
 				var alignX = "left";
 				var alignY = null;
 
-				switch (alertBox.getAlignment()) {
+				switch (alignment) {
 					case "topLeft":
 						edge = "north";
 						alignX = "left";
@@ -347,7 +370,6 @@ qx.Class.define("wisej.web.alertbox.Manager", {
 						edge = "south";
 						alignX = "right";
 						break;
-
 				}
 
 				alertBox.setAlignX(alignX);

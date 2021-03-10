@@ -55,6 +55,7 @@ qx.Class.define("wisej.web.WindowManager", {
 			var active = null;
 
 			// indicates whether to block and the blocking z-index.
+			var block = false;
 			var blockZIndex = -1;
 
 			// collects the z-indexes to assign to the windows.
@@ -71,6 +72,9 @@ qx.Class.define("wisej.web.WindowManager", {
 				// take the first window as active window
 				active = active || win;
 
+				if (win.isModal())
+					block = true;
+
 				// skip z-indexes already assigned.
 				if (zIndexes[i] !== undefined)
 					continue;
@@ -80,7 +84,6 @@ qx.Class.define("wisej.web.WindowManager", {
 				// stay on top of regular windows.
 				if (win.isModal()) {
 
-					block = true;
 					win.setZIndex(zIndexModal);
 					zIndexes[i] = zIndexModal;
 					blockZIndex = zIndexModal - 1;
@@ -107,7 +110,6 @@ qx.Class.define("wisej.web.WindowManager", {
 						var mi = windows.indexOf(owner);
 						if (mi > -1 && zIndexes[mi] === undefined) {
 
-							block = true;
 							owner.setZIndex(zIndexModal);
 							zIndexes[mi] = zIndexModal;
 							blockZIndex = zIndexModal - 1;
@@ -139,7 +141,7 @@ qx.Class.define("wisej.web.WindowManager", {
 			// desktop.getBlocker().setKeepBlockerActive(false);
 
 			// remove the previous blocking and if we are not in modal, restore the previous active widget.
-			if (blockZIndex > -1) {
+			if (block && blockZIndex > -1) {
 				desktop.forceUnblock(false /*restoreActive*/);
 				desktop.blockContent(blockZIndex, true /*keepActive*/);
 			}

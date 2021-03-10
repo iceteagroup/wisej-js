@@ -296,9 +296,10 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 					// when in design mode, use the DesignComponents map.
 					if (wisej.web.DesignComponents) {
 						for (var i = 0; i < value.length; i++) {
-							var widget = wisej.web.DesignComponents[value[i]];
-							if (widget)
-								widgets.push(widget);
+							var component = wisej.web.DesignComponents[value[i]];
+							if (component) {
+								widgets.push(component);
+							}
 						}
 					}
 				}
@@ -401,7 +402,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 		 */
 		_applyId: function (value, old) {
 
-			if (this.isWisejControl) {
+			if (this instanceof qx.ui.core.Widget) {
 
 				var el = this.getContentElement();
 				if (el)
@@ -831,16 +832,17 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 			if (!widgetClass)
 				throw new Error("Unknown class name: " + className);
 
+			var component = null;
 			try {
 
 				// create the QX component.
-				var comp = new widgetClass();
+				component = new widgetClass();
 
 				// store in the design-time map.
 				wisej.web.DesignComponents = wisej.web.DesignComponents || {};
-				wisej.web.DesignComponents[config.id] = comp;
+				wisej.web.DesignComponents[config.id] = component;
+				component.set(config);
 
-				comp.set(config);
 			}
 			catch (e) {
 
@@ -848,9 +850,8 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 			}
 
 			// done
-			return comp;
-		},
-
+			return component;
+		}
 	}
 });
 
@@ -2744,9 +2745,12 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 			if (!wisej.utils.Widget.canExecute(container))
 				return;
 
+			// stop default action.
+			e.preventDefault();
+
 			if (this.executeShortcut && this.executeShortcut()) {
-				e.preventDefault();
-				return true; // stop dispatching
+				// stop dispatching
+				return true;
 			}
 		},
 
@@ -2799,7 +2803,8 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 				var items = menu.removeAll();
 				if (items && items.length > 0) {
 					for (var i = 0; i < items.length; i++) {
-						items[i].setParent(null);
+						if (items[i].isWisejMenu)
+							items[i].setParent(null);
 					}
 				}
 			}

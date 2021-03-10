@@ -50,12 +50,15 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		/**
 		 * Label property.
 		 */
-		text: { init: "", apply: "_applyText" },
+		text: { init: "", check: "String", apply: "_applyText" },
 
 		/**
 		 * Position property.
 		 */
-		position: { init: "top", check: ["left", "top", "right", "bottom", "inside"], apply: "_applyPosition" },
+		position: {
+			init: "top",
+			check: ["left", "top", "right", "bottom", "inside"], apply: "_applyPosition"
+		},
 
 		/**
 		 * TextAlign property.
@@ -77,7 +80,7 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		 * Defines the accelerator key that sets the focus to the editor
 		 * associated with this LabelWrapper.
 		 */
-		mnemonic: { check: "String", apply: "_applyMnemonic", event: "changeMnemonic" },
+		mnemonic: { init: null, nullable: true, check: "String", apply: "_applyMnemonic", event: "changeMnemonic" },
 
 		/**
 		 * Size property.
@@ -85,7 +88,7 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		 * Defines the size of the label widget either in pixels or percentage, depending
 		 * on the value of SizeType.
 		 */
-		size: { apply: "_applySize" },
+		size: { init: 0, check: "Integer", apply: "_applySize" },
 
 		/**
 		 * MaxSize property.
@@ -93,7 +96,7 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		 * Defines the maximum width (when Position is Left or Right) or the
 		 * maximum height (when Position is Top or Bottom) in pixels.
 		 */
-		maxSize: { init: 0, apply: "_applyMaxSize" },
+		maxSize: { init: 0, check: "Integer", apply: "_applyMaxSize" },
 
 		/**
 		 * MinSize property.
@@ -101,14 +104,14 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		 * Defines the minimum width (when Position is Left or Right) or the
 		 * minimum height (when Position is Top or Bottom) in pixels.
 		 */
-		minSize: { init: 0, apply: "_applyMinSize" },
+		minSize: { init: 0, check: "Integer", apply: "_applyMinSize" },
 
 		/**
 		 * SizeType property.
 		 * 
 		 * Determines how to compute the size of the label widget.
 		 */
-		sizeType: { check: ["absolute", "autoSize", "percent"], apply: "_applySizeType" },
+		sizeType: { init: "autoSize", check: ["autoSize", "absolute", "percent"], apply: "_applySizeType" },
 
 		/**
 		 * LabelFont property.
@@ -410,9 +413,10 @@ qx.Class.define("wisej.web.LabelWrapper", {
 					if (this._editor.hasState("multiline"))
 						this.addState("multiline");
 				}
-				catch (e) {
+				catch (error) {
 
-					alert(e.message);
+					if (this.core)
+						this.core.logError(error);
 				}
 
 				// done

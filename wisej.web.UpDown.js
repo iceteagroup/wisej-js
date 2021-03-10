@@ -57,14 +57,8 @@ qx.Class.define("wisej.web.UpDownBase", {
 			this.setDirty(true);
 		}, this);
 
-		// forward the focusin and focusout events to the textfield. The textfield
-		// is not focusable so the events need to be forwarded manually.
-		this.addListener("focusin", function (e) {
-			textField.fireNonBubblingEvent("focusin", qx.event.type.Focus);
-		}, this);
-		this.addListener("focusout", function (e) {
-			textField.fireNonBubblingEvent("focusout", qx.event.type.Focus);
-		}, this);
+		// stop the keypress event from bubbling otherwise this control cannot be used as a cell editor.
+		this.addListener("keypress", this._onKeyPress, this);
 
 		// pointer events.
 		this.addListener("pointerout", this._onPointerOut, this);
@@ -155,26 +149,6 @@ qx.Class.define("wisej.web.UpDownBase", {
 		// overridden
 		focus: function () {
 			this.getChildControl("textfield").getFocusElement().focus();
-		},
-
-		/**
-		 * Filters the state collected by MWisejControl.updateState().
-		 */
-		getState: function (state) {
-
-			// force a "changeValue" event when reading the state
-			// in case the user clicked on an item that doesn't change the focus
-			// such as menu item or some utility buttons.
-
-			// without a focus change or enter, the "changeValue" event is not 
-			// fired and the value of the spinner is not updated.
-
-			var textField = this.getChildControl("textfield");
-			textField.fireNonBubblingEvent("changeValue", qx.event.type.Data, [textField.getValue()]);
-
-			state.value = this.getValue();
-
-			return state;
 		},
 
 		/**
@@ -346,21 +320,33 @@ qx.Class.define("wisej.web.UpDownBase", {
 		// overridden to implement the useArrowKeys property.
 		_onKeyDown: function (e) {
 
-			if (this.getUseArrowKeys())
-				return this.base(arguments, e);
-
-			e.stopPropagation();
-			e.preventDefault();
+			if (this.getUseArrowKeys()) {
+				this.base(arguments, e);
+			}
 		},
 
 		// overridden to implement the useArrowKeys property.
 		_onKeyUp: function (e) {
 
-			if (this.getUseArrowKeys())
-				return this.base(arguments, e);
+			if (this.getUseArrowKeys()) {
+				this.base(arguments, e);
+			}
+		},
 
-			e.stopPropagation();
-			e.preventDefault();
+		// stops the keypress event from bubbling to use this widget as a cell editor.
+		_onKeyPress: function (e) {
+
+			if (this.getUseArrowKeys()) {
+				switch (e.getKeyIdentifier()) {
+					case "PageUp":
+					case "Up":
+					case "PageDown":
+					case "Down":
+						e.stopPropagation();
+						e.preventDefault();
+						break;
+				}
+			}
 		},
 
 		// overridden
@@ -368,6 +354,7 @@ qx.Class.define("wisej.web.UpDownBase", {
 			var control;
 
 			switch (id) {
+
 				case "textfield":
 					control = this.base(arguments, id, hash);
 					control.setMinWidth(1);
@@ -375,8 +362,18 @@ qx.Class.define("wisej.web.UpDownBase", {
 					control.setAllowGrowY(false);
 					// disable browser's autocomplete.
 					control.getContentElement().setAttribute("autocomplete", "off");
-
 					break;
+
+				case "upbutton":
+					control = this.base(arguments, id, hash);
+					control.addListener("execute", this.focus, this);
+					break;
+
+				case "downbutton":
+					control = this.base(arguments, id, hash);
+					control.addListener("execute", this.focus, this);
+					break;
+
 			}
 
 			return control || this.base(arguments, id);
@@ -599,7 +596,26 @@ qx.Class.define("wisej.web.NumericUpDown", {
 			} else {
 				textField.setValue(null);
 			}
+		},
+
+		/**
+		 * Checks the min and max values, disables / enables the
+		 * buttons and handles the wrap around.
+		 */
+		_updateButtons: function () {
+
+			var value = this.getValue();
+			if (value == null) {
+				var upButton = this.getChildControl("upbutton");
+				var downButton = this.getChildControl("downbutton");
+				upButton.setEnabled(true);
+				downButton.setEnabled(true);
+			}
+			else {
+				this.base(arguments);
+			}
 		}
+
 	}
 
 });
@@ -799,9 +815,8 @@ qx.Class.define("wisej.web.TimeUpDown", {
 
 		/** 
 		 *  The value of the spinner.
-		 *
 		 */
-		value: { init: null, check: "Date", apply: "_applyValue", transform:"_transformValue" },
+		value: { init: null, check: "Date", apply: "_applyValue", transform: "_transformValue", event: "changeValue" },
 
 		/** 
 		 * Format property.
@@ -837,8 +852,6 @@ qx.Class.define("wisej.web.TimeUpDown", {
 			}
 
 			this._updateButtons();
-
-			this.fireDataEvent("changeValue", value, old);
 		},
 
 		/**
@@ -852,11 +865,13 @@ qx.Class.define("wisej.web.TimeUpDown", {
 		// overridden
 		_countUp: function () {
 
-			var value = this.getValue();
-			if (!value)
-				return;
-
 			var wrap = this.getWrap();
+			var value = this.getValue();
+
+			if (!value) {
+				value = new Date();
+				this.setValue(value);
+			}
 
 			var newValue = new Date(value);
 			var part = this.__selectCurrentTimePart();
@@ -895,11 +910,13 @@ qx.Class.define("wisej.web.TimeUpDown", {
 		// overridden
 		_countDown: function () {
 
-			var value = this.getValue();
-			if (!value)
-				return;
-
 			var wrap = this.getWrap();
+			var value = this.getValue();
+
+			if (!value) {
+				value = new Date();
+				this.setValue(value);
+			}
 
 			var newValue = new Date(value);
 			var part = this.__selectCurrentTimePart();
@@ -1152,26 +1169,7 @@ qx.Class.define("wisej.web.TimeUpDown", {
 			}
 
 			return parts;
-		},
-
-		_createChildControlImpl: function (id, hash) {
-			var control;
-
-			switch (id) {
-				case "upbutton":
-					control = this.base(arguments, id, hash);
-					control.setKeepFocus(true);
-					break;
-
-				case "downbutton":
-					control = this.base(arguments, id, hash);
-					control.setKeepFocus(true);
-					break;
-			}
-
-			return control || this.base(arguments, id);
 		}
-
 	},
 	destruct: function () {
 		this._disposeObjects("__formatter");

@@ -177,7 +177,7 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		/**
 		 * RightClickSelection property.
 		 * 
-		 * Determines whether a right click event ("contextmenu") selects the node under the pointer.
+		 * Determines whether a right click event ("contextmenu") selects the item under the pointer.
 		 */
 		rightClickSelection: { init: false, check: "Boolean", apply: "_applyRightClickSelection" },
 
@@ -259,21 +259,26 @@ qx.Class.define("wisej.web.VirtualListBox", {
 		_onRightClick: function (e) {
 
 			if (this.getSelectionMode() !== "none" && !this.isReadOnly()) {
-				var item = e.getTarget();
-				if (item instanceof wisej.web.listbox.ListItem) {
+				var target = e.getTarget();
+				if (target instanceof wisej.web.listbox.ListItem) {
 
-					var index = item.getIndex();
-					var model = this.getModel();
 					var selection = this.getSelection();
+					var item = this.getModel().getItem(target.getIndex());
 
-					this.__suspendEvents = true;
-					try {
-						selection.removeAll();
+					// don't change a multi selection unless the right
+					// click lands outside of the selection.
+					var selection = this.getSelection();
+					if (!selection.contains(item) || (e.isShiftPressed() || e.isCtrlPressed())) {
+
+						this.__suspendEvents = true;
+						try {
+							selection.removeAll();
+						}
+						finally {
+							this.__suspendEvents = false;
+						}
+						selection.setItem(0, item);
 					}
-					finally {
-						this.__suspendEvents = false;
-					}
-					selection.setItem(0, model.getItem(item.getIndex()));
 				}
 			}
 		},

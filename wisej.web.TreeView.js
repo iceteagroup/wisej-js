@@ -49,6 +49,14 @@ qx.Class.define("wisej.web.TreeView", {
 		this.addListener("scrollAnimationYEnd", this.__resetCachedTopNode);
 	},
 
+	statics: {
+
+		/**
+		 * @type {Integer} The time in milliseconds before a second click on a node enters edit mode.
+		 */
+		BEGINEDIT_DELAY: 150
+	},
+
 	properties: {
 
 		/**
@@ -495,7 +503,14 @@ qx.Class.define("wisej.web.TreeView", {
 			if (this.getSelectionMode() !== "none") {
 				var node = wisej.utils.Widget.findWisejComponent(e.getTarget());
 				if (node instanceof wisej.web.TreeNode) {
-					this.setSelection([node]);
+
+					// don't change a multi selection unless the right
+					// click lands outside of the selection.
+					var selection = this.getSelection();
+					if (!selection.includes(node) || (e.isShiftPressed() || e.isCtrlPressed())) {
+
+						this.setSelection([node]);
+					}
 				}
 			}
 		},
@@ -802,7 +817,7 @@ qx.Class.define("wisej.web.TreeView", {
 				var me = this;
 				this.__editNodeTimer = setTimeout(function () {
 					me.fireDataEvent("beginEdit", node);
-				}, 100);
+				}, wisej.web.TreeView.BEGINEDIT_DELAY);
 			}
 		},
 

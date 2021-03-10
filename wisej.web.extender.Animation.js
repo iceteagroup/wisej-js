@@ -118,7 +118,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 			});
 
 			// save the handle in relation to the component.
-			this._handles[component.getId()] = handle;
+			this._handles[component.$$hash] = handle;
 
 		},
 
@@ -128,9 +128,9 @@ qx.Class.define("wisej.web.extender.Animation", {
 		stop: function (component) {
 
 			if (component && component.isWisejComponent) {
-				var handle = this._handles[component.getId()];
+				var handle = this._handles[component.$$hash];
 				if (handle) {
-					delete this._handles[component.getId()];
+					delete this._handles[component.$$hash];
 
 					if (handle.jsAnimation) {
 						qx.bom.element.AnimationJs.stop(handle);

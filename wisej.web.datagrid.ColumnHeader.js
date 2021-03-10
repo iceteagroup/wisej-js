@@ -410,9 +410,9 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 				case "selected":
 					var index = table.getColumns().indexOf(this);
 					if (value)
-						table.getSelectionModel().addSelectionRange(index, -1);
+						table.getSelectionModel().setColumnSelected(index, true);
 					else
-						table.getSelectionModel().removeSelectionRange(index, -1);
+						table.getSelectionModel().setColumnSelected(index, false);
 					break;
 
 				case "width":

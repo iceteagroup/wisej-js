@@ -94,14 +94,11 @@ qx.Class.define("wisej.web.Toast", {
 
 		close: function () {
 
-			this.fadeOut(250).addListenerOnce("end", function () {
+			this.exclude();
+			this.fireEvent("close");
 
-				this.exclude();
-				this.fireEvent("close");
-
-				if (this.isAutoDispose())
-					this.destroy();
-			}, this);
+			if (this.isAutoDispose())
+				this.destroy();
 		},
 
 		__startAutoCloseTimer: function () {

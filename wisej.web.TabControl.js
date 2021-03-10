@@ -183,9 +183,9 @@ qx.Class.define("wisej.web.TabControl", {
 
 				bounds = pages[i].getButton().getBounds();
 
-				if (!bounds) {
+				if (!bounds || !tabBarBounds || !tabScrollerBounds) {
 
-					// hidden tab.
+					// hidden tab or not ready yet.
 					rects.push(null);
 				}
 				else {

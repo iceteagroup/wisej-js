@@ -219,6 +219,13 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			return this.__owner.getItemPadding();
 		},
 
+		// fires a data event on the ListView control.
+		fireItemEvent: function (e, type, data) {
+
+			if (this.__owner.isWired(type))
+				this.__owner.fireItemEvent(e, type, data);
+		},
+
 		/**
 		 * Sets the focused item.
 		 *
@@ -398,6 +405,12 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 			this.__itemCount = this.getDataModel().getRowCount();
 			this.update();
+
+			// notify the ListView on the server.
+			if (this.__owner.isWired("dataUpdated")) {
+				var data = e.getData();
+				this.__owner.fireDataEvent("dataUpdated", { firstIndex: data.firstRow, lastIndex: data.lastRow });
+			}
 		},
 
 		// updates the view when it's resized.
@@ -908,7 +921,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 			var item = e.getCurrentTarget();
 			var index = this.__getItemIndex(item);
-			this.__owner.fireItemEvent(e, "itemClick", index);
+			this.fireItemEvent(e, "itemClick", index);
 
 			// move the focus indicator.
 			this.__updateFocusedItem(index);
@@ -916,7 +929,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			// determine if the user clicked the state icon.
 			var clickedWidget = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
 			if (clickedWidget != null && clickedWidget != item && clickedWidget === item.getChildControl("state"))
-				this.__owner.fireItemEvent(e, "itemCheck", index);
+				this.fireItemEvent(e, "itemCheck", index);
 		},
 
 		_onItemMouseUp: function (e) {
@@ -925,7 +938,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			if (e.getButton() !== "left") {
 				var item = e.getCurrentTarget();
 				var index = this.__getItemIndex(item);
-				this.__owner.fireItemEvent(e, "itemClick", index);
+				this.fireItemEvent(e, "itemClick", index);
 			}
 		},
 
@@ -933,7 +946,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 			var item = e.getCurrentTarget();
 			var index = this.__getItemIndex(item);
-			this.__owner.fireItemEvent(e, "itemDblClick", index);
+			this.fireItemEvent(e, "itemDblClick", index);
 		},
 
 		_onItemPointerOver: function (e) {
@@ -941,8 +954,16 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			var item = e.getTarget();
 			var index = this.__getItemIndex(item);
 
-			if (this.__owner.isWired("itemOver"))
-				this.__owner.fireItemEvent(e, "itemOver", index);
+			this.fireItemEvent(e, "itemOver", index);
+		},
+
+		_onItemPointerOut: function (e) {
+
+			var item = e.getTarget();
+			var index = this.__getItemIndex(item);
+
+			if (!qx.ui.core.Widget.contains(item, e.getRelatedTarget()))
+				this.fireItemEvent(e, "itemLeave", index);
 		},
 
 		// determines the target cell (ListViewItem) for a drag operation
@@ -963,8 +984,11 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			var item = this.__findItem(e);
 			if (item instanceof wisej.web.listview.ItemCellWidget) {
 				var index = this.__getItemIndex(item);
-				if (index > -1)
+				if (index > -1) {
 					this.__selectionManager.replaceSelection([index]);
+
+					this.fireItemEvent(e, "itemDrag", index);
+				}
 			}
 		},
 
@@ -1071,6 +1095,7 @@ qx.Class.define("wisej.web.listview.ItemCellProvider", {
 			widget.addListener("mouseup", this.__itemView._onItemMouseUp, this.__itemView);
 			widget.addListener("dblclick", this.__itemView._onItemDblClick, this.__itemView);
 			widget.addListener("labelclick", this.__itemView._onItemLabelClick, this.__itemView);
+			widget.addListener("pointerout", this.__itemView._onItemPointerOut, this.__itemView);
 			widget.addListener("pointerover", this.__itemView._onItemPointerOver, this.__itemView);
 
 			return widget;

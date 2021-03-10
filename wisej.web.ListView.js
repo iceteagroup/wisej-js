@@ -74,6 +74,19 @@ qx.Class.define("wisej.web.ListView", {
 		this.__pressedString = "";
 	},
 
+	statics: {
+
+		/**
+		 * @type {Integer} The time in milliseconds after the user stops typing before firing the "search" event.
+		 */
+		SEARCH_DELAY: 250,
+
+		/**
+		 * @type {Integer} The time in milliseconds after incremental search string is reset to empty.
+		 */
+		SEARCH_TIMEOUT: 1000
+	},
+
 	properties: {
 
 		// appearance key.
@@ -231,6 +244,76 @@ qx.Class.define("wisej.web.ListView", {
 		 * Returns or sets the position of the tools container.
 		 */
 		toolsPosition: { init: "top", check: ["top", "left", "right", "bottom"], apply: "_applyToolsPosition" },
+	},
+
+	events: {
+
+		/**
+		 * Fired when the user clicks on item.
+		 *
+		 * The data property of the event is the index of the item.
+		 */
+		itemClick: "wisej.web.listview.ItemEvent",
+
+		/**
+		 * Fired when the user checks/unchecks an item when the checkboxes are visible.
+		 *
+		 * The data property of the event is the index of the item.
+		 */
+		itemCheck: "wisej.web.listview.ItemEvent",
+
+		/**
+		 * Fired when the user double clicks an item.
+		 *
+		 * The data property of the event is the index of the item.
+		 */
+		itemDblClick: "wisej.web.listview.ItemEvent",
+
+		/**
+		 * Fired when the user moves the pointer over an item.
+		 *
+		 * The data property of the event is the index of the item.
+		 */
+		itemOver: "wisej.web.listview.ItemEvent",
+
+		/**
+		 * Fired when the user moves the pointer outside of an item.
+		 * 
+		 * The data property of the event is the index of the item.
+		 */
+		itemLeave: "wisej.web.listview.ItemEvent",
+
+		/**
+		 * Fired when the selection changes.
+		 * 
+		 * The data property of the event will be an <b>array</b> of range maps each having the following
+		 * attributes:
+		 * <ul>
+		 *   <li>minIndex: The index of the first item in the selection range.</li>
+		 *   <li>maxIndex: The index of the last item in the selection range.</li>
+		 * </ul>
+		 */
+		selectionChanged: "qx.event.type.Data",
+
+		/**
+		 * Fired when the user stops typing to allow the server to select the first item that matches.
+		 * The data is a string containing the incremental string typed by the user.
+		 * 
+		 * The data property of the event is the text that has accrued so far.
+		 */
+		search: "qx.event.type.Data",
+
+		/**
+		 * Fired when the listview data changed (the items or rows shown in the view).
+		 * 
+		 * The data property of the event will be a map having the following
+		 * attributes:
+		 * <ul>
+		 *   <li>firstIndex: The index of the first item that has changed.</li>
+		 *   <li>lastIndex: The index of the last item that has changed.</li>
+		 * </ul>
+		 */
+		dataUpdated: "qx.event.type.Data"
 	},
 
 	members: {
@@ -825,6 +908,9 @@ qx.Class.define("wisej.web.ListView", {
 			if (this.itemView.isVisible()) {
 				this.itemView._onDragStart(e);
 			}
+			else if (this.gridView.isVisible()) {
+				this.gridView._onDragStart(e);
+			}
 		},
 
 		// handles the "keyinput" event to 
@@ -836,7 +922,7 @@ qx.Class.define("wisej.web.ListView", {
 				return;
 
 			// reset string after a second of non pressed key
-			if (((new Date).valueOf() - this.__lastKeyPress) > 1000) {
+			if (((new Date).valueOf() - this.__lastKeyPress) > wisej.web.ListView.SEARCH_TIMEOUT) {
 				this.__pressedString = "";
 			}
 
@@ -846,7 +932,7 @@ qx.Class.define("wisej.web.ListView", {
 			// store timestamp.
 			this.__lastKeyPress = (new Date).valueOf();
 
-			// fire the "search" event after 250ms of not typing.
+			// fire the "search" event after SEARCH_DELAY of not typing.
 			var me = this;
 			clearTimeout(this.__searchEventTimer);
 			this.__searchEventTimer = setTimeout(function () {
@@ -855,7 +941,7 @@ qx.Class.define("wisej.web.ListView", {
 					me.fireDataEvent("search", me.__pressedString);
 				}
 
-			}, 250);
+			}, wisej.web.ListView.SEARCH_DELAY);
 
 		},
 		// stores the pressed keys and time stamp.

@@ -55,6 +55,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 		this.setEditMode("editProgrammatically");
 
 		// attach to the events to redirect to the owner ListView.
+		this.addListener("dataUpdated", this.__bubbleDataEvent, this);
 		this.addListener("gridCellClick", this.__bubbleDataEvent, this);
 		this.addListener("gridCellDblClick", this.__bubbleDataEvent, this);
 		this.addListener("gridCellMouseUp", this.__bubbleDataEvent, this);
@@ -231,6 +232,13 @@ qx.Class.define("wisej.web.listview.GridView", {
 					this.__owner.fireDataEvent("selectionChanged", this.getSelectionRanges());
 					break;
 
+				case "dataUpdated":
+					if (this.__owner.isWired("dataUpdated")) {
+						var data = e.getData();
+						this.__owner.fireDataEvent("dataUpdated", { firstIndex: data.firstRow, lastIndex: data.lastRow });
+					}
+					break;
+
 				default:
 					this.__owner.fireDataEvent(e.getType(), e.getData());
 					break;
@@ -239,6 +247,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 
 		// overridden.
 		_onKeyPress: function (e) {
+
 			// if checkboxes are visible, toggle the check state
 			// when pressing enter.
 			if (this.getShowCheckBoxes()) {
@@ -277,6 +286,25 @@ qx.Class.define("wisej.web.listview.GridView", {
 				}
 			}
 		},
+
+		// select the item that initiated the drag operation.
+		_onDragStart: function (e) {
+
+			var pageX = e.getDocumentLeft();
+			var pageY = e.getDocumentTop();
+
+			var scrollerArr = this._getPaneScrollerArr();
+			for (var i = 0; i < scrollerArr.length; i++) {
+				var row = scrollerArr[i]._getRowForPagePos(pageX, pageY);
+				if (row != null) {
+
+					this.getSelectionModel().setSelectionRange(-1, row);
+
+					this.__owner.fireItemEvent(e, "itemDrag", row);
+					break;
+				}
+			}
+		}
 	}
 
 });

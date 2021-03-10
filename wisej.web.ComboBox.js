@@ -20,6 +20,7 @@
 /**
  * wisej.web.ComboBox
  *
+ *
  */
 qx.Class.define("wisej.web.ComboBox", {
 
@@ -647,7 +648,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		},
 		setDroppedDown: function (value) {
 
-			if (this.isVisible()) {
+			if (this.isSeeable()) {
 
 				if (this.getDropDownStyle() !== "simple") {
 
@@ -661,7 +662,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			} else {
 
 				if (this.__deferredDropDownEventId) {
-					this.removeListenerByid(this.__deferredDropDownEventId);
+					this.removeListenerById(this.__deferredDropDownEventId);
 					this.__deferredDropDownEventId = null;
 				}
 
@@ -985,6 +986,12 @@ qx.Class.define("wisej.web.ComboBox", {
 						quickSelection: false
 					});
 
+					// cannot navigate the list on mobile and tablet devices.
+					if (qx.core.Environment.get("device.type") !== "desktop") {
+						control.setFocusable(true);
+						control.setKeepFocus(false);
+					}
+
 					control.addListener("changeSelection", this._onListChangeSelection, this);
 					control.addListener("pointerdown", this._onListPointerDown, this);
 					control.getChildControl("pane").addListener("tap", this.close, this);
@@ -992,15 +999,6 @@ qx.Class.define("wisej.web.ComboBox", {
 			}
 
 			return control || this.base(arguments, id);
-		},
-
-		/**
-		 * Handler for the blur event of the current widget.
-		 *
-		 * @param e {qx.event.type.Focus} The blur event.
-		 */
-		_onBlur: function (e) {
-			this.close();
 		},
 
 		/**
@@ -1123,25 +1121,25 @@ qx.Class.define("wisej.web.ComboBox", {
 			var maxHeight = this.getMaxListHeight();
 
 			if (maxWidth > 0)
-				popup.setMaxWidth(Math.max(maxWidth, this.getWidth()));
+				popup.setMaxWidth(Math.min(maxWidth, window.innerWidth));
 			else
 				popup.setMaxWidth(window.innerWidth);
 
 			if (maxHeight > 0)
-				popup.setMaxHeight(maxHeight);
+				popup.setMaxHeight(Math.min(maxHeight, window.innerHeight));
 			else
 				popup.setMaxHeight(window.innerHeight);
 		},
 
-		// overridden
-		_onListPointerDown: function (e) {
+		//// overridden
+		//_onListPointerDown: function (e) {
 
-			if (this.getDropDownStyle() !== "dropDownList") {
-				if (this.isFocusable())
-					this.tabFocus();
-			}
+		//	if (this.getDropDownStyle() !== "dropDownList") {
+		//		if (this.isFocusable())
+		//			this.tabFocus();
+		//	}
 
-		},
+		//},
 
 		/**
 		 * Handles "contextmenu" to stop the bubbling of the event
@@ -1656,6 +1654,8 @@ qx.Class.define("wisej.web.ComboBox", {
 				var list = this.getDropDownList();
 
 				if (!text) {
+					list.scrollToX(0);
+					list.scrollToY(0);
 					this.setListSelectedItem(null);
 					return;
 				}
@@ -1679,6 +1679,8 @@ qx.Class.define("wisej.web.ComboBox", {
 					list.scrollItemIntoView(item);
 				}
 				else {
+					list.scrollToX(0);
+					list.scrollToY(0);
 					this.setListSelectedItem(null);
 				}
 			}
@@ -1811,8 +1813,6 @@ qx.Class.define("wisej.web.ComboBox", {
 			}
 
 			var textField = this.getChildControl("textfield");
-			if (!textField.isVisible())
-				return;
 
 			var text = qx.bom.String.toText(value);
 			if (textField.getValue() === text)
@@ -2121,13 +2121,6 @@ qx.Class.define("wisej.web.UserComboBox", {
 		 * Reference to the widget to place inside the drop down popup to replace the list control.
 		 */
 		dropDown: { init: null, nullable: true, apply: "_applyDropDown", transform: "_transformComponent" },
-
-		/**
-		 * DropDownWidth property.
-		 *
-		 * Sets the width of the custom dropdown. If 0, the width of the wrapped widget is used.
-		 */
-		dropDownWidth: { init: 0, check: "PositiveInteger", apply: "_applyDropDownWidth" }
 	},
 
 	members: {
@@ -2146,18 +2139,6 @@ qx.Class.define("wisej.web.UserComboBox", {
 		_applyDropDown: function (value, old) {
 
 			this.getDropDownList().setWrapped(value);
-		},
-
-		/**
-		 * Applies the dropDownWidth property.
-		 */
-		_applyDropDownWidth: function (value, old) {
-
-			var list = this.getDropDownList();
-			if (value === 0)
-				list.resetWidth();
-			else
-				list.setWidth(value);
 		},
 
 		// overridden.
@@ -2202,7 +2183,8 @@ qx.Class.define("wisej.web.UserComboBox", {
 		// overridden
 		_onPopupChangeVisibility: function (e) {
 
-			var opened = this.getPopup().isVisible();
+			var popup = this.getPopup();
+			var opened = popup.isVisible();
 
 			// prevent firing on change of visibility from "hidden" to "excluded" or vice versa.
 			if (!opened && e.getOldData() !== "visible")
@@ -2220,11 +2202,31 @@ qx.Class.define("wisej.web.UserComboBox", {
 			}
 			else {
 
-				// focus the custom drop down control when opening the list.
 				var dropDownControl = this.getDropDown();
+
 				if (dropDownControl) {
+
+					// focus the custom drop down control when opening the list.
 					if (dropDownControl.isFocusable())
 						dropDownControl.focus();
+
+					// let the list container control the width.
+					dropDownControl.resetWidth();
+
+					// honor the maximum width set on the drop down control.
+					var maxWidth = dropDownControl.getMaxWidth();
+					if (maxWidth > 0) {
+						var list = this.getChildControl("list");
+						list.syncAppearance();
+						popup.syncAppearance();
+						var insets1 = list.getInsets();
+						var insets2 = popup.getInsets();
+						this.setMaxListWidth(maxWidth + insets1.left + insets1.right + insets2.left + insets2.right);
+						this._adjustListSize();
+					}
+					else {
+						popup.resetMaxWidth();
+					}
 				}
 
 				// check for a change in focus, this is the only
@@ -2232,6 +2234,56 @@ qx.Class.define("wisej.web.UserComboBox", {
 				// focused is moved to another widget and not to a child
 				// widget in the custom drop down.
 				qx.event.Idle.getInstance().addListener("interval", this.__checkFocusedWidget, this);
+
+			}
+		},
+
+		/**
+		 * Invoked when the drop down list is opened or closed.
+		 * @param {Boolean} opened true when the drop down list is shown, otherwise false.
+		 */
+		_onDropDown: function (opened) {
+
+			// restore the focus to this widget when the popup is closed.
+			if (!opened) {
+				if (this.isFocusable() && this.hasState("focused"))
+					this.focus();
+			}
+
+			// notify the server the drop down list was opened or closed
+			// after the selection events have fired.
+			qx.event.Timer.once(function () {
+				this.fireEvent(opened ? "open" : "close");
+			}, this, 0);
+
+			// In all cases: Remove focused state from button
+			this.getChildControl("button").removeState("selected");
+		},
+
+		// overridden.
+		__synchListWithText: function (text) {
+
+			// nothing to synch for the user combobox.
+		},
+
+		/**
+		 * Updates list minimum size.
+		 * Overridden.
+		 *
+		 * @param e {qx.event.type.Data} Data event
+		 */
+		_onResize: function (e) {
+
+			var popup = this.getChildControl("popup", true);
+			if (popup) {
+				popup.setMinWidth(e.getData().width);
+
+				var dropDownControl = this.getDropDown();
+				if (dropDownControl) {
+
+					// let the list container control the width.
+					dropDownControl.resetWidth();
+				}
 
 			}
 		},
@@ -2329,8 +2381,10 @@ qx.Class.define("wisej.web.userComboBox.DropDownWrapper", {
 
 			if (old) {
 
-				this._remove(old);
-				old.removeState("inner");
+				if (this.indexOf(old) > -1) {
+					this.remove(old);
+					old.removeState("inner");
+				}
 			}
 
 			if (value) {
@@ -2342,7 +2396,7 @@ qx.Class.define("wisej.web.userComboBox.DropDownWrapper", {
 				if (value.setBorderStyle)
 					value.setBorderStyle("none");
 
-				this._add(value);
+				this.add(value);
 			}
 		},
 
@@ -2373,6 +2427,20 @@ qx.Class.define("wisej.web.userComboBox.DropDownWrapper", {
 			var wrapped = this.getWrapped();
 			if (wrapped && wrapped._onKeyPress)
 				wrapped._onKeyPress(e);
+		},
+
+		/**
+		 * Destroys the widget.
+		 * Overridden to remove the wrapped control before it gets destroyed
+		 */
+		destroy: function () {
+
+			// don't dispose the wrapped control automatically, it
+			// may be reusable. if the app disposes it, it will be
+			// disposed by the server.
+			this.setWrapped(null);
+
+			this.base(arguments);
 		},
 
 		/*

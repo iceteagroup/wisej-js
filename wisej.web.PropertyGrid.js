@@ -59,7 +59,7 @@ qx.Class.define("wisej.web.PropertyGrid", {
 		 *
 		 * Defines how many pixels to indent expandable properties.
 		 */
-		indent: { init: 24, check: "PositiveInteger", themeable: true, apply: "__updateView" },
+		indent: { init: 20, check: "PositiveInteger", themeable: true, apply: "__updateView" },
 
 		/**
 		 * Determines the height of the rows.
@@ -203,11 +203,6 @@ qx.Class.define("wisej.web.propertygrid.GridView", {
 		 * Appearance key for the grid view of the property grid.
 		 */
 		appearance: { init: "propertygrid/grid", refine: true },
-
-		/**
-		 * The level indent in pixels.
-		 */
-		indent: { init: 16, check: "PositiveInteger" },
 	},
 
 	members: {
@@ -326,13 +321,17 @@ qx.Class.define("wisej.web.propertygrid.CellRenderer", {
 
 				var paddingLeft = 0;
 				if (cellInfo.col === 1)
-					paddingLeft = (data.level - 1) * cellInfo.table.getIndent();
+					paddingLeft = data.level * cellInfo.table.getIndent();
 
 				if (data.expanded === true && addOpenClose) {
+					if (paddingLeft > 0)
+						paddingLeft -= cellInfo.table.getIndent();
 					htmlArr.push("<div role='close' class='", this._contentExpandedClassName);
 					htmlArr.push("' style='padding-left: ", paddingLeft, "px'></div>");
 				}
 				else if (data.expanded === false && addOpenClose) {
+					if (paddingLeft > 0)
+						paddingLeft -= cellInfo.table.getIndent();
 					htmlArr.push("<div role='open' class='", this._contentCollapsedClassName);
 					htmlArr.push("' style='padding-left: ", paddingLeft, "px'></div>");
 				}

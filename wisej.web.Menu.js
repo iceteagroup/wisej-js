@@ -356,7 +356,7 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 
 			if (opener) {
 
-				// retrieve the header widget if the opened is a column header.
+				// retrieve the header widget if the opener is a column header.
 				if (opener instanceof wisej.web.datagrid.ColumnHeader)
 					opener = opener.getHeaderWidget();
 

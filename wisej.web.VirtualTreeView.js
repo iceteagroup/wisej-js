@@ -49,6 +49,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		this.setDelegate(this);
 
 		this.addListener("dragstart", this._onItemDrag, this);
+
 		// adds the inner target to the drop & drop event object.
 		this.addListener("drop", this._onDragEvent, this);
 
@@ -549,15 +550,20 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 				var node = this.getTreeNode(e.getTarget());
 				if (node) {
 
+					// don't change a multi selection unless the right
+					// click lands outside of the selection.
 					var selection = this.getSelection();
-					this.__inApplySelectedNodes = true;
-					try {
-						selection.removeAll();
-					} finally {
+					if (!selection.contains(node) || (e.isShiftPressed() || e.isCtrlPressed())) {
 
-						this.__inApplySelectedNodes = false;
+						this.__inApplySelectedNodes = true;
+						try {
+							selection.removeAll();
+						} finally {
+
+							this.__inApplySelectedNodes = false;
+						}
+						selection.setItem(0, node);
 					}
-					selection.setItem(0, node);
 				}
 			}
 		},
@@ -995,7 +1001,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 				var node = this.getTreeNode(item);
 				this.__editNodeTimer = setTimeout(function () {
 					me.fireDataEvent("beginEdit", node);
-				}, 100);
+				}, wisej.web.TreeView.BEGINEDIT_DELAY);
 			}
 		},
 

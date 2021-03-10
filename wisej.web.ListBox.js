@@ -141,7 +141,7 @@ qx.Class.define("wisej.web.ListBox", {
 		/**
 		 * RightClickSelection property.
 		 * 
-		 * Determines whether a right click event ("contextmenu") selects the node under the pointer.
+		 * Determines whether a right click event ("contextmenu") selects the item under the pointer.
 		 */
 		rightClickSelection: { init: false, check: "Boolean", apply: "_applyRightClickSelection" },
 
@@ -348,7 +348,14 @@ qx.Class.define("wisej.web.ListBox", {
 			if (this.getSelectionMode() !== "none" && !this.isReadOnly()) {
 				var item = e.getTarget();
 				if (item instanceof wisej.web.listbox.ListItem) {
-					this.setSelection([item]);
+
+					// don't change a multi selection unless the right
+					// click lands outside of the selection or a modifier is pressed.
+					var selection = this.getSelection();
+					if (!selection.includes(item) || (e.isShiftPressed() || e.isCtrlPressed())) {
+
+						this.setSelection([item]);
+					}
 				}
 			}
 		},

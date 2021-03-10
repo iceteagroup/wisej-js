@@ -42,6 +42,9 @@ qx.Class.define("wisej.web.TrackBar", {
 
 		// add local state properties.
 		this.setStateProperties(this.getStateProperties().concat(["value"]));
+
+		// rightToLeft support.
+		this.addListener("changeRtl", this._onRtlChange, this);
 	},
 
 	properties: {
@@ -152,8 +155,15 @@ qx.Class.define("wisej.web.TrackBar", {
 					begin.setAlignX("center");
 
 					knob.setLayoutProperties({ left: null, right: null, bottom: null });
-					end.setLayoutProperties({ top: 0, left: null, right: null, bottom: null });
-					begin.setLayoutProperties({ top: null, left: null, right: null, bottom: 0 });
+
+					if (this.isRtl()) {
+						begin.setLayoutProperties({ top: 0, left: null, right: null, bottom: null });
+						end.setLayoutProperties({ top: null, left: null, right: null, bottom: 0 });
+					}
+					else {
+						end.setLayoutProperties({ top: 0, left: null, right: null, bottom: null });
+						begin.setLayoutProperties({ top: null, left: null, right: null, bottom: 0 });
+					}
 					break;
 
 				case "horizontal":
@@ -172,8 +182,15 @@ qx.Class.define("wisej.web.TrackBar", {
 					begin.setAlignY("middle");
 
 					knob.setLayoutProperties({ top: null, right: null, bottom: null });
-					end.setLayoutProperties({ top: null, left: null, right: 0, bottom: null });
-					begin.setLayoutProperties({ top: null, left: 0, right: null, bottom: null });
+
+					if (this.isRtl()) {
+						begin.setLayoutProperties({ top: null, left: null, right: 0, bottom: null });
+						end.setLayoutProperties({ top: null, left: 0, right: null, bottom: null });
+					}
+					else {
+						end.setLayoutProperties({ top: null, left: null, right: 0, bottom: null });
+						begin.setLayoutProperties({ top: null, left: 0, right: null, bottom: null });
+					}
 					break;
 			}
 
@@ -210,14 +227,27 @@ qx.Class.define("wisej.web.TrackBar", {
 			switch (this.getOrientation()) {
 				case "vertical":
 					var gap = Math.floor(knob.getHeight() / 2);
-					end.setHeight(position + gap);
-					begin.setHeight(size.height - position - gap);
+
+					if (this.isRtl()) {
+						begin.setHeight(position + gap);
+						end.setHeight(size.height - position - gap);
+					} else {
+						end.setHeight(position + gap);
+						begin.setHeight(size.height - position - gap);
+					}
 					break;
 
 				case "horizontal":
 					var gap = Math.floor(knob.getWidth() / 2);
-					begin.setWidth(position + gap);
-					end.setWidth(size.width - position - gap);
+
+					if (this.isRtl()) {
+						end.setWidth(position + gap);
+						begin.setWidth(size.width - position - gap);
+					}
+					else {
+						begin.setWidth(position + gap);
+						end.setWidth(size.width - position - gap);
+					}
 					break;
 			}
 
@@ -266,46 +296,19 @@ qx.Class.define("wisej.web.TrackBar", {
 			return position;
 		},
 
-		/**
-		 * Event handler for keypress events.
-		 *
-		 * Adds support for arrow keys, page up, page down, home and end keys.
-		 *
-		 * @param e {qx.event.type.KeySequence} Incoming keypress event
-		 */
-		_onKeyPress: function (e) {
-			var isHorizontal = this.getOrientation() === "horizontal";
-			var backward = isHorizontal ? "Left" : "Down";
-			var forward = isHorizontal ? "Right" : "Up";
+		// rightToLeft support. 
+		// listens to "changeRtl" to mirror the trackbar sides.
+		_onRtlChange: function (e) {
 
-			switch (e.getKeyIdentifier()) {
-				case forward:
-					this.slideForward();
-					break;
+			if (e.getData() === e.getOldData())
+				return;
 
-				case backward:
-					this.slideBack();
-					break;
+			var rtl = e.getData();
+			if (rtl != null) {
 
-				case "PageUp":
-					this.slidePageForward(100);
-					break;
-
-				case "PageDown":
-					this.slidePageBack(100);
-					break;
-
-				case "Home":
-					this.slideToBegin(200);
-					break;
-
-				case "End":
-					this.slideToEnd(200);
-					break;
-
-				default:
-					return;
+				this._applyOrientation(this.getOrientation());
 			}
+
 		},
 
 		// overridden

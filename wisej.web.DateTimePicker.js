@@ -151,7 +151,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 *
 		 * Updates the selected date.
 		 */
-		value: { init: null, check: "Date", apply: "_applyValue", nullable: true },
+		value: { init: null, check: "Date", apply: "_applyValue", nullable: true, event: "changeValue" },
 
 		/**
 		 * MinValue property.
@@ -239,6 +239,8 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 * Shows the date chooser popup.
 		 */
 		open: function () {
+
+			this.focus();
 
 			var popup = this.getChildControl("popup");
 			popup.open(this, true);
@@ -352,16 +354,11 @@ qx.Class.define("wisej.web.DateTimePicker", {
 					this.addState("unchecked");
 				}
 
-				this.__enableControls([
-					"textfield", "upbutton", "downbutton", "button"], value);
+				this.getChildControl("button").setEnabled(value);
+				this.getChildControl("upbutton").setEnabled(value);
+				this.getChildControl("downbutton").setEnabled(value);
+				this.getChildControl("textfield").setReadOnly(!value || !this.isEditable());
 			}
-		},
-
-		__enableControls: function (controls, enable) {
-
-			for (var i = 0; i < controls.length; i++)
-				this.getChildControl(controls[i]).setEnabled(enable);
-
 		},
 
 		/**
@@ -424,7 +421,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 					var handler = qx.ui.core.FocusHandler.getInstance();
 					if (handler && handler.isFocused(this)) {
 
-						if (selection.length > 1)
+						if (selection.length > 1 || selection.start == selection.length)
 							this.selectAllText();
 						else
 							this.setSelection(selection);
@@ -446,10 +443,15 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 */
 		_applyValue: function (value, old) {
 
-			// do nothing, simply store the date value.
+			// updated the date in the datechooser.
+			var dateChooser = this.getChildControl("list", true);
+			if (dateChooser)
+				dateChooser.setValue(value);
 
-			if (value === null || old === null || value.getTime() !== old.getTime())
-				this.fireDataEvent("changeValue", value, old);
+			// do nothing else, simply store the date value.
+			// we don't set the text in the inner "textfield" because
+			// the formatting is done on the server and the text is
+			// updated through the text property.
 		},
 
 		/** 
@@ -689,7 +691,19 @@ qx.Class.define("wisej.web.DateTimePicker", {
 					break;
 
 				case "list":
-					control = this.base(arguments, id, hash);
+					control = new wisej.web.dateTimePicker.DateChooser().set({
+						focusable: false,
+						keepFocus: true
+					});
+
+					// cannot navigate the list on mobile and tablet devices.
+					if (qx.core.Environment.get("device.type") !== "desktop") {
+						control.setFocusable(true);
+						control.setKeepFocus(false);
+					}
+
+					control.addListener("execute", this._onChangeDate, this);
+					control.addListener("keypress", this._onChooserKeyPress, this);
 					break;
 
 				case "popup":
@@ -952,8 +966,10 @@ qx.Class.define("wisej.web.dateTimePicker.DropDown", {
 
 		this.setAutoHide(true);
 		this.setKeepActive(true);
-		this.setPosition("bottom-right");
+		this.setFont(owner.getFont());
 		this.setPlacementModeX("best-fit");
+
+		owner.addListener("changeFont", function (e) { this.setFont(owner.getFont()); }, this);
 
 		// set the "owner" and "container" attributes for QA automation.
 		this.addListener("changeVisibility", function (e) {
@@ -975,3 +991,49 @@ qx.Class.define("wisej.web.dateTimePicker.DropDown", {
 		}
 	}
 });
+
+
+/**
+ * wisej.web.dateTimePicker.DateChooser"
+ *
+ * Extends qx.ui.control.DateChooser to support roll scrolling.
+ */
+qx.Class.define("wisej.web.dateTimePicker.DateChooser", {
+
+	extend: qx.ui.control.DateChooser,
+
+	construct: function () {
+
+		this.base(arguments);
+
+		// enable roll scrolling of the month.
+		this.addListener("roll", this._onRoll, this);
+	},
+
+	members: {
+
+		/**
+		 * Scrolls pane on roll events
+		 *
+		 * @param e {qx.event.type.Roll} the roll event
+		 */
+		_onRoll: function (e) {
+
+			// only wheel and touch
+			if (e.getPointerType() === "mouse") {
+				return;
+			}
+
+			var delta = e.getDelta();
+			// move 1 month each roll.
+			if (delta != 0) {
+				var date = this.getValue();
+				date = date ? new Date(date.getTime()) : date = new Date();
+				date.setMonth(date.getMonth() + (delta > 0 ? -1 : 1));
+				this.setValue(date);
+			}
+			e.stop();
+		}
+	}
+});
+

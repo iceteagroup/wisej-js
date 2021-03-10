@@ -298,6 +298,23 @@ qx.Class.define("wisej.utils.Widget", {
 		},
 
 		/**
+		 * Returns true of the widget is in a popup.
+		 * @param widget {qx.ui.core.Widget} Widget to check/
+		 */
+		isInsidePopup: function (widget) {
+
+			while (widget) {
+
+				if (widget instanceof qx.ui.popup.Popup)
+					return true;
+
+				widget = widget.getLayoutParent ? widget.getLayoutParent() : null;
+			}
+
+			return false;
+		},
+
+		/**
 		 * Crawls up until it finds a wisej widget.
 		 *
  		 * @param item {qx.ui.core.Widget | Element} A child widget or element.

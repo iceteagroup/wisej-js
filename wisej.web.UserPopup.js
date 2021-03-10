@@ -164,7 +164,16 @@ qx.Class.define("wisej.web.UserPopup", {
 		 * Returns the widget to animate for the wisej.web.extender.Animation component.
 		 */
 		getAnimationTarget: function () {
-			this.__popup;
+			return this.__popup;
+		},
+
+		/**
+		 * Handles the "move" event from the popup to update the absolute location
+		 * of the popup on the server.
+		 */
+		_onPopupMove: function (e) {
+
+			this.fireDataEvent("popupMove", e.getData());
 		},
 
 		/**
@@ -264,6 +273,7 @@ qx.Class.define("wisej.web.UserPopup", {
 				case "popup":
 					control = new wisej.web.userPopup.Popup();
 					control.getContentElement().setStyle("overflow", "visible");
+					control.addListener("move", this._onPopupMove, this);
 					this.__updatePopupResizableEdges(control);
 					break;
 			}

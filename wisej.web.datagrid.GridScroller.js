@@ -432,12 +432,16 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 						break;
 				}
 
-				var notify = (prevRow == row) && (prevCol != col);
-				table.setFocusedCell(col, row, true /*scrollVisible*/, notify);
+				table.setFocusedCell(col, row, true /*scrollVisible*/, false);
 
 				// update the selection.
-				// chances are it has already changed on the server through the "selectionChanged" event.
-				table.getSelectionManager().handleTap(col, row, e);
+				if (!table.getSelectionManager().handleTap(col, row, e)) {
+
+					// notify the server if the selection has not changed.
+					if (prevCol != col || prevRow != row) {
+						table.notifyFocusCellChanged(col, row);
+					}
+				}
 
 				if (this.__focusIndicator.isHidden()
 					|| (this.__lastPointerDownCell

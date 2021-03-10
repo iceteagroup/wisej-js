@@ -260,6 +260,13 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 						quickSelection: false,
 						delegate: this
 					});
+
+					// cannot navigate the list on mobile and tablet devices.
+					if (qx.core.Environment.get("device.type") !== "desktop") {
+						control.setFocusable(true);
+						control.setKeepFocus(false);
+					}
+
 					control.getSelection().addListener("change", this._onListChangeSelection, this);
 					control.addListener("pointerdown", this._onListPointerDown, this);
 					control.getChildControl("pane").addListener("tap", this.close, this);

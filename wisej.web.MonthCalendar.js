@@ -48,6 +48,9 @@ qx.Class.define("wisej.web.MonthCalendar", {
 
 		// attach to the deactivate event to release the selection range anchor.
 		this.addListener("deactivate", this.__onDeactivate);
+
+		// support for key events.
+		this.addListener("keypress", this._onKeyPress);
 	},
 
 	properties: {
@@ -760,7 +763,7 @@ qx.Class.define("wisej.web.MonthCalendar", {
 		// handle the deactivate event to release the selection anchor when the calendar loses the focus.
 		__onDeactivate: function (e) {
 
-			if (!qx.ui.core.Widget.contains(this, e.getRelatedTarget())) {
+			if (this != e.getRelatedTarget() && !qx.ui.core.Widget.contains(this, e.getRelatedTarget())) {
 
 				// update the selection range if we had a pending anchor date.
 				if (this.__selectionAnchor) {
@@ -798,17 +801,19 @@ qx.Class.define("wisej.web.MonthCalendar", {
 						this.__selectionAnchor = null;
 
 						// limit the selection range.
-						if (end > start) {
-							end = this.__limitDays(end, start, maxDays);
-						}
-						else if (end < start) {
-							end = this.__limitDays(end, start, -maxDays);
-							var t = start; start = end; end = t;
-						}
+						if (start) {
+							if (end > start) {
+								end = this.__limitDays(end, start, maxDays);
+							}
+							else if (end < start) {
+								end = this.__limitDays(end, start, -maxDays);
+								var t = start; start = end; end = t;
+							}
 
-						// update the selection range.
-						var range = { start: start, end: end };
-						this.setSelectionRange(range);
+							// update the selection range.
+							var range = { start: start, end: end };
+							this.setSelectionRange(range);
+						}
 
 						return;
 					}
@@ -875,6 +880,12 @@ qx.Class.define("wisej.web.MonthCalendar", {
 
 		},
 
+		// handles the keypress event and forward to the current calendar.
+		_onKeyPress: function (e) {
+
+			this.__calendars[0].handleKeyPress(e);
+		},
+
 		/**
 		 * getDesignMetrics
 		 *
@@ -888,7 +899,7 @@ qx.Class.define("wisej.web.MonthCalendar", {
 				width: size.width,
 				height: size.height
 			};
-		},
+		}
 
 	},
 });
@@ -918,6 +929,8 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		this.calendar.addListener("readOnlyChanged", this.__onCalendarReadOnlyChanged, this);
 		this.getChildControl("navigation-bar").setEnabled(!this.calendar.isReadOnly());
 
+		// enable roll scrolling of the month.
+		this.addListener("roll", this._onRoll, this);
 	},
 
 	properties: {
@@ -1070,10 +1083,31 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 					}
 				}
 			}
+		},
+
+		/**
+		 * Scrolls pane on roll events
+		 *
+		 * @param e {qx.event.type.Roll} the roll event
+		 */
+		_onRoll: function (e) {
+
+			// only wheel and touch
+			if (e.getPointerType() === "mouse") {
+				return;
+			}
+
+			var delta = e.getDelta();
+			// move 1 month each roll.
+			if (delta != 0) {
+				var date = this.getValue();
+				date = date ? new Date(date.getTime()) : date = new Date();
+				date.setMonth(date.getMonth() + (delta > 0 ? -1 : 1));
+				this.setValue(date);
+			}
+			e.stop();
 		}
-
 	}
-
 });
 
 
