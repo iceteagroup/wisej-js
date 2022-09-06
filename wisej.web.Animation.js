@@ -440,7 +440,7 @@ qx.Class.define("wisej.web.Animation", {
 					0: { transform: "translateY(0%)" },
 					100: { transform: "translateY(100%)" }
 				}
-			},
+			}
 		}
 	}
 });

@@ -175,6 +175,11 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 		 */
 		_applyIconSize: function (value, old) {
 
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
+
 			var icon = this.getChildControl("icon", true);
 
 			if (icon) {
@@ -305,6 +310,7 @@ qx.Class.define("wisej.web.datagrid.HeaderCell", {
 						allowGrowY: true,
 						anonymous: true
 					});
+					control.getContentElement().setStyle("word-break", "break-word");
 					this._add(control, { row: 1, column: 2 });
 					break;
 

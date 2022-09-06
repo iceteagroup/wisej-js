@@ -101,11 +101,11 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		_applyAcceptButton: function (value, old) {
 
 			if (!value && old) {
-				wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
+				wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this, "keypress");
 			}
 
 			if (value && !old) {
-				wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onAcceptButton, this);
+				wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onAcceptButton, this, "keypress");
 			}
 		},
 
@@ -119,7 +119,6 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				if (!wisej.utils.Widget.canExecute(acceptButton))
 					return;
 
-				e.stop();
 				acceptButton.execute();
 				return true;
 			}
@@ -134,11 +133,11 @@ qx.Class.define("wisej.web.ScrollablePage", {
 		_applyCancelButton: function (value, old) {
 
 			if (!value && old) {
-				wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
+				wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this, "keypress");
 			}
 
 			if (value && !old) {
-				wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onCancelButton, this);
+				wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onCancelButton, this, "keypress");
 			}
 		},
 
@@ -152,7 +151,6 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				if (!wisej.utils.Widget.canExecute(cancelButton))
 					return;
 
-				e.stop();
 				cancelButton.execute();
 				return true;
 			}
@@ -169,8 +167,8 @@ qx.Class.define("wisej.web.ScrollablePage", {
 				Wisej.Platform.setMainPage(null);
 		}
 
-		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
-		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this, "keypress");
 	}
 
 });

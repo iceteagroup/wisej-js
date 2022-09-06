@@ -242,7 +242,7 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 
 			// selected?
 			if (rowInfo.selected) {
-				state.selected = rowInfo.selected;
+				state.selected = true;
 			}
 
 			// even or odd...
@@ -250,6 +250,11 @@ qx.Class.define("wisej.web.datagrid.rowRenderer.Row", {
 				state.even = true;
 			else
 				state.odd = true;
+
+			// frozen?
+			if (rowInfo.frozenRow) {
+				state.frozen = true;
+			}
 
 			// cell border.
 			if (rowInfo.table)

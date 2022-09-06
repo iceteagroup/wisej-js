@@ -155,7 +155,7 @@ qx.Class.define("wisej.web.Panel", {
 		 *
 		 * Changes the size of the caption bar.
 		 */
-		headerSize: { init: null, check: "Color", apply: "_applyHeaderSize", nullable: true },
+		headerSize: { init: null, check: "Map", apply: "_applyHeaderSize", nullable: true },
 
 		/**
 		 * RestoreBounds property.
@@ -643,7 +643,6 @@ qx.Class.define("wisej.web.Panel", {
 			this.__floating = true;
 
 			var el = this.getContentElement();
-			var vertical = this.__isVertical();
 			var dockSide = this.__getDockSide();
 			var pane = this.getChildControl("pane");
 			var expandedBounds = this.getRestoreBounds();
@@ -771,7 +770,6 @@ qx.Class.define("wisej.web.Panel", {
 			this.__floating = false;
 
 			var el = this.getContentElement();
-			var vertical = this.__isVertical();
 			var dockSide = this.__getDockSide();
 			var pane = this.getChildControl("pane");
 			var collapsedBounds = this.getBounds();

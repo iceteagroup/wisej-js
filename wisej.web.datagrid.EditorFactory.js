@@ -35,9 +35,7 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 		getCellEditorValue: function (cellEditor) {
 
 			if (cellEditor) {
-
 				var getValueMethod = cellEditor.getCellValue || cellEditor.getText || cellEditor.getValue;
-
 				if (getValueMethod)
 					return getValueMethod.call(cellEditor);
 			}
@@ -49,14 +47,9 @@ qx.Class.define("wisej.web.datagrid.EditorFactory",
 		setCellEditorValue: function (cellEditor, value) {
 
 			if (cellEditor) {
-
 				var setValueMethod = cellEditor.setCellValue || cellEditor.setText || cellEditor.setValue;
-
-				if (setValueMethod) {
-
-					value = value || "";
-					setValueMethod.call(cellEditor, value);
-				}
+				if (setValueMethod)
+					setValueMethod.call(cellEditor, value || "");
 			}
 		},
 

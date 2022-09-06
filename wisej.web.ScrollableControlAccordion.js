@@ -70,6 +70,11 @@ qx.Class.define("wisej.web.Accordion", {
 		 */
 		_applyIconSize: function (value, old) {
 
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
+
 			var panels = this.getChildren();
 			for (var i = 0 ; i < panels.length; i++)
 				panels[i].setIconSize(value);
@@ -183,6 +188,13 @@ qx.Class.define("wisej.web.accordion.Panel", {
 		headerTextColor: { init: null, check: "Color", apply: "_applyHeaderTextColor" },
 
 		/**
+		 * HeaderSize property.
+		 *
+		 * Changes the size of the caption bar.
+		 */
+		headerSize: { init: null, check: "Color", apply: "_applyHeaderSize", nullable: true },
+
+		/**
 		 * Collapsed property.
 		 *
 		 * Adds or removes the collapsed state.
@@ -226,6 +238,11 @@ qx.Class.define("wisej.web.accordion.Panel", {
 		 * Applies the iconSize property.
 		 */
 		_applyIconSize: function (value, old) {
+
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
 
 			var size = value;
 			var icon = this.getChildControl("icon", true);
@@ -342,6 +359,27 @@ qx.Class.define("wisej.web.accordion.Panel", {
 		_applyHeaderTextColor: function (value, old) {
 
 			this.getChildControl("captionbar").setTextColor(value);
+		},
+
+		/**
+		 * Applies the headerSize property.
+		 */
+		_applyHeaderSize: function (value, old) {
+
+			var captionBar = this.getChildControl("captionbar");
+
+			if (value && value > -1) {
+				captionBar.resetWidth();
+				captionBar.resetMaxWidth();
+				captionBar.setHeight(value);
+				captionBar.setMaxHeight(value);
+			}
+			else {
+				captionBar.resetHeight();
+				captionBar.resetMaxHeight();
+				captionBar.resetWidth();
+				captionBar.resetMaxWidth();
+			}
 		},
 
 		/**

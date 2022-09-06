@@ -41,7 +41,15 @@ qx.Class.define("wisej.web.TagTextBox", {
 		this.addListener("dblclick", this._onDblClick, this);
 		this.getChildControl("textfield").getContentElement().addListener("paste", this._onPaste, this);
 
-		this._tagContainer = this.getChildControl("tag-container");
+		// add local state events.
+		this.setStateEvents(this.getStateEvents().concat(["tagAdded", "tagRemoved"]));
+
+		// reset the state properties to remove the "selection" state property.
+		this.setStateProperties(["x", "y", "width", "height", "visible", "enabled", "value"]);
+
+		this._tagContainer = this.getChildControl("container");
+
+		this.initAutoSize();
 	},
 
 	properties: {
@@ -117,7 +125,21 @@ qx.Class.define("wisej.web.TagTextBox", {
 		 * 
 		 * Indicates whether to show a tooltip for each inner tag element.
 		 */
-		showToolTips: {init:false, check:"Boolean", apply:"_applyShowToolTips"}
+		showToolTips: { init: false, check: "Boolean", apply: "_applyShowToolTips" },
+
+		/**
+		 * Editable.
+		 * 
+		 * Returns or sets whether the user can add tags by typing into the editable field.
+		 */
+		editable: { init: true, check: "Boolean", apply: "_applyEditable" },
+
+		/**
+		 * AutoSize.
+		 * 
+		 * Determines whether the tagTextBox grows vertically to fit the tags and the input.
+		 */
+		autoSize: { init: true, check: "Boolean", apply: "_applyAutoSize" }
 	},
 
 	events: {
@@ -176,27 +198,50 @@ qx.Class.define("wisej.web.TagTextBox", {
 			var oldValue = this.getValue();
 			var container = this._tagContainer;
 
+			// remove and collect all children of the container: tags and editor.
+			var children = container.removeAll();
+
 			if (!value || value.length == 0) {
 
-				// remove all the tag widgets.
-				if (this.__getTagCount() > 0) {
-					var children = container.getChildren();
-					for (var i = children.length - 2; i > -1; i--) {
+				// setting zero tags? destroy all children.
+				for (var i = 0; i < children.length; i++) {
+					if (children[i] instanceof wisej.web.tagtextbox.Tag)
 						children[i].destroy();
-					}
+					else if (children[i] != null)
+						container.add(children[i]);
 				}
 
 				this.fireDataEvent("changeValue", "", oldValue);
 				return;
 			}
 
+			var tag = null;
 			var showToolTips = this.getShowToolTips();
+			var allowDuplicates = this.getAllowDuplicateTags();
+
 			for (var i = 0; i < value.length; i++) {
 
+				// reject duplicates
+				if (!allowDuplicates) {
+					var text = value[i].value || "";
+					if (this.__findTag(text)) {
+						this.fireDataEvent("tagRejected", { index: -1, value: text });
+						continue;
+					}
+				}
+
 				// try to reuse the existing widgets.
-				var tag =
-					this.__findTag(value[i].value)
-					|| this.__createNewTag();
+				var index = children.findIndex(function (item) {
+					return item instanceof wisej.web.tagtextbox.Tag;
+				});
+
+				if (index == -1) {
+					tag = this.__createNewTag();
+				}
+				else {
+					tag = children[index];
+					children[index] = null;
+				}
 
 				tag.set(value[i]);
 
@@ -205,16 +250,15 @@ qx.Class.define("wisej.web.TagTextBox", {
 				else
 					tag.getContentElement().removeAttribute("title");
 
-				container.addAt(tag, i);
+				container.add(tag);
 			}
 
-			// remove any tag widget that doesn't match the values.
-			var children = container.getChildren();
-			var searchValues = value.map(function (el) { return el.value.toLowerCase(); });
-			for (var i = children.length - 2; i > -1; i--) {
-				var value = children[i].getValue().toLowerCase();
-				if (searchValues.indexOf(value) == -1)
+			// destroy unused tag widgets and re-add the editor.
+			for (var i = 0; i < children.length; i++) {
+				if (children[i] instanceof wisej.web.tagtextbox.Tag)
 					children[i].destroy();
+				else if (children[i] != null)
+					container.add(children[i]);
 			}
 
 			// update the watermark in the editable widget.
@@ -287,7 +331,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 		},
 
 		/**
-		 * Applies the ShowToolTIps property.
+		 * Applies the ShowToolTips property.
 		 */
 		_applyShowToolTips: function (value, old) {
 
@@ -302,19 +346,69 @@ qx.Class.define("wisej.web.TagTextBox", {
 		},
 
 		/**
+		 * Applies the Editable property.
+		 */
+		_applyEditable: function (value, old) {
+
+			var textfield = this.getChildControl("textfield");
+			value
+				? textfield.show()
+				: textfield.exclude();
+		},
+
+		/**
+		 * Applies the AutoSize property.
+		 */
+		_applyAutoSize: function (value, old) {
+
+			var index = 0;
+			var slider = this.getChildControl("slider");
+			var container = this.getChildControl("container");
+
+			var widget = this._getChildren()[0];
+			if (widget instanceof wisej.web.ToolContainer && widget.getPosition() === "left")
+				index++;
+
+			if (value) {
+				slider.exclude();
+				this._addAt(container, index, { flex: 1 });
+				container.invalidateLayoutCache();
+				container.invalidateLayoutChildren();
+			}
+			else {
+				slider.show();
+				slider.add(container, { flex: 0 });
+				this._addAt(slider, index, { flex: 1 });
+				container.invalidateLayoutCache();
+				container.invalidateLayoutChildren();
+			}
+		},
+
+		/**
 		 * Handles "tap" events to delete tags.
 		 */
 		_onTap: function (e) {
 
-			var tag = e.getTarget();
-			if (tag instanceof wisej.web.tagtextbox.Tag) {
+			var target = e.getTarget();
+			if (this.isEditable()
+				&& !this.isReadOnly()
+				&& !(target instanceof qx.ui.form.RepeatButton)
+				&& !(target instanceof wisej.web.tagtextbox.Tag)) {
+
+				this.focus();
+			}
+
+			if (target instanceof wisej.web.tagtextbox.Tag) {
+
+				var tag = target;
 
 				if (this.isReadOnly()) {
 					this.__selectTag(tag);
 				}
 				else {
+
 					// clicked on the delete icon?
-					var target = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
+					target = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
 
 					if (target instanceof qx.ui.basic.Image)
 						this.__removeTag(tag);
@@ -337,7 +431,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 				// clicked on the delete icon?
 				var target = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
 				if (!(target instanceof qx.ui.basic.Image))
-					this.fireDataEvent("tagClick", tag.getValue());
+					this.fireDataEvent("tagClick", { index: this.getSelectedIndex(), value: tag.getValue() });
 			}
 		},
 
@@ -351,7 +445,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 				// clicked on the delete icon?
 				var target = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
 				if (!(target instanceof qx.ui.basic.Image))
-					this.fireDataEvent("tagDblClick", tag.getValue());
+					this.fireDataEvent("tagDblClick", { index: this.getSelectedIndex(), value: tag.getValue() });
 			}
 		},
 
@@ -385,9 +479,8 @@ qx.Class.define("wisej.web.TagTextBox", {
 							this.__removeTag(this.__getSelectedTag(), false);
 							e.stop();
 						}
-						else if (this.getTextSelectionStart() == 0) {
-							this.__selectTag(this.__getTagCount() - 1);
-							this.__removeTag(this.__getSelectedTag(), false);
+						else if (this.getTextSelectionStart() == 0 && this.getTextSelectionLength() == 0) {
+							this.__removeTag(this.__getLastTag(), false);
 							e.stop();
 						}
 					}
@@ -415,9 +508,35 @@ qx.Class.define("wisej.web.TagTextBox", {
 							this.__selectTag(index + 1);
 						}
 						else {
-							this.__selectTag(-1);
+							if (this.isEditable()) {
+								this.__selectTag(-1);
+								this.getChildControl("textfield").getFocusElement().focus();
+							}
+							else {
+								this.__selectTag(0);
+							}
 						}
 						e.stop();
+					}
+					break;
+
+				case "End":
+					if (this.isEditable()) {
+						this.__selectTag(-1);
+						this.getChildControl("textfield").getFocusElement().focus();
+					}
+					else {
+						this.__selectTag(this.__getTagCount() - 1);
+					}
+					break;
+
+				case "Home":
+					this.__selectTag(0);
+					if (!this.isAutoSize()) {
+						var tag = this.__getSelectedTag();
+						if (tag) {
+							this.getChildControl("slider").scrollTo(tag.getBounds().left);
+						}
 					}
 					break;
 			}
@@ -517,6 +636,14 @@ qx.Class.define("wisej.web.TagTextBox", {
 			return container.getChildren()[index];
 		},
 
+		__getLastTag: function () {
+			var index = this.__getTagCount() - 1;
+			if (index > -1) {
+				var container = this._tagContainer;
+				return container.getChildren()[index];
+			}
+		},
+
 		__addTag: function (text) {
 
 			if (!text)
@@ -534,14 +661,14 @@ qx.Class.define("wisej.web.TagTextBox", {
 					},
 					this.getDuplicateDuration());
 
-					this.fireDataEvent("tagRejected", text);
+					this.fireDataEvent("tagRejected", { index: -1, value: text });
 					return false;
 				}
 			}
 
 			if (this.getMaxTagCount() > 0) {
 				if (this.__getTagCount() >= this.getMaxTagCount()) {
-					this.fireDataEvent("tagRejected", text);
+					this.fireDataEvent("tagRejected", { index: -1, value: text });
 					return false;
 				}
 			}
@@ -552,9 +679,13 @@ qx.Class.define("wisej.web.TagTextBox", {
 			tag.setValue(text);
 			tag.setLabel(text);
 
+			if (this.getShowToolTips())
+				tag.getContentElement().setAttribute("title", text);
+
 			var textfield = this.getChildControl("textfield");
 			textfield.invalidateLayoutCache();
-			this.fireDataEvent("tagAdded", text);
+
+			this.fireDataEvent("tagAdded", { index: this.__getTagCount() - 1, value: text });
 
 			// scroll the edit field into view.
 			this.scrollChildIntoView(textfield);
@@ -570,18 +701,34 @@ qx.Class.define("wisej.web.TagTextBox", {
 			var index = container.indexOf(tag);
 			if (index > -1) {
 
+				var selectedIndex = this.getSelectedIndex();
+
 				var textfield = this.getChildControl("textfield");
 				textfield.invalidateLayoutCache();
-				this.fireDataEvent("tagRemoved", tag.getValue());
+				this.fireDataEvent("tagRemoved", { index: index, value: tag.getValue() });
 
 				tag.destroy();
 
-				if (!forward)
-					this.setSelectedIndex(--index);
-				else if (this.__getTagCount() > 0)
-					this._applySelectedIndex(index);
-				else
-					this.setSelectedIndex(-1);
+				if (selectedIndex > -1 && selectedIndex == index) {
+
+					if (!forward || index == this.__getTagCount()) {
+						this.setSelectedIndex(--index);
+						var tag = this.__getSelectedTag();
+						if (tag)
+							this.fireDataEvent("tagSelected", { index: index, value: tag.getValue() });
+					}
+					else if (this.__getTagCount() > 0) {
+						this._applySelectedIndex(index);
+						var tag = this.__getSelectedTag();
+						if (tag)
+							this.fireDataEvent("tagSelected", { index: index, value: tag.getValue() });
+					}
+					else {
+						this.setSelectedIndex(-1);
+					}
+				}
+
+				this.setDirty(true);
 
 				return true;
 			}
@@ -612,7 +759,7 @@ qx.Class.define("wisej.web.TagTextBox", {
 			tag = this.__getSelectedTag();
 			if (tag) {
 				this.scrollChildIntoView(tag);
-				this.fireDataEvent("tagSelected", tag.getValue());
+				this.fireDataEvent("tagSelected", { index: index, value: tag.getValue() });
 			}
 
 			// scroll the edit field into view.
@@ -626,10 +773,12 @@ qx.Class.define("wisej.web.TagTextBox", {
 			if (text) {
 				text = text.toLowerCase();
 				var children = this._tagContainer.getChildren();
-				for (var i = 0, count = this.__getTagCount() ; i < count; i++) {
-					var label = children[i].getValue().toLowerCase();
-					if (label === text)
-						return children[i];
+				for (var i = 0; i < children.length; i++) {
+					if (children[i] instanceof wisej.web.tagtextbox.Tag) {
+						var label = (children[i].getValue() || "").toLowerCase();
+						if (label == text)
+							return children[i];
+					}
 				}
 			}
 			return null;
@@ -651,15 +800,19 @@ qx.Class.define("wisej.web.TagTextBox", {
 					control.addState("inner");
 					control.setMinWidth(1);
 					control.setMinHeight(1);
+					control.setSelectable(true);
 					control.setAllowGrowY(true);
 					this._add(control, { flex: 1 });
 					break;
 
-				case "tag-container":
+				case "slider":
+					control = new qx.ui.container.SlideBar();
+					control.setScrollStep(30);
+					break;
+
+				case "container":
 					control = new wisej.web.tagtextbox.TagContainer();
 					var textfield = this.getChildControl("textfield");
-					var index = this._indexOf(textfield);
-					this._addAt(control, index, { flex: 1 });
 					control.add(textfield, { stretch: 1 });
 					break;
 			}

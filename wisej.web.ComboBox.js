@@ -19,8 +19,6 @@
 
 /**
  * wisej.web.ComboBox
- *
- *
  */
 qx.Class.define("wisej.web.ComboBox", {
 
@@ -65,8 +63,9 @@ qx.Class.define("wisej.web.ComboBox", {
 		// handle the native event "oncopy" to update the clipboard on the server.
 		textField.getContentElement().addListener("copy", this._onNativeCopy, this);
 
-		// register for the Enter or Esc keys at the document level to execute before shortcuts.
-		qx.event.Registration.addListener(document.body, "keydown", this.__onDocumentKeyDown, this, true);
+		// register for the Enter or Esc keys accelerators.
+		wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onEscape, this, "keypress");
 
 		// prepare the combobox when created in a grid cell.
 		this.addListener("cellBeginEdit", this._onCellBeginEdit, this);
@@ -104,7 +103,12 @@ qx.Class.define("wisej.web.ComboBox", {
 		/**
 		 * Fired when the items collection changes.
 		 */
-		"changeItems": "qx.event.type.Event"
+		"changeItems": "qx.event.type.Event",
+
+		/**
+		 * This event is fired once when the user edits the value.
+		 */
+		"changeModified": "qx.event.type.Data"
 	},
 
 	properties: {
@@ -242,7 +246,22 @@ qx.Class.define("wisej.web.ComboBox", {
 		 * 
 		 * When set to true, the entire text is selected when the element gains the focus.
 		 */
-		selectOnEnter: { init: false, check: "Boolean", apply: "_applySelectOnEnter" }
+		selectOnEnter: { init: false, check: "Boolean", apply: "_applySelectOnEnter" },
+
+		/**
+		 * IncrementalSelection property.
+		 * 
+		 * Determines whether items are selected incrementally as the user types within a 1 second timeout.
+		 */
+		incrementalSelection: { init: true, check: "Boolean", apply: "_applyIncrementalSelection" },
+
+		/**
+		 * modified property.
+		 *
+		 * Gets or sets the index of the selected item.
+		 */
+		modified: { init: false, check: "Boolean", event: "changeModified" }
+
 	},
 
 	members: {
@@ -251,7 +270,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		_autoCompleteMode: 0,
 
 		// suspend event dispatching.
-		_suspendEvents: false,
+		_suspendEvents: 0,
 
 		// item to select at the next "Down" key press.
 		_suggestedItem: null,
@@ -265,7 +284,8 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		open: function () {
 
-			this.focus();
+			if (!this.isEnabled())
+				return;
 
 			var popup = this.getPopup();
 
@@ -276,8 +296,7 @@ qx.Class.define("wisej.web.ComboBox", {
 					break;
 
 				case "dropDown":
-					var me = this;
-					setTimeout(function () { popup.open(me, true); }, 1);
+					popup.open(this, true);
 					break;
 
 				case "dropDownList":
@@ -286,9 +305,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			}
 
 			if (this.isLazyLoad()) {
-				this.__showLoader();
-				this.fireEvent("load");
-				this.setLazyLoad(false);
+				this.__performLazyLoading();
 			}
 
 		},
@@ -298,8 +315,11 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		close: function () {
 			var popup = this.getPopup(true);
-			if (popup)
-				popup.hide();
+			if (popup && popup.isVisible()) {
+				setTimeout(function () {
+					popup.hide();
+				}, 1);
+			}
 		},
 
 		/**
@@ -351,6 +371,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		focus: function () {
 
 			if (this.isFocusable()) {
+
 				var field = this.getChildControl("textfield");
 				if (field.isVisible()) {
 					field.getFocusElement().focus();
@@ -392,15 +413,14 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		setItems: function (items) {
 
-			// reset the ajax loaders for lazy loading.
-			this.__hideLoader();
-
 			this._suggestedItem = null;
 
-			if (items == null)
+			if (items == null) {
+				this.__onLazyLoadingDone();
 				return;
+			}
 
-			this._suspendEvents = true;
+			this._suspendEvents++;
 			try {
 
 				var index, item;
@@ -475,7 +495,9 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			} finally {
 
-				this._suspendEvents = false;
+				this._suspendEvents--;
+
+				this.__onLazyLoadingDone();
 			}
 
 			this.fireEvent("changeItems");
@@ -530,24 +552,6 @@ qx.Class.define("wisej.web.ComboBox", {
 		},
 
 		/**
-		 * Applies the capitalization defined in the @characterCasing property.
-		 */
-		_applyTextTransform: function (text) {
-
-			if (text) {
-				switch (this.getCharacterCasing()) {
-
-					case "upper": return text.toUpperCase();
-					case "lower": return text.toLowerCase();
-					case "capitalize": return qx.lang.String.capitalize(text);
-					default: return text;
-				}
-			}
-
-			return text;
-		},
-
-		/**
 		 * Applies the readOnly property.
 		 */
 		_applyReadOnly: function (value, old) {
@@ -557,8 +561,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			else
 				this.removeState("readonly");
 
-			var textField = this.getChildControl("textfield");
-			textField.setReadOnly(value);
+			this.getChildControl("textfield").setReadOnly(value);
 
 			var list = this.getDropDownList();
 			list.setEnableInlineFind(!value);
@@ -573,10 +576,20 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (value && !old) {
 				this.addListener("focusin", function (e) {
 					if (this.isSelectOnEnter()) {
-						qx.event.Timer.once(this.selectAllText, this, 1);
+						qx.event.Timer.once(this.selectAllText, this, 0);
 					}
 				}, this);
 			}
+		},
+
+		/**
+		 * Applies the IncrementalSelection property.
+		 */
+		_applyIncrementalSelection: function (value, old) {
+
+			var list = this.getChildControl("list", true);
+			if (list)
+				list.setIncrementalSelection(value);
 		},
 
 		/**
@@ -617,7 +630,7 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (this.isLazyLoad())
 				return;
 
-			this._suspendEvents = true;
+			this._suspendEvents++;
 			try {
 				if (value == null || value === -1) {
 					this.setListSelectedItem(null);
@@ -631,7 +644,7 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			} finally {
 
-				this._suspendEvents = false;
+				this._suspendEvents--;
 			}
 		},
 
@@ -792,11 +805,8 @@ qx.Class.define("wisej.web.ComboBox", {
 					if (this.isLazyLoad()) {
 
 						qx.event.Timer.once(function () {
-							this.__showLoader();
-							this.fireEvent("load");
+							this.__performLazyLoading();
 						}, this, 0);
-
-						this.setLazyLoad(false);
 					}
 
 					// show the drop down list.
@@ -838,16 +848,19 @@ qx.Class.define("wisej.web.ComboBox", {
 				case "dropDown":
 				case "dropDownList":
 					if (old === "simple") {
-						this.close();
+
 						button.show();
 						list.removeState("simple");
 						textField.removeState("simple");
 						list.setMaxHeight(this.getMaxListHeight());
 						this._getLayout().dispose();
 						this._setLayout((new qx.ui.layout.HBox()).set({ alignY: "middle" }));
-						this.getPopup().add(list);
 
-						this.remnoveState("multiline");
+						var popup = this.getPopup();
+						popup.hide();
+						popup.add(list);
+
+						this.removeState("multiline");
 					}
 
 					break;
@@ -979,17 +992,16 @@ qx.Class.define("wisej.web.ComboBox", {
 						keepFocus: true,
 						height: null,
 						width: null,
-						maxWidth: this.getMaxListWidth(),
 						maxHeight: this.getMaxListHeight(),
 						selectionMode: "single",
 						scrollbarX: "off",
-						quickSelection: false
+						quickSelection: false,
+						incrementalSelection: this.getIncrementalSelection()
 					});
 
 					// cannot navigate the list on mobile and tablet devices.
 					if (qx.core.Environment.get("device.type") !== "desktop") {
 						control.setFocusable(true);
-						control.setKeepFocus(false);
 					}
 
 					control.addListener("changeSelection", this._onListChangeSelection, this);
@@ -1117,11 +1129,12 @@ qx.Class.define("wisej.web.ComboBox", {
 		_adjustListSize: function () {
 
 			var popup = this.getPopup();
+			var width = this.getWidth();
 			var maxWidth = this.getMaxListWidth();
 			var maxHeight = this.getMaxListHeight();
 
 			if (maxWidth > 0)
-				popup.setMaxWidth(Math.min(maxWidth, window.innerWidth));
+				popup.setMaxWidth(Math.min(Math.max(width, maxWidth), window.innerWidth));
 			else
 				popup.setMaxWidth(window.innerWidth);
 
@@ -1130,16 +1143,6 @@ qx.Class.define("wisej.web.ComboBox", {
 			else
 				popup.setMaxHeight(window.innerHeight);
 		},
-
-		//// overridden
-		//_onListPointerDown: function (e) {
-
-		//	if (this.getDropDownStyle() !== "dropDownList") {
-		//		if (this.isFocusable())
-		//			this.tabFocus();
-		//	}
-
-		//},
 
 		/**
 		 * Handles "contextmenu" to stop the bubbling of the event
@@ -1161,10 +1164,13 @@ qx.Class.define("wisej.web.ComboBox", {
 
 			this._suggestedItem = null;
 
-			// save the suspendEvents state.
-			var suspendEvents = this._suspendEvents;
+			if (!this.core.processingActions)
+				this.setModified(true);
 
-			this._suspendEvents = true;
+			// save the suspendEvents state.
+			var suspended = this._suspendEvents > 0;
+
+			this._suspendEvents++;
 			try {
 				var current = e.getData();
 				var icon = this.getChildControl("icon");
@@ -1182,7 +1188,7 @@ qx.Class.define("wisej.web.ComboBox", {
 					icon.setSource(item.getIcon());
 					icon.setVisibility(icon.getSource() ? "visible" : "excluded");
 
-					if (!suspendEvents) {
+					if (!suspended) {
 
 						// select the full text if the combobox has the focus.
 						if (this.getDropDownStyle() !== "dropDownList") {
@@ -1213,8 +1219,7 @@ qx.Class.define("wisej.web.ComboBox", {
 				}
 			}
 			finally {
-				// restore the suspendEvents state.
-				this._suspendEvents = suspendEvents;
+				this._suspendEvents--;
 			}
 		},
 
@@ -1258,7 +1263,7 @@ qx.Class.define("wisej.web.ComboBox", {
 		 */
 		_onPointerDown: function (e) {
 
-			if (e.getTarget() === this) {
+			if (e.getTarget() === this || this.getDropDownStyle() === "simple") {
 				qx.event.Timer.once(this.focus, this, 0);
 			}
 		},
@@ -1353,15 +1358,21 @@ qx.Class.define("wisej.web.ComboBox", {
 					// defer the key handling for after the list is loaded.
 					if (this.isLazyLoad()) {
 
-						this.__showLoader();
-						this.fireEvent("load");
-						this.setLazyLoad(false);
+						switch (key) {
+							case "Tab":
+							case "Enter":
+							case "Escape":
+								break;
 
-						this.addListenerOnce("changeItems", function () {
-							list.handleKeyPress(e);
-						}, this);
+							default:
+								this.__performLazyLoading(function () {
+									list.handleKeyPress(e);
+								});
+								break;
+						}
 					}
 					else {
+
 						list.handleKeyPress(e);
 					}
 				}
@@ -1372,42 +1383,40 @@ qx.Class.define("wisej.web.ComboBox", {
 		},
 
 		/**
-		 * Event handler for the "keydown" accelerator even at the
-		 * document level. Needed to close the drop down also when
-		 * the app registered a shortcut for Enter or Escape.
-		 * 
-		 * @param {qx.event.type.KeySequence} e The event data.
+		 * Handles the "Enter" accelerator to close the drop down.
 		 */
-		__onDocumentKeyDown: function (e) {
+		__onEnter: function (e) {
 
-			if (!this._isFocused())
+			if (e.getTarget() !== this || !this._isFocused())
 				return;
 
-			switch (e.getKeyIdentifier()) {
+			if (this.isDroppedDown()) {
 
-				case "Enter":
-					if (this.isDroppedDown()) {
+				if (this._suggestedItem)
+					this.setListSelectedItem(this._suggestedItem);
 
-						if (this._suggestedItem)
-							this.setListSelectedItem(this._suggestedItem);
+				this.resetAllTextSelection();
+				this.close();
 
-						this.resetAllTextSelection();
-						this.close();
-						e.stop();
+				this.__forwardToDataGrid(e);
 
-						this.__forwardToDataGrid(e);
+				return true;
+			}
+		},
 
-						return;
-					}
-					break;
+		/**
+		 * Handles the "Enter" accelerator to close the drop down.
+		 */
+		__onEscape: function (e) {
 
-				case "Escape":
-					if (this.isDroppedDown()) {
-						this.close();
-						e.stop();
-						return;
-					}
-					break;
+			if (e.getTarget() !== this || !this._isFocused())
+				return;
+
+			if (this.isDroppedDown()) {
+
+				this.close();
+
+				return true;
 			}
 		},
 
@@ -1442,25 +1451,14 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (this.isReadOnly())
 				return;
 
-			if (this.getDropDownStyle() === "dropDownList") {
-
-				// Use the incremental selection using the typed characters
-				// implemented in the list control.
-
-				// It saves the string for about 1000ms and uses it to select
-				// the next item in the list.This is the same as the ListBox
-				// keyboard selection behavior.
+			if (e.getTarget() === this) {
 
 				// defer the key handling for after the list is loaded.
 				if (this.isLazyLoad()) {
 
-					this.__showLoader();
-					this.fireEvent("load");
-					this.setLazyLoad(false);
-
-					this.addListenerOnce("changeItems", function () {
+					this.__performLazyLoading(function () {
 						this.getDropDownList()._onKeyInput(e);
-					}, this);
+					});
 				}
 				else {
 					this.getDropDownList()._onKeyInput(e);
@@ -1487,15 +1485,15 @@ qx.Class.define("wisej.web.ComboBox", {
 			if (this.isReadOnly())
 				return;
 
-			// forward the "input" event.
 			this.setDirty(true);
+			this.setModified(true);
 			this.fireDataEvent("input", e.getData(), e.getOldData());
-
-			if (e.getData() != e.getOldData())
-				this.fireEvent("modified");
 
 			if (this.getDropDownStyle() === "dropDownList")
 				return;
+
+			// process the input event.
+			this.__processInputText(e.getData());
 
 			// automatically show the drop down?
 			switch (this._autoCompleteMode) {
@@ -1508,9 +1506,10 @@ qx.Class.define("wisej.web.ComboBox", {
 						this.open();
 					break;
 			}
+		},
 
-			// process the input event.
-			var text = e.getData();
+		__processInputText: function (text) {
+
 			switch (this._autoCompleteMode) {
 
 				case 0: // none
@@ -1580,7 +1579,7 @@ qx.Class.define("wisej.web.ComboBox", {
 				var itemText = this._getItemText(item);
 				if (itemText.length >= text.length) {
 
-					this._suspendEvents = true;
+					this._suspendEvents++;
 					try {
 
 						textfield.setValue(itemText);
@@ -1588,7 +1587,7 @@ qx.Class.define("wisej.web.ComboBox", {
 
 					} finally {
 
-						this._suspendEvents = false;
+						this._suspendEvents--;
 					}
 				}
 			}
@@ -1640,25 +1639,33 @@ qx.Class.define("wisej.web.ComboBox", {
 				this.__synchListWithText(text);
 			}
 
-			if (e.getTarget().isVisible())
-				this.fireDataEvent("changeValue", e.getData(), e.getOldData());
+			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
 		},
 
 		// overridden.
 		// synchronizes the selected item in the list with the text in the editable combobox.
 		__synchListWithText: function (text) {
 
-			this._suspendEvents = true;
+			var list = this.getDropDownList();
+
+			if (!text) {
+				list.scrollToX(0);
+				list.scrollToY(0);
+				this.setListSelectedItem(null);
+				return;
+			}
+
+			if (this.isLazyLoad() && this.getDropDownStyle() === "dropDownList") {
+
+				this.__performLazyLoading(function () {
+					this.__synchListWithText(text);
+				});
+
+				return;
+			}
+
+			this._suspendEvents++;
 			try {
-
-				var list = this.getDropDownList();
-
-				if (!text) {
-					list.scrollToX(0);
-					list.scrollToY(0);
-					this.setListSelectedItem(null);
-					return;
-				}
 
 				// find the first item that matches the text.
 				var item = list.findItem(text, false /*ignoreCase*/);
@@ -1677,15 +1684,19 @@ qx.Class.define("wisej.web.ComboBox", {
 					}
 
 					list.scrollItemIntoView(item);
-				}
-				else {
+
+				} else {
 					list.scrollToX(0);
 					list.scrollToY(0);
 					this.setListSelectedItem(null);
+
+					// clear the value if this is a DropDownList.
+					if (this.getDropDownStyle() === "dropDownList") {
+						this.setValue("");
+					}
 				}
-			}
-			finally {
-				this._suspendEvents = false;
+			} finally {
+				this._suspendEvents--;
 			}
 		},
 
@@ -1773,20 +1784,69 @@ qx.Class.define("wisej.web.ComboBox", {
 			return qx.ui.core.FocusHandler.getInstance().getFocusedWidget() === this;
 		},
 
-		__showLoader: function () {
+		__performLazyLoading: function (callback) {
 
-			var open = this.getChildControl("button", true);
-			if (open) {
-				open.setIcon(this.getLoader());
+			if (!this.__loading) {
+
+				this.__loading = true;
+
+				var open = this.getChildControl("button", true);
+				if (open) {
+					open.setIcon(this.getLoader());
+				}
+
+				qx.event.Timer.once(function () {
+					this.fireEvent("load");
+				}, this, 0);
+			}
+
+			if (this.__loading && callback) {
+
+				this.addListenerOnce("changeItems", function () {
+
+					qx.event.Timer.once(function () {
+						callback.call(this);
+					}, this, 0);
+
+				}, this);
+			}
+
+			return this.__loading;
+		},
+
+		__onLazyLoadingDone: function () {
+
+			if (this.__loading) {
+
+				this.__loading = false;
+				this.setLazyLoad(false);
+
+				var open = this.getChildControl("button", true);
+				if (open) {
+					open.resetIcon();
+				}
+
+				if (this.getDropDownStyle() !== "dropDownList")
+					this.__processInputText(this.getValue());
 			}
 		},
 
-		__hideLoader: function () {
+		/** true when the lazy loader is waiting for a response. */
+		__loading: false,
 
-			var open = this.getChildControl("button", true);
-			if (open) {
-				open.resetIcon();
-			}
+		/*---------------------------------------------------------------------------
+		  wisej.web.datagrid.EditorFactory -> get/setCellValue implementation.
+		---------------------------------------------------------------------------*/
+
+		getCellValue: function () {
+
+			return this.getValue();
+		},
+		setCellValue: function (value) {
+
+			this.setValue(value);
+			this.__synchListWithText(value);
+			this.__processInputText(value);
 		},
 
 		/*---------------------------------------------------------------------------
@@ -1795,44 +1855,41 @@ qx.Class.define("wisej.web.ComboBox", {
 
 		setValue: function (value) {
 
-			value = this._applyTextTransform(value);
+			this._suspendEvents++;
+			try {
 
-			var labelField = this.getChildControl("labelfield");
+				var labelField = this.getChildControl("labelfield");
 
-			if (!value
-				&& this.getPlaceholder()
-				&& this.getSelectedIndex() == -1
-				&& this.getListSelectedItem() == null) {
+				if (!value
+					&& this.getPlaceholder()
+					&& this.getSelectedIndex() == -1
+					&& this.getListSelectedItem() == null) {
 
-				labelField.setValue(this.getPlaceholder());
-				labelField.setTextColor("text-placeholder");
-			}
-			else {
-				labelField.setValue(value);
-				labelField.resetTextColor();
-			}
+					labelField.setValue(this.getPlaceholder());
+					labelField.setTextColor("text-placeholder");
+				}
+				else {
+					labelField.setValue(value);
+					labelField.resetTextColor();
+				}
 
-			var textField = this.getChildControl("textfield");
+				var textField = this.getChildControl("textfield");
 
-			var text = qx.bom.String.toText(value);
-			if (textField.getValue() === text)
-				return;
+				var text = qx.bom.String.toText(value);
+				if (textField.getValue() === text)
+					return;
 
-			if (this._isFocused()) {
-				var selectAll, selStart, selEnd;
-				selEnd = textField.getTextSelectionEnd();
-				selStart = textField.getTextSelectionStart();
-				selectAll = selStart < 1 && text && text.length <= selEnd;
-
-				textField.setValue(text);
-
-				if (selectAll)
+				if (this._isFocused()) {
+					textField.setValue(text);
 					textField.selectAllText();
-				else
-					textField.setTextSelection(selStart, selEnd);
+				}
+				else {
+					textField.setValue(text);
+				}
 			}
-			else {
-				textField.setValue(text);
+			finally {
+
+				this._suspendEvents--;
 			}
 		},
 		getValue: function () {
@@ -1844,7 +1901,7 @@ qx.Class.define("wisej.web.ComboBox", {
 					? textField.getValue()
 					: labelField.getValue();
 
-			return this._applyTextTransform(value);
+			return value;
 
 		},
 		resetValue: function () {
@@ -1856,8 +1913,8 @@ qx.Class.define("wisej.web.ComboBox", {
 	destruct: function () {
 
 		// un-register the Enter or Esc accelerators.
-		qx.event.Registration.removeListener(document.body, "keydown", this.__onDocumentKeyDown, this, true);
-
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onEscape, this, "keypress");
 	}
 });
 
@@ -1954,6 +2011,17 @@ qx.Class.define("wisej.web.combobox.DropDownList", {
 	construct: function () {
 
 		this.base(arguments);
+
+	},
+
+	properties: {
+
+		/**
+		 * IncrementalSelection property.
+		 * 
+		 * Determines whether items are selected incrementally as the user types within a 1 second timeout.
+		 */
+		incrementalSelection: { init: true, check: "Boolean" }
 
 	},
 
@@ -2088,6 +2156,22 @@ qx.Class.define("wisej.web.combobox.DropDownList", {
 
 			// if no element was found, return null
 			return null;
+		},
+
+		/**
+		 * Handles the inline find - if enabled
+		 *
+		 * @param e {qx.event.type.KeyInput} key input event
+		 */
+		_onKeyInput: function (e) {
+
+			this.base(arguments, e);
+
+			if (!this.getIncrementalSelection()) {
+
+				// reset the key buffer timer.
+				this.__lastKeyPress = 0;
+			}
 		}
 	}
 
@@ -2129,8 +2213,8 @@ qx.Class.define("wisej.web.UserComboBox", {
 		 * Applies the readOnly property.
 		 */
 		_applyReadOnly: function (value, old) {
-			var textField = this.getChildControl("textfield");
-			textField.setReadOnly(value);
+
+			this.getChildControl("textfield").setReadOnly(value);
 		},
 
 		/**
@@ -2176,7 +2260,6 @@ qx.Class.define("wisej.web.UserComboBox", {
 					return;
 				}
 			}
-
 			this.base(arguments, e);
 		},
 
@@ -2199,29 +2282,31 @@ qx.Class.define("wisej.web.UserComboBox", {
 				// close all popup widgets (most likely a context menu)
 				// when the combobox dropdown list is closed.
 				qx.ui.menu.Manager.getInstance().hideAll();
+
+				this.focus();
 			}
 			else {
 
 				var dropDownControl = this.getDropDown();
-
 				if (dropDownControl) {
 
 					// focus the custom drop down control when opening the list.
-					if (dropDownControl.isFocusable())
+					if (dropDownControl.isFocusable() && this.getDropDownStyle() === "dropDownList")
 						dropDownControl.focus();
 
-					// let the list container control the width.
-					dropDownControl.resetWidth();
+					dropDownControl.setWidth(this.getWidth());
 
 					// honor the maximum width set on the drop down control.
 					var maxWidth = dropDownControl.getMaxWidth();
+
 					if (maxWidth > 0) {
 						var list = this.getChildControl("list");
 						list.syncAppearance();
 						popup.syncAppearance();
 						var insets1 = list.getInsets();
 						var insets2 = popup.getInsets();
-						this.setMaxListWidth(maxWidth + insets1.left + insets1.right + insets2.left + insets2.right);
+						maxWidth += insets1.left + insets1.right + insets2.left + insets2.right;
+						this.setMaxListWidth(maxWidth);
 						this._adjustListSize();
 					}
 					else {
@@ -2276,15 +2361,12 @@ qx.Class.define("wisej.web.UserComboBox", {
 
 			var popup = this.getChildControl("popup", true);
 			if (popup) {
-				popup.setMinWidth(e.getData().width);
+				var width = e.getData().width;
+				popup.setMinWidth(width);
 
 				var dropDownControl = this.getDropDown();
-				if (dropDownControl) {
-
-					// let the list container control the width.
-					dropDownControl.resetWidth();
-				}
-
+				if (dropDownControl)
+					dropDownControl.setWidth(width);
 			}
 		},
 
@@ -2456,7 +2538,9 @@ qx.Class.define("wisej.web.userComboBox.DropDownWrapper", {
 		getSelection: function () { },
 		setSelection: function () { },
 		resetSelection: function () { },
-		getSelectionContext: function () { }
+		getSelectionContext: function () { },
+		getIncrementalSelection: function () { },
+		setIncrementalSelection: function () { }
 	}
 
 });

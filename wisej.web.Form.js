@@ -58,7 +58,6 @@ qx.Class.define("wisej.web.Form", {
 		this.addListener("longtap", function (e) { e.stopPropagation(); }, this);
 		this.addListener("contextmenu", function (e) { e.stopPropagation(); }, this);
 
-
 		// fire the "created" event asynchronously to let creators subscribe.
 		qx.event.Timer.once(function () { this.fireEvent("created") }, this, 0);
 	},
@@ -284,6 +283,22 @@ qx.Class.define("wisej.web.Form", {
 				this.fireEvent("close");
 			}
 
+			// remove from all owned forms.
+			if (!wisej.web.DesignMode) {
+
+				var manager = Wisej.Platform.getDesktop() || Wisej.Platform.private.getRoot();
+				if (manager) {
+					var windows = manager.getWindows();
+					if (windows && windows.length) {
+						for (var i = 0; i < windows.length; i++) {
+							var w = windows[i];
+							if (w && w != this && w.getOwner() == this)
+								w.setOwner(null);
+						}
+					}
+				}
+			}
+
 			this.base(arguments);
 		},
 
@@ -454,6 +469,12 @@ qx.Class.define("wisej.web.Form", {
 					break;
 
 				case "normal":
+
+					// update the restore position
+					var props = this.getLayoutProperties();
+					this.__restoredTop = props.top != null ? props.top : this.__restoredTop;
+					this.__restoredLeft = props.left != null ? props.left : this.__restoredLeft;
+
 					this.base(arguments);
 					break;
 
@@ -741,15 +762,22 @@ qx.Class.define("wisej.web.Form", {
 		_applyAcceptButton: function (value, old) {
 
 			if (!value && old) {
-				wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
+				wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this, "keypress");
 			}
 
 			if (value && !old) {
-				wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onAcceptButton, this);
+				wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onAcceptButton, this, "keypress");
 			}
 		},
 
 		__onAcceptButton: function (e) {
+
+			// ignore if the Enter accelerator was pressed on another button.
+			var target = e.getTarget();
+			if (target instanceof wisej.web.Button ||
+				target instanceof wisej.web.SplitButton) {
+				return;
+			}
 
 			var acceptButton = this.getAcceptButton();
 			if (acceptButton != null && acceptButton.isEnabled()) {
@@ -759,7 +787,6 @@ qx.Class.define("wisej.web.Form", {
 				if (!wisej.utils.Widget.canExecute(acceptButton))
 					return;
 
-				e.stop();
 				acceptButton.execute();
 				return true;
 			}
@@ -774,11 +801,11 @@ qx.Class.define("wisej.web.Form", {
 		_applyCancelButton: function (value, old) {
 
 			if (!value && old) {
-				wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
+				wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this, "keypress");
 			}
 
 			if (value && !old) {
-				wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onCancelButton, this);
+				wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onCancelButton, this, "keypress");
 			}
 		},
 
@@ -792,7 +819,6 @@ qx.Class.define("wisej.web.Form", {
 				if (!wisej.utils.Widget.canExecute(cancelButton))
 					return;
 
-				e.stop();
 				cancelButton.execute();
 				return true;
 			}
@@ -965,8 +991,8 @@ qx.Class.define("wisej.web.Form", {
 	 * destruct
 	 */
 	destruct: function () {
-		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this);
-		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this);
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onAcceptButton, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onCancelButton, this, "keypress");
 	}
 });
 

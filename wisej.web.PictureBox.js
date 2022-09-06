@@ -148,6 +148,13 @@ qx.Class.define("wisej.web.PictureBox", {
 			}
 		},
 
+		_onChangeTheme: function () {
+
+			this.base(arguments);
+
+			this._applySizeMode(this.getSizeMode());
+		},
+
 		/**
 		 * Event handler for the pointer over event.
 		 */
@@ -182,7 +189,6 @@ qx.Class.define("wisej.web.PictureBox", {
 		getDesignMetrics: function () {
 
 			return this.getSizeHint();
-		},
-
-	},
+		}
+	}
 });

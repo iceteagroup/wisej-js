@@ -371,9 +371,13 @@ qx.Class.define("wisej.web.ListView", {
 
 					this.itemView.show();
 					this.gridView.exclude();
-					this.itemView.scrollToY(0);
+
+					var index = (old == "details")
+						? this.gridView.getFocusedRow()
+						: this.itemView.getFocusedItem();
 
 					this.reloadData();
+					this.itemView.setFocusedItem(index);
 					this.itemView.setSelectionRanges(ranges);
 
 					break;
@@ -382,11 +386,13 @@ qx.Class.define("wisej.web.ListView", {
 
 					this.gridView.show();
 					this.itemView.exclude();
-					this.gridView.scrollCellVisible(0, 0);
 					this.gridView.setColumns(this.getColumns());
+
+					var index = this.itemView.getFocusedItem();
 
 					this.reloadData();
 					this.gridView.setSelectionRanges(ranges);
+					this.gridView.setFocusedCell(0, index, true);
 
 					break;
 			}
@@ -397,6 +403,11 @@ qx.Class.define("wisej.web.ListView", {
 		 */
 		_applyIconSize: function (value, old) {
 
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
+
 			this.itemView.setIconSize(value);
 
 		},
@@ -405,6 +416,11 @@ qx.Class.define("wisej.web.ListView", {
 		 * Applies the stateIconSize property.
 		 */
 		_applyStateIconSize: function (value, old) {
+
+			if (value == null) {
+				this.resetStateIconSize();
+				return;
+			}
 
 			this.itemView.setStateIconSize(value);
 
@@ -799,7 +815,7 @@ qx.Class.define("wisej.web.ListView", {
 		 * Resize the columns width according to the specified parameters.
 		 *
 		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
-		 * @param autoSizeMode {String} Autosize mode: one of "none", "headerSize", "columnContent".
+		 * @param autoSizeMode {String} Autosize mode: one of "none", "headerSize", "columnContent", "headerAndColumnContent".
 		 * @param deferred {Boolean} Indicates that the call should be deferred until the next data update.
 		 */
 		autoResizeColumns: function (columnIndex, autoSizeMode, deferred) {
@@ -814,6 +830,10 @@ qx.Class.define("wisej.web.ListView", {
 
 					case "columnContent":
 						this.gridView.autoResizeColumns(columnIndex, "allCellsExceptHeader", 0, deferred);
+						break;
+
+					case "headerAndColumnContent":
+						this.gridView.autoResizeColumns(columnIndex, "allCells", 0, deferred);
 						break;
 				}
 			}
@@ -859,7 +879,24 @@ qx.Class.define("wisej.web.ListView", {
 					? this.itemView
 					: this.gridView;
 
-			if (currentView != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
+			var originalTarget = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
+
+			if (currentView != originalTarget) {
+
+				// keep the keyboard with the embedded widget.
+				if (this !== originalTarget &&
+					!(originalTarget instanceof qx.ui.root.Inline) &&
+					!qx.ui.core.Widget.contains(this, originalTarget)) {
+
+					return;
+				}
+
+				if (this !== originalTarget
+					&& originalTarget instanceof wisej.web.listview.LabelEditor) {
+
+					return;
+				}
+
 				currentView.activate();
 			}
 		},
@@ -867,14 +904,34 @@ qx.Class.define("wisej.web.ListView", {
 		// focus the inner view when gaining the focus.
 		__onFocusIn: function (e) {
 
+			this.visualizeFocus();
+
 			var currentView =
 				this.itemView.isVisible()
 					? this.itemView
 					: this.gridView;
 
-			if (currentView != qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget())) {
+			var originalTarget = qx.ui.core.Widget.getWidgetByElement(e.getOriginalTarget());
+
+			if (currentView != originalTarget) {
+
 				currentView.fireNonBubblingEvent("focusin", qx.event.type.Focus);
 				currentView.fireNonBubblingEvent("focus", qx.event.type.Focus);
+
+				// keep the keyboard with the embedded widget.
+				if (this !== originalTarget &&
+					!(originalTarget instanceof qx.ui.root.Inline) &&
+					!qx.ui.core.Widget.contains(this, originalTarget)) {
+
+					return;
+				}
+
+				if (this !== originalTarget
+					&& originalTarget instanceof wisej.web.listview.LabelEditor) {
+
+					return;
+				}
+
 				currentView.activate();
 			}
 		},

@@ -207,7 +207,6 @@ qx.Class.define("wisej.web.Media", {
 		 */
 		_applyVolume: function (value, old) {
 
-
 			this._media.setVolume(value);
 		},
 
@@ -289,6 +288,22 @@ qx.Class.define("wisej.web.Video", {
 
 		appearance: { init: "video", refine: true },
 
+		/*
+		 * object-fit Property
+		 *
+		 * The CSS object-fit property is used to specify how an video should be resized to fit its container.
+		 * https://www.w3schools.com/css/css3_object-fit.asp
+		 */
+		objectFit: { check: "String", apply: "_applyObjectFit" },
+
+		/**
+		 * playsinline property.
+		 * 
+		 * A Boolean attribute indicating that the video is to be played "inline", that is within the element's playback area.
+		 * 
+		 */
+		playsInline: { check: "Boolean", apply: "_applyPlaysInline" },
+
 		/**
 		 * PosterImage property.
 		 *
@@ -306,6 +321,30 @@ qx.Class.define("wisej.web.Video", {
 
 			return new qx.bom.media.Video();
 
+		},
+
+		/**
+		 * Applies the playsinline property.
+		 * @param {any} value
+		 * @param {any} old
+		 */
+		_applyPlaysInline: function (value, old) {
+
+			var video = this._media.getMediaObject();
+			if (video) {
+				video.setAttribute("playsinline", "");
+			}
+		},
+
+		/**
+		 * Applies the object-fit property.
+		 */
+		_applyObjectFit: function (value, old) {
+
+			var video = this._media.getMediaObject();
+			if (video) {
+				video.style.objectFit = value;
+			}
 		},
 
 		/**
@@ -328,6 +367,7 @@ qx.Class.define("wisej.web.Video", {
 			if (this.getSource()) {
 
 				var video = this._media.getMediaObject();
+				video.pause();
 
 				var renderWhenReady = function () {
 

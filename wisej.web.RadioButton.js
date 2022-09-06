@@ -29,7 +29,10 @@ qx.Class.define("wisej.web.RadioButton", {
 
 	// All Wisej components must include this mixin
 	// to provide services to the Wisej core.
-	include: [wisej.mixin.MWisejControl, wisej.mixin.MShortcutTarget],
+	include: [
+		wisej.mixin.MWisejControl,
+		wisej.mixin.MShortcutTarget
+	],
 
 	construct: function (text) {
 
@@ -201,16 +204,20 @@ qx.Class.define("wisej.web.RadioButton", {
 				return;
 
 			var items = parent.getChildren();
+			if (items.length == 0)
+				return;
+
+			var length = items.length;
+			items = items.slice();
+			items.sort((function (i1, i2) { return i1.getTabIndex() - i2.getTabIndex(); }));
 			var index = items.indexOf(this);
 			if (index == -1)
 				return;
 
-			var i = 0;
-			var length = items.length;
-
 			// find next enabled item.
 			index = (index + 1) % length;
 
+			var i = 0;
 			while (i < length && (!items[index].isEnabled() || !items[index].isVisible())) {
 				index = (index + 1) % length;
 				i++;
@@ -233,16 +240,20 @@ qx.Class.define("wisej.web.RadioButton", {
 				return;
 
 			var items = parent.getChildren();
+			if (items.length == 0)
+				return;
+
+			var length = items.length;
+			items = items.slice();
+			items.sort((function (i1, i2) { return i1.getTabIndex() - i2.getTabIndex(); }));
 			var index = items.indexOf(this);
 			if (index == -1)
 				return;
 
-			var i = 0;
-			var length = items.length;
-
 			// find previous enabled item.
 			index = (index - 1 + length) % length;
 
+			var i = 0;
 			while (i < length && (!items[index].isEnabled() || !items[index].isVisible())) {
 				index = (index - 1 + length) % length;
 				i++;

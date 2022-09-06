@@ -66,7 +66,8 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 		 */
 		setItems: function (items) {
 
-			this.__hideLoader();
+			// reset the ajax loaders for lazy loading.
+			this.__onLazyLoadingDone();
 
 			if (items == null)
 				return;
@@ -92,7 +93,10 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 					}
 				}
 
-				this.setSelectedIndex(selectedIndex);
+				if (selectedIndex > -1) {
+					this._adjustListSize();
+					this.setSelectedIndex(selectedIndex);
+				}
 
 				this._suspendEvents = false;
 			}
@@ -253,18 +257,17 @@ qx.Class.define("wisej.web.VirtualComboBox", {
 						keepFocus: true,
 						height: null,
 						width: null,
-						maxHeight: this.getMaxListWidth(),
 						maxHeight: this.getMaxListHeight(),
 						selectionMode: "single",
 						scrollbarX: "off",
 						quickSelection: false,
-						delegate: this
+						delegate: this,
+						incrementalSelection: this.getIncrementalSelection()
 					});
 
 					// cannot navigate the list on mobile and tablet devices.
 					if (qx.core.Environment.get("device.type") !== "desktop") {
 						control.setFocusable(true);
-						control.setKeepFocus(false);
 					}
 
 					control.getSelection().addListener("change", this._onListChangeSelection, this);
@@ -426,7 +429,14 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 		 * 
 		 * Indicates the number of items to prefetch outside of the visible range.
 		 */
-		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" }
+		prefetchItems: { init: 0, check: "Integer", apply: "_applyPrefetchItems" },
+
+		/**
+		 * IncrementalSelection property.
+		 * 
+		 * Determines whether items are selected incrementally as the user types within a 1 second timeout.
+		 */
+		incrementalSelection: { init: true, check: "Boolean" }
 
 	},
 
@@ -695,7 +705,10 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 			}
 
 			// Store timestamp
-			this.__lastKeyPress = (new Date).valueOf();
+			if (this.getIncrementalSelection())
+				this.__lastKeyPress = (new Date).valueOf();
+			else
+				this.__lastKeyPress = 0;
 		},
 
 		// accrues typed characters.
@@ -907,6 +920,9 @@ qx.Class.define("wisej.web.combobox.VirtualDropDownList", {
 				colConfig.setItemSize(0, maxWidth);
 				pane.fullUpdate();
 			}
+
+			if (this.isVisible())
+				qx.ui.core.queue.Layout.flush();
 		},
 
 		/**

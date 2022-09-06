@@ -51,12 +51,17 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 			});
 
 			// when "automation.mode" is enabled, change the id of the element on creation.
-			if (this instanceof qx.ui.core.Widget
-				&& qx.core.Environment.get("automation.mode") === true) {
+			if (wisej.utils.Widget.getAutomationMode()) {
 
-				this.addListenerOnce("appear", function (e) {
-					wisej.utils.Widget.setAutomationID(e.getTarget());
-				}, this);
+				if (this instanceof qx.ui.core.Widget) {
+
+					this.addListenerOnce("appear", function (e) {
+						var target = e.getTarget();
+						qx.event.Timer.once(function () {
+							wisej.utils.Widget.setAutomationID(target);
+						}, 1, this);
+					}, this);
+				}
 			}
 		}
 	},
@@ -373,7 +378,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 		// returns the element to use to set automation attributes.
 		getAutomationElement: function () {
 
-			if (this.getAutomationTarget) {
+			if (this.getAutomationTarget instanceof Function) {
 				var target = this.getAutomationTarget();
 				if (target)
 					return target.getContentElement();
@@ -385,7 +390,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 		// returns the element to use to set accessibility attributes.
 		getAccessibilityElement: function () {
 
-			if (this.getAccessibilityTarget) {
+			if (this.getAccessibilityTarget instanceof Function) {
 				var target = this.getAccessibilityTarget();
 				if (target)
 					return target.getContentElement();
@@ -409,8 +414,16 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 					el.setAttribute("id", value);
 			}
 
-			if (value && !wisej.web.DesignMode)
+			if (value && !wisej.web.DesignMode) {
+
+				// replacing an existing widget?
+				var existing = this.core.getComponent(value);
+				if (existing)
+					existing.destroy();
+
+				// now register.
 				this.core.registerComponent(this);
+			}
 		},
 
 		/**
@@ -476,9 +489,13 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 			function makeHandler(descriptor) {
 
 				// argument value converters.
-				function convertData(data) {
+				function convertData(data, level) {
 
 					if (data == null)
+						return;
+
+					level++;
+					if (level >= 10)
 						return;
 
 					// wisej control? return the id.
@@ -494,7 +511,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 					if (data instanceof Array) {
 						var array = null;
 						for (var i = 0; i < data.length; i++) {
-							var value = convertData(data[i]);
+							var value = convertData(data[i], level);
 							if (value != null) {
 								if (array == null)
 									array = new Array();
@@ -513,7 +530,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 
 						var map = null;
 						for (var name in data) {
-							var value = convertData(data[name]);
+							var value = convertData(data[name], level);
 							if (value != null) {
 								if (map == null)
 									map = {};
@@ -533,7 +550,9 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 					switch (type) {
 						case "tap":
 						case "click":
+						case "execute":
 						case "tagClick":
+						case "itemClick":
 						case "gridCellTap":
 							{
 								if (lastEvent.name === type
@@ -646,7 +665,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 
 					if (descriptor.argNames.length > 0) {
 						var data = e.getData ? e.getData() : null;
-						var value = convertData(data);
+						var value = convertData(data, 0);
 						args = args || {};
 						args[descriptor.argNames[0]] = value;
 					}
@@ -678,7 +697,7 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 					}
 					else if (window.event) {
 						var event = window.event;
-						if (event.pageX !== undefined) {
+						if (event.pageX !== undefined && event.button !== undefined) {
 							args = args || {};
 							args.y = event.pageY | 0;
 							args.x = event.pageX | 0;
@@ -946,7 +965,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 		 */
 		getRealBackgroundImages: function () {
 
-			if (this._getBackgroundImages)
+			if (this._getBackgroundImages instanceof Function)
 				return this._getBackgroundImages();
 			else
 				return this.getBackgroundImages();
@@ -991,7 +1010,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 					var item = images[i];
 
-					if (item && item.image) {
+					if (item && item.image && !item.recolored) {
 
 						// resolves the image URI into a {source, color} map.
 						var imageColor = imageUtils.resolveImage(item.image, this.getTextColor());
@@ -1015,6 +1034,7 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 									if (imageColor.color) {
 										var svg = imageLoader.getSvg(item.image);
 										if (svg) {
+											item.recolored = true;
 											item.image = imageUtils.getSvgDataUri(imageUtils.setSvgColor(svg, imageColor.color));
 										}
 									}
@@ -1205,20 +1225,17 @@ qx.Mixin.define("wisej.mixin.MBackgroundImage", {
 
 				styles.backgroundSize.push(imageSize);
 
-				if (image.align) {
-
-					styles.boxSizing = "border-box";
-					styles.backgroundRepeat.push("no-repeat");
-					styles.backgroundOrigin.push("content-box");
-					styles.backgroundPosition.push(this.__translateImageAlign(image.align));
-				}
+				styles.boxSizing = "border-box";
+				styles.backgroundRepeat.push("no-repeat");
+				styles.backgroundOrigin.push("content-box");
+				styles.backgroundPosition.push(this.__translateImageAlign(image.align));
 			}
 		},
 
 		__translateImageAlign: function (value) {
 
 			if (!value)
-				return "center";
+				value = "topLeft";
 
 			var left = this.isRtl() ? "right" : "left";
 			var right = this.isRtl() ? "left" : "right";
@@ -1363,8 +1380,6 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 				this.__onDesignRender(e);
 			});
 		}
-
-		this.initTopLevel();
 	},
 
 	/**
@@ -1554,12 +1569,12 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 		/**
 		 * List of properties that should be included in the state.
 		 */
-		stateProperties: { init: ["x", "y", "width", "height", "visible", "enabled"], check: "Array", nullable: true },
+		stateProperties: { init: ["x", "y", "width", "height"], check: "Array", nullable: true },
 
 		/**
 		 * List of events that causes this component to be marked dirty.
 		 */
-		stateEvents: { init: ["move", "resize", "changeVisibility", "changeEnabled"], check: "Array", apply: "_applyStateEvents", nullable: true },
+		stateEvents: { init: ["move", "resize"], check: "Array", apply: "_applyStateEvents", nullable: true },
 
 		/**
 		 * Map of custom defined theme states, initialization script, event listeners and css class names.
@@ -1924,7 +1939,7 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 			window.App = window.App || {};
 
 			// unregister, if previously registered as a child control
-			if (old) {
+			if (!value) {
 				this.core.unregisterComponent(this, window.App);
 				qx.ui.core.FocusHandler.getInstance().removeRoot(this);
 			}
@@ -2223,7 +2238,16 @@ qx.Mixin.define("wisej.mixin.MWisejControl", {
 
 			switch (name) {
 				case "width":
+					if (value == null) {
+						this.resetWidth();
+					}
+					this.__updateUserBounds();
+					break;
+
 				case "height":
+					if (value == null) {
+						this.resetHeight();
+					}
 					this.__updateUserBounds();
 					break;
 			}
@@ -2708,11 +2732,11 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		 */
 		_applyShortcut: function (value, old) {
 
-			if (!value && old) {
+			if (old) {
 				wisej.web.manager.Accelerators.getInstance().unregister(old, this.__onShortcut, this);
 			}
 
-			if (value && !old) {
+			if (value) {
 				wisej.web.manager.Accelerators.getInstance().register(value, this.__onShortcut, this);
 			}
 
@@ -2761,12 +2785,12 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 		 */
 		_applyMnemonic: function (value, old) {
 
-			if (!value && old) {
+			if (old) {
 				this.removeState("mnemonic");
 				wisej.web.manager.Accelerators.getInstance().unregister("Alt" + old, this.__onMnemonic, this);
 			}
 
-			if (value && !old) {
+			if (value) {
 				this.addState("mnemonic");
 				wisej.web.manager.Accelerators.getInstance().register("Alt+" + value.toUpperCase(), this.__onMnemonic, this);
 			}
@@ -2783,7 +2807,8 @@ qx.Mixin.define("wisej.mixin.MWisejMenu", {
 				return;
 
 			// stop dispatching when a widget processes the mnemonic.
-			return this.executeMnemonic && this.executeMnemonic();
+			if (this.executeMnemonic && this.executeMnemonic())
+				return true; // stop dispatching
 		},
 
 		/**
@@ -2913,11 +2938,11 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 		 */
 		_applyShortcut: function (value, old) {
 
-			if (!value && old) {
+			if (old) {
 				wisej.web.manager.Accelerators.getInstance().unregister(old, this.__onAccelerator, this);
 			}
 
-			if (value && !old) {
+			if (value) {
 				wisej.web.manager.Accelerators.getInstance().register(value, this.__onAccelerator, this);
 			}
 
@@ -2935,10 +2960,8 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 			if (!wisej.utils.Widget.canExecute(this))
 				return;
 
-			if (this.executeShortcut && this.executeShortcut()) {
-				e.preventDefault();
+			if (this.executeShortcut && this.executeShortcut())
 				return true; // stop dispatching
-			}
 		},
 
 		/**
@@ -2948,12 +2971,12 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 		 */
 		_applyMnemonic: function (value, old) {
 
-			if (!value && old) {
+			if (old) {
 				this.removeState("mnemonic");
 				wisej.web.manager.Accelerators.getInstance().unregister("Alt+" + old, this.__onMnemonic, this);
 			}
 
-			if (value && !old) {
+			if (value) {
 				this.addState("mnemonic");
 				wisej.web.manager.Accelerators.getInstance().register("Alt+" + value.toUpperCase(), this.__onMnemonic, this);
 			}
@@ -2966,7 +2989,8 @@ qx.Mixin.define("wisej.mixin.MShortcutTarget", {
 			if (!wisej.utils.Widget.canExecute(this))
 				return;
 
-			return this.executeMnemonic && this.executeMnemonic();
+			if (this.executeMnemonic && this.executeMnemonic())
+				return true; // stop dispatching
 		}
 	},
 
@@ -3114,24 +3138,15 @@ qx.Mixin.define("wisej.mixin.MAccelerators", {
 				var code = (e.getModifiers() << 16) | e.getKeyCode();
 				if (this.__accelerators[code]) {
 
-					e.stopPropagation();
 					this.fireDataEvent("accelerator", { code: code, target: id });
-
-					// prevent default for Ctrl accelerators to prevent the browser's default actions.
-					if (e.isCtrlPressed())
-						e.preventDefault();
+					return true; // stop dispatching
 				}
 				else {
 					var key = e.getKeyIdentifier();
 					if (this.__accelerators[key]) {
 
-						e.stopPropagation();
 						this.fireDataEvent("accelerator", { code: code, target: id });
-
-						// prevent default for browser keys or we get the search box on F3
-						// and the tools on F12, etc...
-						if (key.length > 1 && key[0] === "F")
-							e.preventDefault();
+						return true; // stop dispatching
 					}
 				}
 			}

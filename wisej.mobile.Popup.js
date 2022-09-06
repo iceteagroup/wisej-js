@@ -50,6 +50,8 @@ qx.Class.define("wisej.mobile.Popup", {
 				layout = Wisej.Platform.isMobileMode()
 					? new qx.ui.layout.Grow()
 					: new qx.ui.layout.VBox();
+
+				this.addState(qx.core.Environment.get("os.name"));
 			}
 		}
 
@@ -84,20 +86,22 @@ qx.Class.define("wisej.mobile.Popup", {
 			}
 			else if (qx.core.Environment.get("os.name") === "android") {
 
-				this.setLayoutProperties({ edge: "10%" });
+				this.resetHeight();
+				this.resetMinWidth();
+				this.setLayoutProperties({ edge: "10%", bottom: null, left: null, right: null });
+
 				wisej.web.Animation.animate(this, "popIn", {
 					timing: "ease",
 					duration: wisej.mobile.Popup.ANIMATION_DURATION
 				});
 				this.show();
-
-				Wisej.Platform.blockRoot(true);
-				this.addListenerOnce("disappear", function () { Wisej.Platform.blockRoot(false) });
 			}
 			else {
 
+				this.resetMinWidth();
 				this.setHeight(wisej.mobile.Popup.DEFAULT_HEIGHT);
-				this.setLayoutProperties({ bottom: 0, left: 0, right: 0 });
+				this.setLayoutProperties({ edge: null, bottom: 0, left: 0, right: 0 });
+
 				wisej.web.Animation.animate(this, "slideUpIn", {
 					timing: "ease",
 					duration: wisej.mobile.Popup.ANIMATION_DURATION

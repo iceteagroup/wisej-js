@@ -34,6 +34,8 @@ qx.Class.define("wisej.web.AlertBox", {
 
 		this.setAllowGrowX(true);
 		this.setAllowGrowY(true);
+		this.setKeepFocus(true);
+		this.setKeepActive(true);
 
 		var layout = this.getLayout();
 		layout.setRowFlex(0, 1);

@@ -52,6 +52,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 		// adds the inner target to the drop & drop event object.
 		this.addListener("drop", this._onDragEvent, this);
+		this.addListener("dragover", this._onDragEvent, this);
 
 		// add local state properties.
 		this.setStateProperties(this.getStateProperties().concat(["topNode"]));
@@ -65,6 +66,9 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 		// update the size of the cells.
 		this.addListener("changeFont", this._onUpdated);
+
+		// manage focusin the label editor.
+		this.addListener("focusin", this.__onFocusIn);
 	},
 
 	properties: {
@@ -283,6 +287,18 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			}
 		},
 
+		/**
+		 * Terminates the current label editing.
+		 * 
+		 * @param {Boolean} cancel True to discard the edited value.
+		 */
+		endEdit: function (cancel) {
+
+			var editor = this.getChildControl("editor", true);
+			if (editor)
+				editor.endEdit(cancel);
+		},
+
 		// overridden. interface implementation
 		hasChildren: function (node) {
 
@@ -315,6 +331,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 			if (old)
 				old.setTree(null);
+
 			if (value)
 				value.setTree(this);
 
@@ -827,7 +844,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			switch (id) {
 
 				case "editor":
-					control = new wisej.web.virtualTreeView.LabelEditor().set({
+					control = new wisej.web.virtualTreeView.LabelEditor(this).set({
 						visibility: "excluded"
 					});
 					control.addState("inner");
@@ -881,7 +898,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			// redirect endEdit events to the TreeView.
 			this.fireDataEvent("endEdit", e.getData());
 
-			this.activate();
+			this.focus();
 		},
 
 		/**
@@ -892,8 +909,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 */
 		_onSelectionChange: function (e) {
 
-			clearTimeout(this.__editNodeTimer);
-			this.__editNodeTimer = 0;
+			this._cancelEditItem();
 
 			if (!this.__inApplySelectedNodes && !this.core.processingActions)
 				this.fireDataEvent("selectionChanged", e.getData().added);
@@ -979,6 +995,12 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			e.stopPropagation();
 		},
 
+		__onFocusIn: function (e) {
+
+			this.visualizeFocus();
+
+		},
+
 		/**
 		 * Starts the timer to start editing the node.
 		 * 
@@ -994,14 +1016,32 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			}
 			else {
 
-				clearTimeout(this.__editNodeTimer);
-				this.__editNodeTimer = 0;
+				this._cancelEditItem();
 
 				var me = this;
 				var node = this.getTreeNode(item);
 				this.__editNodeTimer = setTimeout(function () {
+
+					me.__editNodeTimer = 0;
 					me.fireDataEvent("beginEdit", node);
+
 				}, wisej.web.TreeView.BEGINEDIT_DELAY);
+			}
+		},
+
+		/**
+		 * Cancels the edit node timer.
+		 */
+		_cancelEditItem: function () {
+
+			var editor = this.getChildControl("editor", true);
+			if (editor) {
+				editor.endEdit();
+			}
+
+			if (this.__editNodeTimer) {
+				clearTimeout(this.__editNodeTimer);
+				this.__editNodeTimer = 0;
 			}
 		},
 
@@ -1014,8 +1054,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		 */
 		_onItemDrag: function (e) {
 
-			clearTimeout(this.__editNodeTimer);
-			this.__editNodeTimer = 0;
+			this._cancelEditItem();
 
 			var node = this.getTreeNode(e.getOriginalTarget());
 			if (node)
@@ -1070,6 +1109,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 
 			if (jobs["applyModelChanges"]) {
 				this.__applyModelChanges();
+				this._updateSelection();
 			}
 		},
 
@@ -1105,6 +1145,10 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			item.removeState("selected");
 			item.removeState("editing");
 			item.showLoader(false);
+
+			if (wisej.utils.Widget.getAutomationMode()) {
+				wisej.utils.Widget.clearAutomationID(item);
+			}
 		},
 
 		/**
@@ -1123,6 +1167,7 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 		bindItem: function (controller, item, id) {
 
 			controller.bindProperty("", "model", null, item, id);
+			controller.bindProperty("name", "name", null, item, id);
 			controller.bindProperty("label", "label", null, item, id);
 			controller.bindProperty("icon", "icon", null, item, id);
 			controller.bindProperty("iconOpened", "iconOpened", null, item, id);
@@ -1149,6 +1194,12 @@ qx.Class.define("wisej.web.VirtualTreeView", {
 			}, item, id);
 
 			controller.bindPropertyReverse("tree", "tree", null, item, id);
+
+			if (wisej.utils.Widget.getAutomationMode()) {
+
+				// update the automation id of the virtual tree node.
+				wisej.utils.Widget.setAutomationID(item, this);
+			}
 		},
 
 		__bindItemInheritedPropertyFilter: {
@@ -1201,8 +1252,6 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 
 		if (label)
 			this.setLabel(label);
-
-		this.setChildren(new qx.data.Array());
 	},
 
 	properties: {
@@ -1213,6 +1262,11 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 		 * Reference to the parent wisej.web.VirtualTreeView.
 		 */
 		tree: { init: null, check: "wisej.web.VirtualTreeView", apply: "_applyTree" },
+
+		/**
+		 * Name property.
+		 */
+		name: { init: "", check: "String", event: "changeName" },
 
 		/**
 		 * The label/caption/text.
@@ -1345,7 +1399,13 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 		_applyNodes: function (value, old) {
 
 			var children = this.getChildren();
-			children.removeAll();
+			if (children) {
+				children.removeAll();
+			}
+			else if (value && value.length > 0) {
+				children = new qx.data.Array();
+				this.setChildren(children);
+			}
 
 			if (value && value.length > 0) {
 
@@ -1419,11 +1479,15 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 			if (value) {
 
 				var parentChildren = value.getChildren();
+				if (!parentChildren) {
+					parentChildren = new qx.data.Array();
+					value.setChildren(parentChildren);
+				}
 
 				// different parent?
 				if (parentChildren && !parentChildren.contains(this)) {
 					var index = this.getIndex();
-					if (index > -1)
+					if (index > -1 && parentChildren.length > 0)
 						parentChildren.insertAt(index, this);
 					else
 						parentChildren.push(this);
@@ -1443,10 +1507,12 @@ qx.Class.define("wisej.web.virtualTreeView.TreeNode", {
 			if (parentNode) {
 				var newIndex = value;
 				var parentChildren = parentNode.getChildren();
-				var currentIndex = parentChildren.indexOf(this);
-				if (currentIndex > -1 && currentIndex !== newIndex) {
+				if (parentChildren && parentChildren.length > 0) {
+					var currentIndex = parentChildren.indexOf(this);
+					if (currentIndex > -1 && currentIndex !== newIndex) {
 						parentChildren.remove(this);
 						parentChildren.insertAt(newIndex, this);
+					}
 				}
 			}
 		},
@@ -1812,30 +1878,15 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 					return;
 
 				var source = null;
-				if (this.hasState("selected")) {
-					source = this.getIconSelected()
-						|| treeView.getIconSelected();
-
-					if (source) {
-						icon.setSource(source);
-						return;
-					}
+				if (!source && this.hasState("opened")) {
+					source = this.getIconOpened() || treeView.getIconOpened();
 				}
-
-				if (this.hasState("opened")) {
-					source = this.getIconOpened()
-						|| treeView.getIconOpened();
-
-					if (source) {
-						icon.setSource(source);
-						return;
-					}
+				if (!source && this.hasState("selected")) {
+					source = this.getIconSelected() || treeView.getIconSelected();
 				}
-
-				source = this.__getUserIcon()
-					|| treeView.getIcon()
-					|| this.__getThemeIcon();
-
+				if (!source) {
+					source = this.__getUserIcon() || treeView.getIcon() || this.__getThemeIcon();
+				}
 				if (source)
 					icon.setSource(source);
 			}
@@ -2087,6 +2138,10 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 		 */
 		_onDblTap: function (e) {
 
+			var treeView = this.getTree();
+			if (treeView != null)
+				treeView._cancelEditItem();
+
 			this.__fireNodeEvent("nodeDblClick", e);
 		},
 
@@ -2151,7 +2206,8 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 				var open = this.getChildControl("open", true);
 				if (open) {
 					if (show) {
-						if (this.getModel().getChildren().length === 0) {
+						var children = this.getModel().getChildren();
+						if (!children || children.length === 0) {
 							open.setSource(this.getLoader());
 						}
 					}
@@ -2233,6 +2289,8 @@ qx.Class.define("wisej.web.VirtualTreeItem", {
 
 				if (!treeView.hasState("focused"))
 					return;
+
+				treeView._cancelEditItem();
 
 				var selection = treeView.getSelection();
 				if (selection.indexOf(this.getModel()) > -1) {

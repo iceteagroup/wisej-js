@@ -175,6 +175,9 @@ qx.Class.define("wisej.web.Button", {
 
 	members: {
 
+		// The button repeat timer.
+		__timer: null,
+
 		/**
 		 * Process mnemonics.
 		 */
@@ -367,6 +370,11 @@ qx.Class.define("wisej.web.Button", {
 		 * Sets the size of the icon child widget.
 		 */
 		_applyIconSize: function (value, old) {
+
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
 
 			var size = value;
 			var icon = this.getChildControl("icon");
@@ -802,7 +810,6 @@ qx.Class.define("wisej.web.Button", {
 				this.fireEvent("release");
 			}
 		},
-
 	},
 
 	destruct: function () {

@@ -59,10 +59,16 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			this.setDirty(true);
 		}, this);
 
+		textField.addListener("input", this._onInput, this);
+
 		// pointer events.
 		this.addListener("pointerout", this._onPointerOut, this);
 		this.addListener("pointerover", this._onPointerOver, this);
 		this.addListener("pointerdown", this._onPointerDown, this);
+
+		// register for the Enter or Esc keys accelerators.
+		wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onEscape, this, "keypress");
 	},
 
 	events:
@@ -78,6 +84,11 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 *  Event data: The new value.
 		 */
 		"changeValue": "qx.event.type.Data",
+
+		/**
+		 * This event is fired once when the user edits the value.
+		 */
+		"changeModified": "qx.event.type.Data"
 	},
 
 	properties: {
@@ -226,8 +237,14 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 *
 		 * Collection of tool definitions to display next to the edit field.
 		 */
-		tools: { check: "Array", apply: "_applyTools" }
+		tools: { check: "Array", apply: "_applyTools" },
 
+		/**
+		 * modified property.
+		 *
+		 * Gets or sets the index of the selected item.
+		 */
+		modified: { init: false, check: "Boolean", event: "changeModified" }
 	},
 
 	members: {
@@ -240,8 +257,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 */
 		open: function () {
 
-			this.focus();
-
 			var popup = this.getChildControl("popup");
 			popup.open(this, true);
 		},
@@ -250,9 +265,17 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		tabFocus: function () {
 
 			if (this.isEditable()) {
-				var textField = this.getChildControl("textfield");
-				textField.getFocusElement().focus();
-				textField.selectAllText();
+
+				if (qx.core.Environment.get("device.type") !== "desktop") {
+
+					this.getFocusElement().focus();
+
+				} else {
+
+					var textField = this.getChildControl("textfield");
+					textField.getFocusElement().focus();
+					textField.selectAllText();
+				}
 			}
 			else {
 				this.focus();
@@ -261,10 +284,18 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 		// overridden
 		focus: function () {
-			if (this.isEditable())
-				this.getChildControl("textfield").getFocusElement().focus();
-			else
+
+			if (this.isEditable()) {
+
+				if (qx.core.Environment.get("device.type") !== "desktop")
+					this.getFocusElement().focus();
+				else
+					this.getChildControl("textfield").getFocusElement().focus();
+
+			}
+			else {
 				this.base(arguments);
+			}
 		},
 
 		/**
@@ -291,10 +322,10 @@ qx.Class.define("wisej.web.DateTimePicker", {
 				this.getChildControl("downbutton").setEnabled(false);
 			}
 			else {
-				this.getChildControl("button").resetEnabled();
-				this.getChildControl("checkbox").resetEnabled();
-				this.getChildControl("upbutton").resetEnabled();
-				this.getChildControl("downbutton").resetEnabled();
+				this.getChildControl("button").setEnabled("inherit");
+				this.getChildControl("checkbox").setEnabled("inherit");
+				this.getChildControl("upbutton").setEnabled("inherit");
+				this.getChildControl("downbutton").setEnabled("inherit");
 			}
 
 			var readOnly = value || !this.isEditable();
@@ -318,7 +349,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			if (value && !old) {
 				this.addListener("focusin", function (e) {
 					if (this.isSelectOnEnter()) {
-						qx.event.Timer.once(this.selectAllText, this, 1);
+						qx.event.Timer.once(this.selectAllText, this, 0);
 					}
 				}, this);
 			}
@@ -402,6 +433,12 @@ qx.Class.define("wisej.web.DateTimePicker", {
 		 */
 		setText: function (value) {
 
+
+			if (this.__maskProvider) {
+				var keepPrompt = this._isFocused() || !this.getHidePrompt() || wisej.web.DesignMode;
+				value = this.__maskProvider.mask(value, keepPrompt, true /*keepLiterals*/);
+			}
+
 			this.__suspendEvents = true;
 			try {
 
@@ -418,8 +455,7 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 					textfield.setValue(value);
 
-					var handler = qx.ui.core.FocusHandler.getInstance();
-					if (handler && handler.isFocused(this)) {
+					if (this._isFocused()) {
 
 						if (selection.length > 1 || selection.start == selection.length)
 							this.selectAllText();
@@ -438,12 +474,17 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			return this.getChildControl("textfield").getValue();
 		},
 
+		// checks whether the picker has the focus.
+		_isFocused: function () {
+			return qx.ui.core.FocusHandler.getInstance().isFocused(this);
+		},
+
 		/**
 		 * Applies the value property.
 		 */
 		_applyValue: function (value, old) {
 
-			// updated the date in the datechooser.
+			// updated the date in the date chooser.
 			var dateChooser = this.getChildControl("list", true);
 			if (dateChooser)
 				dateChooser.setValue(value);
@@ -493,8 +534,11 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			if (value)
 				this._createMaskProvider();
 
-			if (this.__maskProvider)
+			if (this.__maskProvider) {
+				var text = this.getText();
 				this.__maskProvider.setMask(value);
+				this.setText(text);
+			}
 		},
 
 		/**
@@ -533,7 +577,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 				this.setTextSelection(value.start, value.length + value.start);
 			}
 		},
-
 
 		/**
 		 * Toggles the popup's visibility and transfer the focus.
@@ -597,22 +640,29 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			}
 
 			var selectedDate = this.getChildControl("list").getValue();
-
-			// the date from the date chooser doesn't specify
-			// the time: preserve the time from the previous value.
-			if (this.getPreserveTime()) {
-				var original = this.getValue();
-				if (original) {
-					selectedDate.setHours(original.getHours());
-					selectedDate.setMinutes(original.getMinutes());
-					selectedDate.setSeconds(original.getSeconds());
+			if (selectedDate != null) {
+				// the date from the date chooser doesn't specify
+				// the time: preserve the time from the previous value.
+				if (this.getPreserveTime()) {
+					var original = this.getValue();
+					if (original) {
+						selectedDate.setHours(original.getHours());
+						selectedDate.setMinutes(original.getMinutes());
+						selectedDate.setSeconds(original.getSeconds());
+					}
 				}
+				this.selectAllText();
 			}
 
 			this.setValue(selectedDate);
-			this.selectAllText();
-
 			this.close();
+		},
+
+		_onInput: function (e) {
+
+			this.setDirty(true);
+			this.setModified(true);
+			this.fireDataEvent("input", e.getData(), e.getOldData());
 		},
 
 		/**
@@ -638,6 +688,54 @@ qx.Class.define("wisej.web.DateTimePicker", {
 
 			if (e.getTarget() === this) {
 				qx.event.Timer.once(this.focus, this, 0);
+			}
+		},
+
+		/**
+		 * Handles the "Enter" accelerator to close the drop down.
+		 */
+		__onEnter: function (e) {
+
+			if (e.getTarget() !== this || !this._isFocused())
+				return;
+
+			var popup = this.getChildControl("popup", true);
+			if (popup && popup.isVisible()) {
+
+				// let the month-year selector handle the Enter accelerator.
+				var chooser = this.getChildControl("list");
+				var selector = chooser.getChildControl("month-year-selector", true);
+				if (selector && selector.isVisible()) {
+					selector.handleKeyPress(e);
+					return true;
+				}
+
+				this._onChangeDate(e);
+				return true;
+			}
+		},
+
+		/**
+		 * Handles the "Enter" accelerator to close the drop down.
+		 */
+		__onEscape: function (e) {
+
+			if (e.getTarget() !== this || !this._isFocused())
+				return;
+
+			var popup = this.getChildControl("popup", true);
+			if (popup && popup.isVisible()) {
+
+				// let the month-year selector handle the Escape accelerator.
+				var chooser = this.getChildControl("list");
+				var selector = chooser.getChildControl("month-year-selector", true);
+				if (selector && selector.isVisible()) {
+					selector.handleKeyPress(e);
+					return true;
+				}
+
+				this.close();
+				return true;
 			}
 		},
 
@@ -699,7 +797,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 					// cannot navigate the list on mobile and tablet devices.
 					if (qx.core.Environment.get("device.type") !== "desktop") {
 						control.setFocusable(true);
-						control.setKeepFocus(false);
 					}
 
 					control.addListener("execute", this._onChangeDate, this);
@@ -709,7 +806,6 @@ qx.Class.define("wisej.web.DateTimePicker", {
 				case "popup":
 					control = new wisej.web.dateTimePicker.DropDown(this);
 					control.add(this.getChildControl("list"));
-					control.addListener("pointerup", this._onChangeDate, this);
 					control.addListener("changeVisibility", this._onPopupChangeVisibility, this);
 					break;
 			}
@@ -798,11 +894,8 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			// opening of the popup. This is needed when the value has been
 			// modified and not saved yet (e.g. no blur).
 			if (opened) {
-
 				var chooser = this.getChildControl("list");
-
 				this.__updateChooserStyle(chooser);
-
 				chooser.setValue(this.getValue());
 			}
 
@@ -942,6 +1035,12 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			this.__upDownContainer.destroy();
 			this.__upDownContainer = null;
 		}
+
+		this._disposeObjects("__maskProvider");
+
+		// un-register the Enter or Esc accelerators.
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onEscape, this, "keypress");
 	}
 
 });
@@ -1010,7 +1109,25 @@ qx.Class.define("wisej.web.dateTimePicker.DateChooser", {
 		this.addListener("roll", this._onRoll, this);
 	},
 
+	statics: {
+
+		TOUCH_ROLL_DISTANCE: 10
+	},
+
 	members: {
+
+		// overridden.
+		_applyValue: function (value, old) {
+
+			this.base(arguments, value, old);
+
+			// show the current month on a null value.
+			if (!value) {
+
+				var current = new Date();
+				this.showMonth(current.getMonth(), current.getFullYear());
+			}
+		},
 
 		/**
 		 * Scrolls pane on roll events
@@ -1019,19 +1136,40 @@ qx.Class.define("wisej.web.dateTimePicker.DateChooser", {
 		 */
 		_onRoll: function (e) {
 
-			// only wheel and touch
-			if (e.getPointerType() === "mouse") {
-				return;
+			var year = this.getShownYear();
+			var month = this.getShownMonth();
+
+			switch (e.getPointerType()) {
+
+				case "touch": {
+
+					var delta = e.getDelta().x;
+					var distance = wisej.web.dateTimePicker.DateChooser.TOUCH_ROLL_DISTANCE;
+
+					if (delta > distance)
+						delta = 1;
+					else if (delta < -distance)
+						delta = -1;
+					else
+						delta = 0;
+
+					if (delta != 0)
+						this.showMonth(month + delta, year);
+
+					break;
+				}
+
+				case "wheel": {
+
+					// move 1 month each roll.
+					var delta = e.getDelta().y;
+					if (delta != 0)
+						this.showMonth(month + (delta > 0 ? 1 : -1), year);
+
+					break;
+				}
 			}
 
-			var delta = e.getDelta();
-			// move 1 month each roll.
-			if (delta != 0) {
-				var date = this.getValue();
-				date = date ? new Date(date.getTime()) : date = new Date();
-				date.setMonth(date.getMonth() + (delta > 0 ? -1 : 1));
-				this.setValue(date);
-			}
 			e.stop();
 		}
 	}

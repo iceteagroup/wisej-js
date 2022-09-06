@@ -47,6 +47,9 @@ qx.Class.define("wisej.web.TreeView", {
 		// reset the cached metrics when scrolling or resizing.
 		this.addListener("resize", this.__resetCachedTopNode);
 		this.addListener("scrollAnimationYEnd", this.__resetCachedTopNode);
+
+		// manage focusin the label editor.
+		this.addListener("focusin", this.__onFocusIn);
 	},
 
 	statics: {
@@ -54,7 +57,7 @@ qx.Class.define("wisej.web.TreeView", {
 		/**
 		 * @type {Integer} The time in milliseconds before a second click on a node enters edit mode.
 		 */
-		BEGINEDIT_DELAY: 150
+		BEGINEDIT_DELAY: 250
 	},
 
 	properties: {
@@ -235,6 +238,18 @@ qx.Class.define("wisej.web.TreeView", {
 
 				}, this, 1);
 			}
+		},
+
+		/**
+		 * Terminates the current label editing.
+		 * 
+		 * @param {Boolean} cancel True to discard the edited value.
+		 */
+		endEdit: function (cancel) {
+
+			var editor = this.getChildControl("editor", true);
+			if (editor)
+				editor.endEdit(cancel);
 		},
 
 		/**
@@ -474,7 +489,7 @@ qx.Class.define("wisej.web.TreeView", {
 			this.__inApplySelectedNodes = true;
 			try {
 
-				this.setSelection(value);
+				this.setSelection(value || []);
 
 			} finally {
 
@@ -489,10 +504,10 @@ qx.Class.define("wisej.web.TreeView", {
 		_applyRightClickSelection: function (value, old) {
 
 			if (!value && old)
-				this.removeListener("contextmenu", this._onRightClick, this);
+				this.removeListener("contextmenu", this._onRightClick, this, true);
 
 			if (value && !old)
-				this.addListener("contextmenu", this._onRightClick, this);
+				this.addListener("contextmenu", this._onRightClick, this, true);
 		},
 
 		/**
@@ -636,7 +651,7 @@ qx.Class.define("wisej.web.TreeView", {
 			switch (id) {
 
 				case "editor":
-					control = new wisej.web.treeview.LabelEditor().set({
+					control = new wisej.web.treeview.LabelEditor(this).set({
 						visibility: "excluded"
 					});
 					control.addState("inner");
@@ -689,7 +704,7 @@ qx.Class.define("wisej.web.TreeView", {
 			// redirect endEdit events to the TreeView.
 			this.fireDataEvent("endEdit", e.getData());
 
-			this.activate();
+			this.focus();
 		},
 
 		/**
@@ -700,10 +715,9 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_onChangeSelection: function (e) {
 
-			clearTimeout(this.__editNodeTimer);
-			this.__editNodeTimer = 0;
-
 			this.base(arguments, e);
+
+			this._cancelEditNode();
 
 			if (!this.__inApplySelectedNodes && !this.core.processingActions)
 				this.fireDataEvent("selectionChanged", e.getData());
@@ -793,12 +807,17 @@ qx.Class.define("wisej.web.TreeView", {
 		 */
 		_onItemDrag: function (e) {
 
-			clearTimeout(this.__editNodeTimer);
-			this.__editNodeTimer = 0;
+			this._cancelEditNode();
 
 			var node = this.getTreeItem(e.getOriginalTarget());
 			if (node)
 				this.fireDataEvent("itemDrag", node.getId());
+		},
+
+		__onFocusIn: function (e) {
+
+			this.visualizeFocus();
+
 		},
 
 		/**
@@ -811,13 +830,31 @@ qx.Class.define("wisej.web.TreeView", {
 			}
 			else {
 
-				clearTimeout(this.__editNodeTimer);
-				this.__editNodeTimer = 0;
+				this._cancelEditNode();
 
 				var me = this;
 				this.__editNodeTimer = setTimeout(function () {
+
+					me.__editNodeTimer = 0;
 					me.fireDataEvent("beginEdit", node);
+
 				}, wisej.web.TreeView.BEGINEDIT_DELAY);
+			}
+		},
+
+		/**
+		 * Cancels the edit node timer.
+		 */
+		_cancelEditNode: function () {
+
+			var editor = this.getChildControl("editor", true);
+			if (editor) {
+				editor.endEdit();
+			}
+
+			if (this.__editNodeTimer) {
+				clearTimeout(this.__editNodeTimer);
+				this.__editNodeTimer = 0;
 			}
 		},
 
@@ -1171,30 +1208,16 @@ qx.Class.define("wisej.web.TreeNode", {
 			if (treeView == null)
 				return;
 
-			if (this.hasState("selected")) {
-				var source = this.getIconSelected()
-								|| treeView.getIconSelected();
-
-				if (source) {
-					icon.setSource(source);
-					return;
-				}
+			var source = null;
+			if (!source && this.hasState("opened")) {
+				source = this.getIconOpened() || treeView.getIconOpened();
 			}
-
-			if (this.hasState("opened")) {
-				var source = this.getIconOpened()
-								|| treeView.getIconOpened();
-
-				if (source) {
-					icon.setSource(source);
-					return;
-				}
+			if (!source && this.hasState("selected")) {
+				source = this.getIconSelected() || treeView.getIconSelected();
 			}
-
-			var source = this.__getUserIcon()
-							|| treeView.getIcon()
-							|| this.__getThemeIcon();
-
+			if (!source) {
+				source = this.__getUserIcon() || treeView.getIcon() || this.__getThemeIcon();
+			}
 			if (source)
 				icon.setSource(source);
 		},
@@ -1517,6 +1540,10 @@ qx.Class.define("wisej.web.TreeNode", {
 		 */
 		_onDblTap: function (e) {
 
+			var treeView = this.getTree();
+			if (treeView != null)
+				treeView._cancelEditNode();
+
 			this.__fireNodeEvent("nodeDblClick", e);
 		},
 
@@ -1670,6 +1697,8 @@ qx.Class.define("wisej.web.TreeNode", {
 				if (!treeView.hasState("focused"))
 					return;
 
+				treeView._cancelEditNode();
+
 				var selection = treeView.getSelection();
 				if (selection.indexOf(this) > -1) {
 
@@ -1759,15 +1788,22 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 
 	extend: qx.ui.form.TextField,
 
-	construct: function () {
+	construct: function (treeView) {
 
 		this.base(arguments);
 
+		this.treeView = treeView;
+
 		// listen to the lost focus to commit editing.
 		this.addListener("blur", this._onBlur);
-
+		
 		// list to the keyboard to commit or cancel editing.
-		this.addListener("keypress", this._onKeyPress);
+		this.addListener("keypress", this._onKeyPress);	
+
+		// register for the Enter or Esc keys accelerators.
+		wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onEscape, this, "keypress");
+
 	},
 
 	properties: {
@@ -1778,10 +1814,19 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 
 	members: {
 
+		/** reference to the treeView container. */
+		treeView: null,
+
 		/**
 		 * Begins editing the specified node.
 		 */
 		editNode: function (node) {
+
+			// cancel editing the node if the selection has changed.
+			if (!node.hasState("selected")) {
+				this._fireEndEdit(node, null);
+				return;
+			}
 
 			// find the label, the edit control will replace it.
 			var label = node.getChildControl("label");
@@ -1826,15 +1871,15 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 		_onBlur: function (e) {
 
 			if (this.isVisible())
-				this.endEdit(true);
+				this.endEdit();
 		},
-
+		
 		_onKeyPress: function (e) {
 
 			switch (e.getKeyIdentifier()) {
 
 				case "Escape":
-					this.endEdit(true);
+					this.endEdit(true /*cancel*/);
 					break;
 
 				case "Enter":
@@ -1843,7 +1888,43 @@ qx.Class.define("wisej.web.treeview.LabelEditor", {
 			}
 
 			e.stopPropagation();
+		},
+
+		/**
+		 * Handles the "Enter" accelerator to close editor.
+		 */
+		__onEnter: function (e) {
+
+			if (!this.__isFocused())
+				return;
+
+			this.endEdit();
+			return true;
+		},
+
+		/**
+		 * Handles the "Enter" accelerator to close the editor.
+		 */
+		__onEscape: function (e) {
+
+			if (!this.__isFocused())
+				return;
+
+			this.endEdit(true /*cancel*/);
+			return true;
+		},
+
+		__isFocused: function () {
+			return qx.ui.core.FocusHandler.getInstance().getFocusedWidget() === this;
 		}
+
+	},
+
+	destruct: function () {
+
+		// un-register the Enter or Esc accelerators.
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onEscape, this, "keypress");
 
 	}
 });

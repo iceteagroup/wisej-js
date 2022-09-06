@@ -54,7 +54,7 @@ qx.Class.define("wisej.web.ToolBar", {
 		 *
 		 * Assigns the list of child buttons.
 		 */
-		buttons: { init: [], nullable: true, check: "Array", apply: "_applyButtons", transform: "_transformComponents" },
+		buttons: { init: [], nullable: true, check: "Array", apply: "_applyButtons", transform: "_transformComponents" }
 	},
 
 	members: {
@@ -98,42 +98,48 @@ qx.Class.define("wisej.web.ToolBar", {
 		 */
 		_applyButtons: function (value, old) {
 
-			var newItems = value;
+			this.__inRecalculateOverflow = true;
+			try {
+				var newItems = value;
 
-			// remove the existing buttons.
-			if (old && old.length > 0) {
-				for (var i = 0; i < old.length; i++) {
+				// remove the existing buttons.
+				if (old && old.length > 0) {
+					for (var i = 0; i < old.length; i++) {
 
-					if (newItems && newItems.indexOf(old[i]) > -1)
-						continue;
+						var item = old[i];
 
-					old[i].removeListener("open", this._onButtonOpen, this);
-					old[i].removeListener("execute", this._onButtonExecute, this);
-					this.remove(old[i]);
-				}
-			}
+						item.removeListener("open", this._onButtonOpen, this);
+						item.removeListener("execute", this._onButtonExecute, this);
 
-			if (newItems != null && newItems.length > 0) {
-				for (var i = 0; i < newItems.length; i++) {
-
-					var item = newItems[i];
-
-					if (item.getSizeMode() == "fill")
-						this.add(item, { flex: 1 });
-					else
-						this.add(item);
-
-					item._setChildAppearance(this);
-
-					if (!(item instanceof wisej.web.toolbar.Separator)) {
-
-						if (!item.hasListener("execute"))
-							item.addListener("execute", this._onButtonExecute, this);
-
-						if (item instanceof wisej.web.toolbar.SplitButton && !item.hasListener("open"))
-							item.addListener("open", this._onButtonOpen, this);
+						this.remove(item);
 					}
 				}
+
+				if (newItems != null && newItems.length > 0) {
+					for (var i = 0; i < newItems.length; i++) {
+
+						var item = newItems[i];
+
+						item._setChildAppearance(this);
+
+						if (item.getSizeMode() == "fill")
+							this.add(item, { flex: 1 });
+						else
+							this.add(item);
+
+						if (!(item instanceof wisej.web.toolbar.Separator)) {
+
+							item.addListener("execute", this._onButtonExecute, this);
+
+							if (item instanceof wisej.web.toolbar.SplitButton)
+								item.addListener("open", this._onButtonOpen, this);
+						}
+					}
+				}
+			} finally {
+
+				this.__inRecalculateOverflow = false;
+				this._recalculateOverflow();
 			}
 		},
 
@@ -231,16 +237,16 @@ qx.Class.define("wisej.web.ToolBar", {
 							rect: widgetRect
 						});
 
-						//// add the rect for the wrapped control.
-						//if (widget instanceof wisej.web.toolbar.ButtonControl) {
-						//	var control = widget.getControl();
-						//	if (control && control.isWisejComponent) {
-						//		items.push({
-						//			id: control.getId(),
-						//			rect: control.getBounds()
-						//		});
-						//	}
-						//}
+						// add the rect for the wrapped control.
+						if (widget instanceof wisej.web.toolbar.Control) {
+							var control = widget.getControl();
+							if (control && control.isWisejComponent) {
+								items.push({
+									id: control.getId(),
+									rect: control.getBounds()
+								});
+							}
+						}
 					}
 				}
 			}
@@ -257,6 +263,7 @@ qx.Class.define("wisej.web.ToolBar", {
 
 			var overflow = new qx.ui.menubar.Button();
 			overflow.setAppearance("menubar/overflow");
+			overflow.syncAppearance();
 			overflow.__spacer = new qx.ui.core.Spacer();
 
 			var overflowMenu = new qx.ui.menu.Menu().set({
@@ -282,7 +289,6 @@ qx.Class.define("wisej.web.ToolBar", {
 			}
 		},
 
-
 		// destroys the overflow item.
 		__destroyOverflowWidget: function () {
 
@@ -293,14 +299,38 @@ qx.Class.define("wisej.web.ToolBar", {
 			}
 		},
 
-		// process menu items after they are removed from the tool bar.
+		// process toolbox items after they are removed from the tool bar.
 		_afterRemoveChild: function (child) {
+
+			child.removeListener("changeVisibility", this._onChildchangeVisibility, this);
 
 			// remove the overflow item along with the menu item.
 			if (child.__overflowItem) {
 				child.__overflowItem.destroy();
 				child.__overflowItem = null;
 			}
+		},
+
+		// process toolbox items after they are added to the menu bar.
+		_afterAddChild: function (child) {
+
+			this.invalidateLayoutCache();
+			child.addListener("changeVisibility", this._onChildchangeVisibility, this);
+		},
+
+		/**
+		 * This method is called during the flush of the
+		 * {@link qx.ui.core.queue.Widget widget queue}.
+		 *
+		 * @param jobs {Map} A map of jobs.
+		 */
+		syncWidget: function (jobs) {
+
+			if (!jobs)
+				return;
+
+			if (jobs["recalculateOverflow"])
+				this._recalculateOverflow();
 		},
 
 		// ensures that all the tool items have their overflow clone
@@ -451,6 +481,11 @@ qx.Class.define("wisej.web.ToolBar", {
 			}
 		},
 
+		_onChildchangeVisibility: function (e) {
+
+			qx.ui.core.queue.Widget.add(this, "recalculateOverflow");
+		},
+
 		// when the overflow becomes visible it is added to the toolbar
 		// together with a spacer to ensure that it's aligned to the right.
 		_recalculateOverflow: function (width, requiredWidth) {
@@ -460,15 +495,33 @@ qx.Class.define("wisej.web.ToolBar", {
 			if (this.__inRecalculateOverflow)
 				return;
 
-			this.invalidateLayoutCache();
-			requiredWidth = this._getContentHint().width;
-			this.base(arguments, width, requiredWidth);
-
 			// our toolbars are dynamic - items are added/removed live - therefore
 			// we need to add/remove the spacer together with the overflow indicator otherwise
 			// newly added items will dock to the right.
 			this.__inRecalculateOverflow = true;
 			try {
+
+				// update overflowed items cached list.
+				var toolItems = this.getChildren();
+				for (var i = 0; i < toolItems.length; i++) {
+					var toolItem = toolItems[i];
+					if (toolItem instanceof wisej.web.toolbar.Button
+						|| toolItem instanceof wisej.web.toolbar.SplitButton) {
+
+						if (toolItem.isHidden()) {
+							qx.lang.Array.remove(this.__removedItems, toolItem);
+						}
+						else {
+							toolItem.syncAppearance();
+							toolItem.invalidateLayoutCache();
+						}
+					}
+				}
+
+				this.invalidateLayoutCache();
+				requiredWidth = requiredWidth || this._getContentHint().width;
+				this.base(arguments, width, requiredWidth);
+
 				var overflow = this.getOverflowIndicator();
 				if (overflow) {
 
@@ -487,20 +540,17 @@ qx.Class.define("wisej.web.ToolBar", {
 
 			}
 
-		},
-
-		// overridden to dispose the overflow indicator space.
-		dispose: function () {
-
-			this.base(arguments);
-
-			var overflow = this.getOverflowIndicator();
-			if (overflow && overflow.__spacer) {
-				overflow.__spacer.destroy();
-				overflow.__spacer = null;
-			}
-		},
+		}
 	},
+
+	destruct: function () {
+
+		var overflow = this.getOverflowIndicator();
+		if (overflow && overflow.__spacer) {
+			overflow.__spacer.destroy();
+			overflow.__spacer = null;
+		}
+	}
 });
 
 
@@ -544,6 +594,14 @@ qx.Class.define("wisej.web.toolbar.Button", {
 		 */
 		sizeMode: { init: "auto", check: ["auto", "fill"], apply: "_applySizeMode" },
 
+		/**
+		 * AutoShowLoader property.
+		 * 
+		 * When true, the ajax loader blocks the browser when the "execute" event is
+		 * fired. NOTE: It's up to the server control to hide the loader once
+		 * execution is completed.
+		 */
+		autoShowLoader: { init: false, check: "Boolean", apply: "_applyAutoShowLoader" }
 	},
 
 	members: {
@@ -577,6 +635,7 @@ qx.Class.define("wisej.web.toolbar.Button", {
 		setVisible: function (value) {
 
 			this.__hidden = !value;
+
 			this.setVisibility(value ? "visible" : "excluded");
 
 			if (this.__overflowItem)
@@ -618,8 +677,16 @@ qx.Class.define("wisej.web.toolbar.Button", {
 		 * Applies the sizeMode property.
 		 */
 		_applySizeMode: function (value, old) {
-
 			this.setLayoutProperties({ flex: value == "fill" ? 1 : 0 });
+		},
+
+		/**
+		 * Applies the iconPosition property.
+		 */
+		_applyIconPosition: function (value, old) {
+
+			this.base(arguments, value, old);
+			this.setCenter(value == "top" || value == "bottom");
 		},
 
 		/**
@@ -628,6 +695,11 @@ qx.Class.define("wisej.web.toolbar.Button", {
 		 * Sets the size of the icon child widget.
 		 */
 		_applyIconSize: function (value, old) {
+
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
 
 			var icon = this.getChildControl("icon");
 
@@ -642,6 +714,27 @@ qx.Class.define("wisej.web.toolbar.Button", {
 				icon.getContentElement().setStyle("backgroundSize", "contain");
 			}
 		},
+
+		/**
+		 * Applies the showLoader property.
+		 */
+		_applyAutoShowLoader: function (value, old) {
+
+			if (this.__showLoaderListenerId) {
+				this.removeListenerById(this.__showLoaderListenerId);
+				this.__showLoaderListenerId = null;
+			}
+
+			if (value) {
+				this.__showLoaderListenerId = this.addListener("execute", function (e) {
+					this.core.showLoader(true);
+				});
+			}
+		},
+
+		/** id of the showLoader "execute" handler. */
+		__showLoaderListenerId: null,
+
 	},
 
 	destruct: function () {
@@ -721,6 +814,15 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 		 * Determines how the toolbar item is resized.
 		 */
 		sizeMode: { init: "auto", check: ["auto", "fill"], apply: "_applySizeMode" },
+
+		/**
+		 * AutoShowLoader property.
+		 * 
+		 * When true, the ajax loader blocks the browser when the "execute" event is
+		 * fired. NOTE: It's up to the server control to hide the loader once
+		 * execution is completed.
+		 */
+		autoShowLoader: { init: false, check: "Boolean", apply: "_applyAutoShowLoader" }
 	},
 
 	members: {
@@ -823,8 +925,9 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 		 */
 		_applyIconPosition: function (value, old) {
 
-			this.getChildControl("button").setIconPosition(value);
-
+			var button = this.getChildControl("button");
+			button.setIconPosition(value);
+			button.setCenter(value == "top" || value == "bottom");
 		},
 
 		/**
@@ -833,6 +936,11 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 		 * Sets the size of the icon child widget.
 		 */
 		_applyIconSize: function (value, old) {
+
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
 
 			var icon = this.getChildControl("button").getChildControl("icon");
 
@@ -846,6 +954,26 @@ qx.Class.define("wisej.web.toolbar.SplitButton", {
 				icon.resetHeight();
 			}
 		},
+
+		/**
+		 * Applies the showLoader property.
+		 */
+		_applyAutoShowLoader: function (value, old) {
+
+			if (this.__showLoaderListenerId) {
+				this.removeListenerById(this.__showLoaderListenerId);
+				this.__showLoaderListenerId = null;
+			}
+
+			if (value) {
+				this.__showLoaderListenerId = this.addListener("execute", function (e) {
+					this.core.showLoader(true);
+				});
+			}
+		},
+
+		/** id of the showLoader "execute" handler. */
+		__showLoaderListenerId: null,
 
 		/**
 		 * Returns the widget to use to apply the background style by wisej.mixin.MBackgroundImage.
@@ -995,7 +1123,181 @@ qx.Class.define("wisej.web.toolbar.Separator", {
 		_applySizeMode: function (value, old) {
 
 			this.setLayoutProperties({ flex: value == "fill" ? 1 : 0 });
-		},
+		}
 	}
 
 });
+
+
+/**
+ * wisej.web.toolbar.Control
+ */
+qx.Class.define("wisej.web.toolbar.Control", {
+
+	extend: qx.ui.basic.Atom,
+
+	// All Wisej components must include this mixin
+	// to provide services to the Wisej core.
+	include: [wisej.mixin.MWisejComponent],
+
+
+	construct: function () {
+
+		this.base(arguments);
+
+		this.setCenter(true);
+
+		this.addListener("pointerover", this._onPointerOver);
+		this.addListener("pointerout", this._onPointerOut);
+	},
+
+	properties: {
+
+		// appearance
+		appearance: { init: "$parent/button", refine: true },
+
+		/**
+		 * IconSize property.
+		 *
+		 * Gets or sets the size of the icon.
+		 */
+		iconSize: { init: null, nullable: true, check: "Map", apply: "_applyIconSize", themeable: true },
+
+		/**
+		 * SizeMode property.
+		 *
+		 * Determines how the toolbar item is resized.
+		 */
+		sizeMode: { init: "auto", check: ["auto", "fill"], apply: "_applySizeMode" },
+
+		/**
+		 * Control property.
+		 *
+		 * Reference to the widget to place inside the toolbar item.
+		 */
+		control: { init: null, nullable: true, apply: "_applyControl", transform: "_transformComponent" }
+	},
+
+	members: {
+
+		/**
+		 * Gets/Sets the visible property.
+		 */
+		getVisible: function () {
+
+			return this.isVisible();
+
+		},
+		setVisible: function (value) {
+
+			this.setVisibility(value ? "visible" : "excluded");
+		},
+
+		// overridden.
+		_applyAppearance: function (value, old) {
+
+			if (value == null) {
+				this.resetAppearance();
+				return;
+			}
+
+			this.base(arguments, value, old);
+		},
+
+		/**
+		 * Applies the iconPosition property.
+		 */
+		_applyIconPosition: function (value, old) {
+
+			this.base(arguments, value, old);
+			this.setCenter(value == "top" || value == "bottom");
+		},
+
+		/**
+		 * Applies the IconSize property.
+		 *
+		 * Sets the size of the icon child widget.
+		 */
+		_applyIconSize: function (value, old) {
+
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
+
+			var icon = this.getChildControl("icon");
+
+			if (value && value.width && value.height) {
+				icon.setWidth(value.width);
+				icon.setHeight(value.height);
+				icon.getContentElement().setStyle("background-size", value.width + "px " + value.height + "px");
+			}
+			else {
+				icon.resetWidth();
+				icon.resetHeight();
+				icon.getContentElement().setStyle("backgroundSize", "contain");
+			}
+		},
+
+		/**
+		 * Applies the sizeMode property.
+		 */
+		_applySizeMode: function (value, old) {
+
+			this.setLayoutProperties({ flex: value == "fill" ? 1 : 0 });
+		},
+
+		/**
+		 * Applies the control property.
+		 */
+		_applyControl: function (value, old) {
+
+			if (old) {
+
+				if (this._indexOf(old) > -1)
+					this._remove(old);
+
+				this.removeState("control");
+
+				old.removeListener("resize", this._onControlResize, this);
+			}
+
+			if (value) {
+				// the wrapped widget should always fill this item.
+				var widget = value;
+				widget.resetUserBounds();
+				this._add(widget);
+				this.addState("control");
+
+				widget.addListener("resize", this._onControlResize, this);
+			}
+		},
+
+		/**
+		 * Event handler for the pointer over event.
+		 */
+		_onPointerOver: function (e) {
+
+			this.addState("hovered");
+		},
+
+		/**
+		 * Event handler for the pointer out event.
+		 */
+		_onPointerOut: function (e) {
+
+			this.removeState("hovered");
+		},
+
+		// handles the "resize" even on the wrapped control
+		// to fire the event to the wrapper component on the server
+		// and update the wrapped control's size.
+		_onControlResize: function (e) {
+
+			this.fireDataEvent("controlResize", e.getData());
+		}
+	}
+
+});
+
+

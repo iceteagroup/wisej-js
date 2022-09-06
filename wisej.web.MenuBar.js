@@ -74,7 +74,7 @@ qx.Class.define("wisej.web.MenuBar", {
 				if (this.getTextColor()) menu.setTextColor(this.getTextColor());
 				if (this.getBackgroundColor()) menu.setBackgroundColor(this.getBackgroundColor());
 			}
-		},
+		}
 
-	},
+	}
 });

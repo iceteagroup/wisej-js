@@ -42,6 +42,33 @@ qx.Class.define("wisej.web.datagrid.HeaderScroller", {
 				cellWidget.setCellWidget(null);
 				cellWidget.destroy();
 			}
+		},
+
+		/**
+		 * This method is called during the flush of the
+		 * {@link qx.ui.core.queue.Widget widget queue}.
+		 *
+		 * @param jobs {Map} A map of jobs.
+		 */
+		syncWidget: function (jobs) {
+
+			if (jobs && jobs["updateContent"])
+				this._updateContent(true);
+		},
+
+		/**
+		 * Event handler. Called the column order has changed.
+		 *
+		 */
+		onColOrderChanged: function () {
+			qx.ui.core.queue.Widget.add(this, "updateContent");
+		},
+
+		/**
+		 * Event handler. Called when the pane model has changed.
+		 */
+		onPaneModelChanged: function () {
+			qx.ui.core.queue.Widget.add(this, "updateContent");
 		}
 	}
 

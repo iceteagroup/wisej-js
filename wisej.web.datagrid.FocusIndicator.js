@@ -151,6 +151,12 @@ qx.Class.define("wisej.web.datagrid.FocusIndicator",
 					return;
 				}
 
+				// hide if behind frozen rows band.
+				if (row >= table.getFrozenRows() && y < this.__scroller.getFrozenRowsHeight()) {
+					this.hide();
+					return;
+				}
+
 				var x = (!table.isRtl())
 					? paneModel.getColumnLeft(col)
 					: paneModel.getTotalWidth() - paneModel.getColumnLeft(col) - w;

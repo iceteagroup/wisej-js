@@ -29,12 +29,12 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 	implement: [qx.ui.virtual.core.IWidgetCellProvider],
 
-	construct: function (owner) {
+	construct: function (listView) {
 
-		if (!(owner instanceof wisej.web.ListView))
+		if (!(listView instanceof wisej.web.ListView))
 			throw new Error("The owner must be an instance of wisej.web.ListView.");
 
-		this.__owner = owner;
+		this.listView = listView;
 
 		// initialize the data model.
 		this.setDataModel(new wisej.web.listview.ItemDataModel);
@@ -60,7 +60,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		this.getPane().addListener("resize", this._onPaneResize, this);
 
 		// listen to the keyboard to start editing or toggle the checkboxes.
-		this.getPane().addListener("keypress", this._onKeyPress, this);
+		this.addListener("keypress", this._onKeyPress, this);
 
 		// issue the first data load when becoming visible.
 		this.addListenerOnce("appear", this.reloadData, this);
@@ -117,7 +117,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 	members: {
 
 		// the owner ListView.
-		__owner: null,
+		listView: null,
 
 		// the virtual cells container.
 		__layer: null,
@@ -175,7 +175,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		getOwnerId: function () {
 
-			return this.__owner.getId();
+			return this.listView.getId();
 		},
 
 		/**
@@ -184,7 +184,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		getShowCheckBoxes: function () {
 
-			return this.__owner.isCheckBoxes();
+			return this.listView.isCheckBoxes();
 		},
 
 		/**
@@ -192,38 +192,38 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		getView: function () {
 
-			return this.__owner.getView();
+			return this.listView.getView();
 		},
 
 		// returns the value of the property ListView.showItemTooltips.
 		getShowItemTooltips: function () {
 
-			return this.__owner.getShowItemTooltips();
+			return this.listView.getShowItemTooltips();
 		},
 
 		// returns the value of the property ListView.wrap.
 		getLabelWrap: function () {
 
-			return this.__owner.getLabelWrap();
+			return this.listView.getLabelWrap();
 		},
 
 		// returns the default color for svg icons.
 		getIconColor: function () {
 
-			return this.__owner.getIconColor();
+			return this.listView.getIconColor();
 		},
 
 		// returns the item padding value.
 		getItemPadding: function () {
 
-			return this.__owner.getItemPadding();
+			return this.listView.getItemPadding();
 		},
 
 		// fires a data event on the ListView control.
 		fireItemEvent: function (e, type, data) {
 
-			if (this.__owner.isWired(type))
-				this.__owner.fireItemEvent(e, type, data);
+			if (this.listView.isWired(type))
+				this.listView.fireItemEvent(e, type, data);
 		},
 
 		/**
@@ -233,9 +233,19 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		setFocusedItem: function (index) {
 
-			this.scrollIntoView(index);
 			this.__selectionManager.setLeadItem(index);
-			this.__selectionManager.replaceSelection([index]);
+
+			if (this.getSelectionMode() != "none")
+				this.__selectionManager.replaceSelection([index]);
+		},
+
+		/**
+		 * Returns the focused item.
+		 *
+		 */
+		getFocusedItem: function () {
+
+			return this.__selectionManager.getLeadItem();
 		},
 
 		/**
@@ -336,6 +346,9 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		 */
 		scrollIntoView: function (index) {
 
+			if (index == null)
+				return;
+
 			// store the for a deferred call, after the data count is loaded.
 			if (this.__itemCount == 0) {
 				this.__pendingScrollIntoViewArgs = index;
@@ -407,9 +420,9 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			this.update();
 
 			// notify the ListView on the server.
-			if (this.__owner.isWired("dataUpdated")) {
+			if (this.listView.isWired("dataUpdated")) {
 				var data = e.getData();
-				this.__owner.fireDataEvent("dataUpdated", { firstIndex: data.firstRow, lastIndex: data.lastRow });
+				this.listView.fireDataEvent("dataUpdated", { firstIndex: data.firstRow, lastIndex: data.lastRow });
 			}
 		},
 
@@ -454,7 +467,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 		syncWidget: function (jobs) {
 
-			if (jobs && jobs["updateItems"]) {
+			if (jobs["updateItems"]) {
 
 				// process the update asynchronously, otherwise
 				// it may skip a beat since this is being process in a syncWidget cycle
@@ -463,17 +476,19 @@ qx.Class.define("wisej.web.listview.ItemView", {
 				setTimeout(function () {
 					me.__updateItems();
 				}, 1);
+
 			}
 
-			if (jobs && jobs["scrollIntoView"]) {
+			if (jobs["scrollIntoView"]) {
 				this.scrollIntoView(this.__pendingScrollIntoViewArgs);
 				this.__pendingScrollIntoViewArgs = null;
 			}
-			if (jobs && jobs["setSelectionRanges"]) {
+			if (jobs["setSelectionRanges"]) {
 				this.setSelectionRanges(this.__pendingSelectionArgs, true);
 				this.__pendingSelectionArgs = null;
 			}
-			if (jobs && jobs["updateFocusedItem"]) {
+
+			if (jobs["updateFocusedItem"]) {
 				this.__updateFocusedItem();
 			}
 		},
@@ -486,29 +501,37 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			if (!bounds || !bounds.width)
 				return;
 
+			var rowConfig = pane.getRowConfig();
+			var colConfig = pane.getColumnConfig();
+
 			var itemSize = this.getItemSize();
-			pane.getRowConfig().setDefaultItemSize(itemSize.height);
-			pane.getColumnConfig().setDefaultItemSize(itemSize.width);
+			rowConfig.setDefaultItemSize(itemSize.height);
+			colConfig.setDefaultItemSize(itemSize.width);
 
 			var paneWidth = bounds.width;
 			var itemCount = this.__itemCount;
-			var itemWidth = pane.getColumnConfig().getDefaultItemSize();
+			var itemWidth = colConfig.getDefaultItemSize();
 			this.__colCount = Math.max(1, Math.floor(paneWidth / itemWidth));
 			this.__rowCount = Math.ceil(itemCount / this.__colCount) || 0;
+			var changed = this.__colCount != colConfig.getItemCount();
 
-			var innerPane = pane;
-			innerPane.getColumnConfig().setItemCount(this.__colCount);
-			innerPane.getRowConfig().setItemCount(this.__rowCount);
-			innerPane.fullUpdate();
+			colConfig.setItemCount(this.__colCount);
+			rowConfig.setItemCount(this.__rowCount);
+			pane.fullUpdate();
 
 			// schedule pending calls.
 			if (itemCount > 0) {
+
 				if (this.__pendingScrollIntoViewArgs)
 					qx.ui.core.queue.Widget.add(this, "scrollIntoView");
 
 				if (this.__pendingSelectionArgs)
 					qx.ui.core.queue.Widget.add(this, "setSelectionRanges");
 			}
+
+			// scroll the focused item into view when the column count changes.
+			if (changed && this.getFocusedItem() != null && this.getFocusedItem() > -1)
+				this.scrollIntoView(this.getFocusedItem());
 		},
 
 		/**
@@ -611,7 +634,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 			var widget = Wisej.Core.getComponent(data.styles[0].widgetId);
 			if (widget) {
-				widget.setUserData("owner", this.__owner);
+				widget.setUserData("owner", this.listView);
 				cellWidget.setHostedWidget(widget, data.styles[0].widgetDock);
 			}
 		},
@@ -623,7 +646,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		_setChildAppearance: function (widget) {
 
 			widget.$$subcontrol = "item";
-			widget.$$subparent = this.__owner;
+			widget.$$subparent = this.listView;
 		},
 
 		/**
@@ -640,7 +663,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 				states.selected = true;
 
 			// propagate the view mode state.
-			states[this.__owner.getView()] = true;
+			states[this.listView.getView()] = true;
 
 			return states;
 		},
@@ -810,7 +833,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			switch (id) {
 
 				case "editor":
-					control = new wisej.web.listview.LabelEditor().set({
+					control = new wisej.web.listview.LabelEditor(this.listView).set({
 						visibility: "excluded"
 					});
 					control.addState("inner");
@@ -845,12 +868,12 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			var data = e.getData();
 
 			// redirect endEdit events to the parent ListView.
-			this.__owner.fireDataEvent("endEdit", {
+			this.listView.fireDataEvent("endEdit", {
 				index: this.__getItemIndex(data.item),
 				text: data.text
 			});
 
-			this.activate();
+			this.listView.focus();
 		},
 
 		_onKeyPress: function (e) {
@@ -874,7 +897,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 						var selection = this.__selectionManager.getSelection();
 						if (selection && selection.length > 0) {
 							for (var i = 0; i < selection.length; i++)
-								this.__owner.fireDataEvent("itemCheck", selection[i]);
+								this.listView.fireDataEvent("itemCheck", selection[i]);
 						}
 						e.stop();
 						break;
@@ -883,14 +906,14 @@ qx.Class.define("wisej.web.listview.ItemView", {
 
 			// if label editing is enabled, process F2
 			// to start editing the only selected item.
-			if (this.__owner.isLabelEdit()) {
+			if (this.listView.isLabelEdit()) {
 
 				switch (e.getKeyIdentifier()) {
 
 					case "F2":
 						var selection = this.__selectionManager.getSelection();
 						if (selection && selection.length === 1)
-							this.__owner.fireDataEvent("beginEdit", selection[0]);
+							this.listView.fireDataEvent("beginEdit", selection[0]);
 
 						e.stop();
 						return;
@@ -902,12 +925,12 @@ qx.Class.define("wisej.web.listview.ItemView", {
 		// on a label in a selected item.
 		_onItemLabelClick: function (e) {
 
-			if (this.__owner.isLabelEdit()) {
+			if (this.listView.isLabelEdit()) {
 
 				var item = e.getCurrentTarget();
 				var index = this.__getItemIndex(item);
 				if (this.__selectionManager.isItemSelected(index))
-					this.__owner.fireDataEvent("beginEdit", index);
+					this.listView.fireDataEvent("beginEdit", index);
 			}
 		},
 
@@ -939,6 +962,13 @@ qx.Class.define("wisej.web.listview.ItemView", {
 				var item = e.getCurrentTarget();
 				var index = this.__getItemIndex(item);
 				this.fireItemEvent(e, "itemClick", index);
+
+				// move the focus indicator.
+				this.__updateFocusedItem(index);
+
+				// select the single item on a right click.
+				if (this.getSelectionMode() != "none")
+					this.__selectionManager.replaceSelection([index]);
 			}
 		},
 
@@ -1040,12 +1070,20 @@ qx.Class.define("wisej.web.listview.ItemView", {
 			if (this.hasState("focused"))
 				this.__updateFocusedItem();
 
+			var selection = e.getData();
+
 			// need to convert the selection array into selection ranges.
-			// each selected item in the selection array is a map indicting
+			// each selected item in the selection array is a map indicating
 			// the select row and column.
-			var selectionRanges = this.getSelectionRanges(e.getData());
-			this.__owner.fireDataEvent("selectionChanged", selectionRanges);
-		},
+			var selectionRanges = this.getSelectionRanges(selection);
+			this.listView.fireDataEvent("selectionChanged", selectionRanges);
+
+			//  update the lead item with the last selected item.
+			var index = selection.length == 0
+				? -1
+				: selection[selection.length - 1];
+			this.__selectionManager.setLeadItem(index);
+		}
 	},
 
 	destruct: function()
@@ -1060,7 +1098,7 @@ qx.Class.define("wisej.web.listview.ItemView", {
 /**
  * wisej.web.listview.ItemCellProvider
  *
- * Creates, pools and reuses wisej.web.listview.ItemCellWidget instances in the wisej.web.listview.ItemView.
+ * Creates wisej.web.listview.ItemCellWidget instances in the wisej.web.listview.ItemView.
  */
 qx.Class.define("wisej.web.listview.ItemCellProvider", {
 
@@ -1646,15 +1684,21 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 
 	extend: qx.ui.form.TextField,
 
-	construct: function () {
+	construct: function (listView) {
 
 		this.base(arguments);
+
+		this.listView = listView;
 
 		// listen to the lost focus to commit editing.
 		this.addListener("blur", this._onBlur);
 
 		// list to the keyboard to commit or cancel editing.
 		this.addListener("keypress", this._onKeyPress);
+
+		// register for the Enter or Esc keys accelerators.
+		wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().register("Escape", this.__onEscape, this, "keypress");
 	},
 
 	properties: {
@@ -1664,6 +1708,9 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 	},
 
 	members: {
+
+		/** reference to the ListView container. */
+		listView: null,
 
 		/**
 		 * Begins editing the specified item widget.
@@ -1677,14 +1724,13 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 			// find the label, the edit control will replace it.
 			var label = item.getChildControl("label");
 			var labelBounds = label.getBounds();
-			var nodeBounds = item.getBounds();
+			var itemBounds = item.getBounds();
 			label.hide();
 
 			item._add(this);
-			this.setPaddingLeft(label.getPaddingLeft());
-			this.setPaddingRight(label.getPaddingRight());
+
 			this.setValue(qx.bom.String.unescape(label.getValue()));
-			this.setUserBounds(labelBounds.left, labelBounds.top, nodeBounds.width - labelBounds.left, labelBounds.height);
+			this.setUserBounds(labelBounds.left, labelBounds.top, itemBounds.width - labelBounds.left - 4, labelBounds.height + 4);
 
 			this.show();
 			this.focus();
@@ -1710,7 +1756,7 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 		_onBlur: function (e) {
 
 			if (this.isVisible())
-				this.endEdit(true);
+				this.endEdit();
 		},
 
 		_onKeyPress: function (e) {
@@ -1718,7 +1764,7 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 			switch (e.getKeyIdentifier()) {
 
 				case "Escape":
-					this.endEdit(true);
+					this.endEdit(true /*cancel*/);
 					break;
 
 				case "Enter":
@@ -1727,7 +1773,42 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
 			}
 
 			e.stopPropagation();
+		},
+
+		/**
+		 * Handles the "Enter" accelerator to close editor.
+		 */
+		__onEnter: function (e) {
+
+			if (!this.__isFocused())
+				return;
+
+			this.endEdit();
+			return true;
+		},
+
+		/**
+		 * Handles the "Enter" accelerator to close the editor.
+		 */
+		__onEscape: function (e) {
+
+			if (!this.__isFocused())
+				return;
+
+			this.endEdit(true /*cancel*/);
+			return true;
+		},
+
+		__isFocused: function () {
+			return qx.ui.core.FocusHandler.getInstance().getFocusedWidget() === this;
 		}
+	},
+
+	destruct: function () {
+
+		// un-register the Enter or Esc accelerators.
+		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onEnter, this, "keypress");
+		wisej.web.manager.Accelerators.getInstance().unregister("Escape", this.__onEscape, this, "keypress");
 
 	}
 });
@@ -1751,7 +1832,7 @@ qx.Class.define("wisej.web.listview.LabelEditor", {
  *				"0": "item's text",
  *				...
  *			},
- *          "styles": {item's style map}
+ *			"styles": {item's style map}
  *		}
  */
 qx.Class.define("wisej.web.listview.ItemDataModel", {
@@ -1856,7 +1937,7 @@ qx.Class.define("wisej.web.listview.ItemDataModel", {
  *				"0": "item's text",
  *				...
  *			},
- *          "styles": {item's style map}
+ *			"styles": {item's style map}
  *		}
  */
 qx.Class.define("wisej.web.listview.ItemDataModelDesignMode", {

@@ -100,7 +100,18 @@ qx.Class.define("wisej.web.WebBrowser", {
 		 */
 		_applyUrl: function (value, old) {
 
-			this.getChildControl("iframe").setSource(value);
+			// when in design mode, don't display the document.
+			// simply show the name of the file.
+			if (wisej.web.DesignMode) {
+
+				var viewer = this.getChildControl("design-view");
+
+				viewer.set({
+					label: this.getUrl(),
+				});
+			} else {
+				this.getChildControl("iframe").setSource(value);
+			}
 		},
 
 		/**
@@ -116,6 +127,24 @@ qx.Class.define("wisej.web.WebBrowser", {
 			var control;
 
 			switch (id) {
+
+				case "design-view":
+
+					if (wisej.web.DesignMode) {
+
+						this._setLayout(new qx.ui.layout.Grow());
+						control = new qx.ui.basic.Atom().set({
+							rich: true,
+							padding: 20,
+							center: true,
+							alignX: "center",
+							iconPosition: "left",
+							gap: 10
+						});
+
+						this._add(control);
+					}
+					break;
 
 				case "iframe":
 					control = new qx.ui.embed.Iframe();

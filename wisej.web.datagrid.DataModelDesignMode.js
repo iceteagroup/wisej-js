@@ -38,7 +38,7 @@
  *				"1": "first cell value",
  *				...
  *			},
- *          "styles":
+ *			"styles":
  *			{
  *				"0": {row header style map},
  *				"1": {first cell style map},
@@ -68,6 +68,13 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 		 */
 		init: function (table) {
 			this.__table = table;
+		},
+
+		/**
+		 * Removes all the rows from the data model.
+		 */
+		clear: function () {
+			this.setData([], true);
 		},
 
 		/**
@@ -306,6 +313,27 @@ qx.Class.define("wisej.web.datagrid.DataModelDesignMode", {
 		 * @param object {Object} context of the iterator
 		 */
 		iterateCachedRows: function (iterator, object) {
+
+		},
+
+		/**
+		 * Returns the requested cell style.
+		 *
+		 * @param columnIndex {Integer} the index of the column
+		 * @param rowIndex {Integer} the index of the row
+		 */
+		getCellStyle: function (columnIndex, rowIndex) {
+
+		},
+
+		/**
+		 * Sets the cell style.
+		 *
+		 * @param columnIndex {Integer} index of the column
+		 * @param rowIndex {Integer} index of the row
+		 * @param style {var} style to apply to the cell.
+		 */
+		setCellStyle: function (columnIndex, rowIndex, style) {
 
 		}
 

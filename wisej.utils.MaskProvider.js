@@ -96,6 +96,8 @@ qx.Class.define("wisej.utils.MaskProvider", {
 		 * . = Localized decimal separator.
 		 * , = Localized group separator.
 		 * $ = Localized currency symbol.
+		 * / = Localized date separator.
+		 * : = Localized time separator.
 		 * All other characters Literals = All non-mask elements will appear as themselves within MaskedTextBox. Literals always occupy a static position in the mask at run time, and cannot be moved or deleted by the user.
 		 */
 		mask: { init: "", check: "String", apply: "_applyMask" },
@@ -548,6 +550,9 @@ qx.Class.define("wisej.utils.MaskProvider", {
 							continue;
 
 						case ".":
+							if (literal)
+								break;
+
 							literal = true;
 							c = localization
 								? localization.decimal
@@ -555,13 +560,39 @@ qx.Class.define("wisej.utils.MaskProvider", {
 							break;
 
 						case ",":
+							if (literal)
+								break;
+
 							literal = true;
 							c = localization
 								? localization.group
 								: qx.locale.Number.getGroupSeparator();
 							break;
 
+						case "/":
+							if (literal)
+								break;
+
+							literal = true;
+							c = localization
+								? localization.date
+								: qx.locale.Date.getDateSeparator()
+							break;
+
+						case ":":
+							if (literal)
+								break;
+
+							literal = true;
+							c = localization
+								? localization.time
+								: qx.locale.Date.getTimeSeparator()
+							break;
+
 						case "$":
+							if (literal)
+								break;
+
 							literal = true;
 							c = localization
 								? localization.currency

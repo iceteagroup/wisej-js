@@ -71,7 +71,7 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 		 *
 		 * Gets or sets the type of animation to perform.
 		 */
-		blinkAnimation: { init: "blink", check: "String" },
+		blinkAnimation: { init: "blink", check: ["none", "blink", "bounce", "tada"], apply: "_applyBlinkStyle" },
 
 		/**
 		 * Alignment property.
@@ -101,12 +101,21 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 		__errorWidgets: null,
 
 		/**
-		 * Updates the type of blinker: blinkIfDifferentError, alwaysBlink, neverBlink.
+		 * Updates the type of animation to apply to the error widgets.
 		 */
-		_applyBlinkStyle: function (value, old) {
+		_applyBlinkStyle: function (value, old, name) {
 
-			if (value === "alwaysBlink")
-				this.__startAnimation();
+			switch (value) {
+				case "none":
+				case "neverBlink":
+				case "blinkIfDifferentError":
+					this.__stopAnimation();
+					break;
+
+				default:
+					this.__startAnimation();
+					break;
+			}
 		},
 
 		/**
@@ -147,7 +156,7 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 			}
 
 			// start the blinker procedure, if blinkStyle is set to "blinkIfDifferentError"
-			// the animation will kick in only if error._errorChanged is true.
+			// the animation will kick in only if error.isErrorChanged() is true.
 			this.__startAnimation();
 		},
 
@@ -211,24 +220,49 @@ qx.Class.define("wisej.web.extender.ErrorProvider", {
 				for (var id in this.__errorWidgets) {
 
 					var error = this.__errorWidgets[id];
-					if (error && error._component) {
+					if (error && error.getComponent()) {
 
-						if (error._component.isVisible()) {
+						if (error.getComponent().isVisible()) {
 
-							if (!blinkIfDifferent || (error._errorChanged && error.getError())) {
+							if (!blinkIfDifferent || (error.isErrorChanged() && error.getError())) {
 
-								wisej.web.Animation.animate(
+								if (!wisej.utils.Widget.ensureDomElement(error))
+									continue;
+
+								var handle = wisej.web.Animation.animate(
 									error,
 									this.getBlinkAnimation(),
 									{
 										duration: this.getBlinkRate(),
 										repeat: blinkIfDifferent ? this.getBlinkRepeat() : -1
 									});
+
+								if (handle)
+									error.setAnimationHandle(handle);
 							}
 						}
 					}
 				}
-			};
+			}
+		},
+
+		/**
+		 * Stops the animation on the error icons that are visible.
+		 */
+		__stopAnimation: function () {
+
+			var errors = this.__errorWidgets;
+			if (errors != null) {
+
+				for (var id in this.__errorWidgets) {
+
+					var error = this.__errorWidgets[id];
+					if (error.getAnimationHandle()) {
+						error.getAnimationHandle().stop();
+						error.setAnimationHandle(null);
+					}
+				}
+			}
 		}
 	},
 
@@ -253,11 +287,33 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 
 		this.base(arguments);
 
-		if (!provider)
-			throw new Error("Cannot create the error icon without a valid provider");
+		if (!provider) {
+			this.core.logError("Cannot create the error icon without a valid provider");
+			return;
+		}
 
-		if (!component)
-			throw new Error("Cannot create the error icon without a valid component");
+		if (!component) {
+			this.core.logError("Cannot create the error icon without a valid component");
+			return;
+		}
+
+		// save a reference to the error provider and the component connected to this error icon.
+		this.setComponent(component);
+		this.setErrorProvider(provider);
+
+		if (!component.getLayoutParent()) {
+			// defer if the widget doesn't have a parent yet.
+			component.addListenerOnce("appear", function () {
+
+				// add this widget to the same layout parent.
+				component.getLayoutParent()._add(this);
+			}, this);
+		}
+		else {
+
+			// add this widget to the same layout parent.
+			component.getLayoutParent()._add(this);
+		}
 
 		// initialize the icon, if specified.
 		if (provider.getIcon())
@@ -272,15 +328,9 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 		if (!this.getSource())
 			this.setSource("icon-error");
 
-		// save a reference to the error provider and the component connected to this error icon.
-		this._provider = provider;
-		this._component = component;
-
 		// start hidden.
 		this.exclude();
 
-		// add this widget to the same layout parent.
-		component.getLayoutParent()._add(this);
 		this.addListenerOnce("appear", this.__updatePosition);
 
 		// hook our handlers to follow the owner component.
@@ -293,8 +343,17 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 
 		appearance: { init: "errorprovider", refine: true },
 
+		// the widget associated with this error icon.
+		component: {check:"qx.core.Widget"},
+
+		// the wisej.web.extender.ErrorProvider that manages this error icon.
+		errorProvider: { check: "wisej.web.extender.ErrorProvider" },
+
 		// the error message.
 		error: { init: null, check: "String", apply: "_applyError" },
+
+		// handle for the current animation applied to the icon.
+		animationHandle: { check: "Object" },
 
 		// the icon alignment in relation to the component.
 		alignment: { init: "middleRight", check: ["topLeft", "topRight", "middleLeft", "middleRight", "bottomLeft", "bottomRight"], apply: "_applyAlignment" },
@@ -306,19 +365,13 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 		valid: { check: "Boolean", init: false },
 
 		// invalidMessage implementation from IForm.
-		invalidMessage: { check: "String", init: "" }
+		invalidMessage: { check: "String", init: "" },
+
+		// indicates the error has changed.
+		errorChanged: { check: "Boolean", init: false }
 	},
 
 	members: {
-
-		// the component connected to this error image
-		_component: null,
-
-		// the error provider instance that created this image.
-		_provider: null,
-
-		// flag to signal that the error message changed.
-		_errorChanged: false,
 
 		/**
 		 * Applies the error property.
@@ -327,11 +380,10 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 		 */
 		_applyError: function (value, old) {
 
-			this._errorChanged = true;
-
+			this.setErrorChanged(true);
 			this.setInvalidMessage(value);
 
-			if (value && this._component.isVisible())
+			if (value && this.getComponent().isVisible())
 				this.show();
 			else
 				this.exclude();
@@ -366,7 +418,7 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 
 			if (this.getError()) {
 
-				this._component.isVisible()
+				this.getComponent().isVisible()
 					? show()
 					: exclude();
 
@@ -376,7 +428,7 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 		// updates this error image position.
 		__updatePosition: function () {
 
-			var bounds = this._component.getBounds();
+			var bounds = this.getComponent().getBounds();
 			if (bounds) {
 
 				var mySize = this.getSizeHint();
@@ -436,9 +488,13 @@ qx.Class.define("wisej.web.extender.errorprovider.Icon", {
 
 	destruct: function () {
 
-		this._provider = null;
-		this._component = null;
+		// unhook our handlers to follow the owner component.
+		var component = this.getComponent();
+		if (component) {
+			component.removeListener("move", this.__onComponentMove, this);
+			component.removeListener("resize", this.__onComponentResize, this);
+			component.removeListener("changeVisibility", this.__onComponentChangeVisibility, this);
+		}
 	}
-
 
 });

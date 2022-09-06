@@ -44,7 +44,7 @@
  *				"1": "first cell error text",
  *				...
  *			},
- *          "styles":
+ *			"styles":
  *			{
  *				"0": {row header style map},
  *				"1": {first cell style map},
@@ -89,6 +89,36 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		init: function (table) {
 
 			this.__table = table;
+		},
+
+		/**
+		 * Removes all the rows from the data model without issuing a reload-data request.
+		 */
+		clear: function () {
+
+			var rowCount = this._rowCount;
+			if (rowCount <= 0)
+				return;
+
+			this.clearCache();
+
+			this._rowCount = 0;
+			this._clearCache = false;
+			this._lastRowToLoad = -1;
+			this._firstRowToLoad = -1;
+
+			// Inform the listeners
+			if (this.hasListener("dataChanged")) {
+				var data =
+				{
+					firstRow: 0,
+					lastRow: rowCount - 1,
+					firstColumn: 0,
+					lastColumn: this.getColumnCount() - 1
+				};
+
+				this.fireDataEvent("dataChanged", data);
+			}
 		},
 
 		/**

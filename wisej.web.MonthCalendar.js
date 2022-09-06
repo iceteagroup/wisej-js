@@ -787,47 +787,52 @@ qx.Class.define("wisej.web.MonthCalendar", {
 			try {
 
 				var target = e.getTarget();
+				if (target.userAction) {
 
-				// multiple selection is enabled?
-				var maxDays = this.getMaxSelectionCount();
-				if (maxDays > 1) {
+					// multiple selection is enabled?
+					var maxDays = this.getMaxSelectionCount();
+					if (maxDays > 1) {
 
-					// if the user has already selected the start date, then
-					// this selection is the end date of the range.
-					if (this.__selectionAnchor || target.__inKeyPress) {
+						// if the user has already selected the start date, then
+						// this selection is the end date of the range.
+						if (this.__selectionAnchor || target.userAction == "keyboard") {
 
-						var end = target.getValue();
-						var start = this.__inKeyPress ? end : this.__selectionAnchor;
-						this.__selectionAnchor = null;
+							var end = target.getValue();
+							var start = this.__selectionAnchor;
+							this.__selectionAnchor = null;
 
-						// limit the selection range.
-						if (start) {
-							if (end > start) {
-								end = this.__limitDays(end, start, maxDays);
+							if (target.userAction == "keyboard")
+								start = end;
+
+							// limit the selection range.
+							if (start) {
+								if (end > start) {
+									end = this.__limitDays(end, start, maxDays);
+								}
+								else if (end < start) {
+									end = this.__limitDays(end, start, -maxDays);
+									var t = start; start = end; end = t;
+								}
+
+								// update the selection range.
+								var range = { start: start, end: end };
+								this.setSelectionRange(range);
 							}
-							else if (end < start) {
-								end = this.__limitDays(end, start, -maxDays);
-								var t = start; start = end; end = t;
-							}
 
-							// update the selection range.
-							var range = { start: start, end: end };
-							this.setSelectionRange(range);
+							return;
 						}
+						else {
 
-						return;
+							// save the first selection date, waiting for the next.
+							this.__selectionAnchor = target.getValue();
+						}
 					}
 					else {
 
-						// save the first selection date, waiting for the next.
-						this.__selectionAnchor = target.getValue();
+						// update the selection range.
+						var range = { start: target.getValue(), end: target.getValue() };
+						this.setSelectionRange(range);
 					}
-				}
-				else {
-
-					// update the selection range.
-					var range = { start: target.getValue(), end: target.getValue() };
-					this.setSelectionRange(range);
 				}
 
 				// reset the selected day on all other inner calendars when:
@@ -933,6 +938,11 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		this.addListener("roll", this._onRoll, this);
 	},
 
+	statics: {
+
+		TOUCH_ROLL_DISTANCE: 10
+	},
+
 	properties: {
 
 		/**
@@ -963,8 +973,8 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		// the calendar that owns this inner DateChooser.
 		calendar: null,
 
-		// flag indicating that the widget is processing a keypress event.
-		__inKeyPress: false,
+		// flag indicating that the calendar is changing the value because of a keyboard or a pointer action.
+		userAction: null,
 
 		/**
 		 * Event handler. Called when a key was pressed.
@@ -973,13 +983,55 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		 */
 		_onKeyPress: function (e) {
 
-			this.__inKeyPress = true;
+			if (this.calendar.isReadOnly())
+				return;
+
+			this.userAction = "keyboard";
 			try {
 
 				this.base(arguments, e);
+
 			} finally {
 
-				this.__inKeyPress = false;
+				this.userAction = null;
+			}
+		},
+
+		/**
+		 * Event handler. Called when a day has been tapped.
+		*/
+		_onDayTap: function (e) {
+
+			if (this.calendar.isReadOnly())
+				return;
+
+			this.userAction = "pointer";
+			try {
+
+				this.base(arguments, e);
+
+			} finally {
+
+				this.userAction = null;
+			}
+		},
+
+		/**
+		 * Event handler. Called when a day has been double-tapped.
+		 */
+		_onDayDblTap: function (e) {
+
+			if (this.calendar.isReadOnly())
+				return;
+
+			this.userAction = "pointer";
+			try {
+
+				this.base(arguments, e);
+
+			} finally {
+
+				this.userAction = null;
 			}
 		},
 
@@ -989,15 +1041,6 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 
 			var readOnly = e.getData();
 			this.getChildControl("navigation-bar").setEnabled(!readOnly);
-		},
-
-		// overridden.
-		_onDayTap: function (e) {
-
-			if (this.calendar.isReadOnly())
-				return;
-
-			this.base(arguments, e);
 		},
 
 		/**
@@ -1092,19 +1135,40 @@ qx.Class.define("wisej.web.monthCalendar.DateChooser", {
 		 */
 		_onRoll: function (e) {
 
-			// only wheel and touch
-			if (e.getPointerType() === "mouse") {
-				return;
+			var year = this.getShownYear();
+			var month = this.getShownMonth();
+
+			switch (e.getPointerType()) {
+
+				case "touch": {
+
+					var delta = e.getDelta().x;
+					var distance = wisej.web.monthCalendar.DateChooser.TOUCH_ROLL_DISTANCE;
+
+					if (delta > distance)
+						delta = 1;
+					else if (delta < -distance)
+						delta = -1;
+					else
+						delta = 0;
+
+					if (delta != 0)
+						this.showMonth(month + delta, year);
+					
+					break;
+				}
+
+				case "wheel": {
+
+					// move 1 month each roll.
+					var delta = e.getDelta().y;
+					if (delta != 0)
+						this.showMonth(month + (delta > 0 ? 1 : -1), year);
+					
+					break;
+				}
 			}
 
-			var delta = e.getDelta();
-			// move 1 month each roll.
-			if (delta != 0) {
-				var date = this.getValue();
-				date = date ? new Date(date.getTime()) : date = new Date();
-				date.setMonth(date.getMonth() + (delta > 0 ? -1 : 1));
-				this.setValue(date);
-			}
 			e.stop();
 		}
 	}

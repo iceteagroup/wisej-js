@@ -55,7 +55,15 @@ qx.Class.define("wisej.web.Widget", {
 		 * 
 		 * List of event names fired by the widget implementation.
 		 */
-		events: { init: null, check: "Array" },
+		events: { init: null, check: "Array", apply: "_applyEvents" },
+
+		/**
+		 * EventExpressions properties.
+		 * 
+		 * Contains a map of event name: expression processed by _getEventData() to build
+		 * the event data object to return to the server when firing wired events.
+		 */
+		eventExpressions: { init: null, check: "Map" },
 
 		/**
 		 * PostbackUrl property.
@@ -140,6 +148,112 @@ qx.Class.define("wisej.web.Widget", {
 				this.__renderWidget();
 			}
 		},
+
+		/**
+		 * Keeps a list of the registered handlers.
+		 */
+		__registeredEvents: null,
+
+		/**
+		 * Registers or unregisters the wired events from the wrapped third party widget.
+		 */
+		_applyEvents: function (value, old) {
+
+			this.__registeredEvents = this.__registeredEvents || {};
+
+			// defer the event registration until the widget is created.
+			if (!this.widget) {
+				this.addListenerOnce("loaded", function () {
+					this._applyEvents(value, old);
+				});
+				return;
+			}
+
+			// unregister previous handlers.
+			if (old && old.length > 0) {
+				for (var i = 0; i < old.length; i++) {
+					var type = old[i];
+					this._removeListener(type, this.__registeredEvents[type]);
+				}
+			}
+
+			// register new handlers.
+			if (value && value.length > 0) {
+				for (var i = 0; i < value.length; i++) {
+					var type = value[i];
+					var handler = this._onEvent.bind(this, type);
+					this.__registeredEvents[type] = handler;
+					this._addListener(type, handler);
+				}
+			}
+		},
+
+		/**
+		 * Generic handler for the third party widget's events.
+		 */
+		_onEvent: function (type, e) {
+
+			var me = this;
+			setTimeout(function () {
+
+				// find the expression registered with the event.
+				var expressions = me.getEventExpressions();
+
+				// collect the arguments from the implementation and fire the server event.
+				me.fireWidgetEvent(type, me._getEventData(type, e, expressions ? expressions[type] : undefined));
+
+			}, 0);
+		},
+
+		// ---------------------------------------------------
+		// Dynamic event system implementation.
+		// ---------------------------------------------------
+
+		/**
+		 * Registers the handler function to listen to the event name on the wrapped widget.
+		 * 
+		 * @param name { String } name of the event.
+		 * @param handler { Function } event handler.
+		 */
+		_addListener: function (name, handler) {
+
+			// virtual, implement in a derived class.
+			this.core.logWarning("_addListener is not implemented.");
+		},
+
+		/**
+		 * Unregisters the handler functions from the event name on the wrapped widget.
+		 * 
+		 * @param name { String } name of the event.
+		 * @param handler { Function } event handler.
+		 */
+		_removeListener: function (name, handler) {
+
+			// virtual, implement in a derived class.
+			this.core.logWarning("_removeListener is not implemented.");
+		},
+
+		/**
+		 * Collects the event date from the arguments received by the widget.
+		 * 
+		 * @param type {String} name of the event.
+		 * @param e {Object} event data from the widget.
+		 * @param expression {String?} optional string expression that returns the event data from e.
+	     */
+		_getEventData: function (type, e, expression) {
+
+			if (expression != null) {
+				var func = new Function("e", "return " + expression);
+				return func.call(this, e);
+			}
+
+			// virtual, implement in a derived class.
+			this.core.logWarning("_getEventData is not implemented.");
+		},
+
+		// ---------------------------------------------------
+		// END: Dynamic event system implementation.
+		// ---------------------------------------------------
 
 		/**
 		 * Applies the options property.

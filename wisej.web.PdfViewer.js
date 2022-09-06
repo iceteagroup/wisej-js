@@ -71,10 +71,10 @@ qx.Class.define("wisej.web.PdfViewer", {
 	statics: {
 
 		// Google's default URL.
-		GOOGLE_VIEWER_URL: "//docs.google.com/viewer",
+		GOOGLE_VIEWER_URL: "https://docs.google.com/viewer",
 
 		// Mozilla's default URL.
-		MOZILLA_VIEWER_URL: "//mozilla.github.io/pdf.js/web/viewer.html",
+		MOZILLA_VIEWER_URL: "https://mozilla.github.io/pdf.js/web/viewer.html",
 
 	},
 

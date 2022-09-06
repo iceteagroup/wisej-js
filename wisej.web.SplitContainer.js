@@ -41,17 +41,11 @@ qx.Class.define("wisej.web.SplitContainer", {
 		// the first to the left and the second to the right.
 		this.setReverseControls(false);
 
-		// don't need the split blocker larger than the splitter.
-		this.setOffset(0);
-
 		// ensure we have 2 widgets to show the splitter in design mode.
 		if (wisej.web.DesignMode) {
 			this.add(new qx.ui.core.Widget());
 			this.add(new qx.ui.core.Widget());
 		}
-
-		// listen to the inner splitter "resize" event to remove the blocker when the splitter is disabled.
-		this.getChildControl("splitter").addListener("resize", this.__onSplitterResize, this);
 	},
 
 	properties: {
@@ -123,8 +117,6 @@ qx.Class.define("wisej.web.SplitContainer", {
 				else
 					splitter.setHeight(value);
 			}
-
-			this.__setBlockerPosition();
 		},
 
 		/**
@@ -186,21 +178,13 @@ qx.Class.define("wisej.web.SplitContainer", {
 		_applySplitterEnabled: function (value, old) {
 
 			if (value) {
-				this.getBlocker().show();
 				this.removeState("fixed");
 				this.getChildControl("splitter").removeState("fixed");
 			}
 			else {
-				this.getBlocker().hide();
 				this.addState("fixed");
 				this.getChildControl("splitter").addState("fixed");
 			}
-		},
-
-		__onSplitterResize: function (e) {
-
-			if (!this.isSplitterEnabled())
-				this.getBlocker().hide();	
 		},
 
 		/**
@@ -258,8 +242,7 @@ qx.Class.define("wisej.web.SplitContainer", {
 				return;
 
 			this.base(arguments, e);
-		},
-
-	},
+		}
+	}
 
 });

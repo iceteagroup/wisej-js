@@ -150,8 +150,14 @@ qx.Class.define("wisej.web.ListBox", {
 		 * 
 		 * Determines whether items are selected incrementally as the user types within a 1 second timeout.
 		 */
-		incrementalSelection: { init: true, check: "Boolean" }
+		incrementalSelection: { init: true, check: "Boolean" },
 
+		/**
+		 * Horizontal property.
+		 * 
+		 * When true, child items are displayed horizontally using the flow layout engine.
+		 */
+		horizontal: { init: false, check: "Boolean", apply: "_applyHorizontal" }
 	},
 
 	members: {
@@ -338,6 +344,28 @@ qx.Class.define("wisej.web.ListBox", {
 
 			if (value && !old)
 				this.addListener("contextmenu", this._onRightClick, this);
+		},
+
+		/**
+		 * Applies the Horizontal property.
+		 */
+		_applyHorizontal: function (value, old) {
+
+			var content = this.__content;
+
+			if (value) {
+				content.getLayout().dispose();
+				content.setLayout(new qx.ui.layout.Flow());
+				content.setAllowGrowX(false);
+				content.setAllowGrowY(true);
+			}
+			else {
+				content.getLayout().dispose();
+				content.setLayout(new qx.ui.layout.VBox());
+				content.setAllowGrowX(true);
+				content.setAllowGrowY(false);
+				this._applySpacing(this.getSpacing());
+			}
 		},
 
 		/**
@@ -729,7 +757,7 @@ qx.Class.define("wisej.web.CheckedListBox", {
 		/**
 		 * Check/uncheck the selected items.
 		 */
-		_onItemClick: function (e) {
+		_onItemTap: function (e) {
 
 			if (this.isReadOnly())
 				return;
@@ -795,7 +823,7 @@ qx.Class.define("wisej.web.CheckedListBox", {
 			item.setHeight(this.getItemHeight());
 			item.setAppearance(this.getItemAppearance());
 			item.set(properties);
-			item.addListener("click", this._onItemClick, this);
+			item.addListener("tap", this._onItemTap, this);
 			item.addListener("changeCheckState", this._onItemChangeCheckState, this);
 			item.addListener("beforeChangeCheckState", this._onItemBeforeChangeCheckState, this);
 			return item;
@@ -944,7 +972,20 @@ qx.Class.define("wisej.web.listbox.CheckedListItemCheckBox", {
 	members: {
 
 		/**
-		 * Handler for the execute event. Overridden
+		 * Overridden.
+		 * Listener method for "tap" event which stops the propagation.
+		 *
+		 * @param e {qx.event.type.Pointer} Pointer event
+		 */
+		_onTap: function (e) {
+			// "execute" is fired here so that the button can be dragged
+			// without executing it (e.g. in a TabBar with overflow)
+			this.execute();
+		},
+
+		/**
+		 * Overridden.
+		 * Handler for the execute event.
 		 * to prevent the checkbox from toggling when the
 		 * parent CheckedListBox is read-only.
 		 *

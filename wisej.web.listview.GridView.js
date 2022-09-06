@@ -29,12 +29,12 @@ qx.Class.define("wisej.web.listview.GridView", {
 
 	extend: wisej.web.DataGrid,
 
-	construct: function (owner) {
+	construct: function (listView) {
 
-		if (!(owner instanceof wisej.web.ListView))
+		if (!(listView instanceof wisej.web.ListView))
 			throw new Error("The owner must be an instance of wisej.web.ListView.");
 
-		this.__owner = owner;
+		this.listView = listView;
 
 		// use the listview data model.
 		var dataModel = !wisej.web.DesignMode
@@ -49,8 +49,10 @@ qx.Class.define("wisej.web.listview.GridView", {
 
 		// set defaults.
 		this._rowHeaderColIndex = -1;
+		this.setStandardTab(true);
 		this.setBorderStyle("none");
 		this.setRowHeadersVisible(false);
+		this.setRightClickSelection(true);
 		this.setShowCellFocusIndicator(false);
 		this.setEditMode("editProgrammatically");
 
@@ -74,7 +76,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 	members: {
 
 		// the owner ListView.
-		__owner: null,
+		listView: null,
 
 		// current number of rows.
 		__rowCount: 0,
@@ -85,19 +87,19 @@ qx.Class.define("wisej.web.listview.GridView", {
 		 */
 		getOwnerId: function () {
 
-			return this.__owner.getId();
+			return this.listView.getId();
 		},
 
 		// returns the default color for svg icons.
 		getIconColor: function () {
 
-			return this.__owner.getIconColor();
+			return this.listView.getIconColor();
 		},
 
 		// returns the item padding value.
 		getItemPadding: function () {
 
-			return this.__owner.getItemPadding();
+			return this.listView.getItemPadding();
 		},
 
 		/**
@@ -106,7 +108,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 		 */
 		getShowCheckBoxes: function () {
 
-			return this.__owner.isCheckBoxes();
+			return this.listView.isCheckBoxes();
 		},
 
 		/**
@@ -114,13 +116,13 @@ qx.Class.define("wisej.web.listview.GridView", {
 		 */
 		getHeaderStyle: function () {
 
-			return this.__owner.getHeaderStyle();
+			return this.listView.getHeaderStyle();
 		},
 
 		// returns the value of the property ListView.wrap.
 		getLabelWrap: function () {
 
-			return this.__owner.getLabelWrap();
+			return this.listView.getLabelWrap();
 		},
 
 		/**
@@ -212,35 +214,26 @@ qx.Class.define("wisej.web.listview.GridView", {
 
 				case "gridCellClick":
 				case "gridCellDblClick":
-					if (e.getData().row == -1) {
+					if (e.getData().row == -1 && e.getButton() === "left") {
 						if (this.getHeaderStyle() !== "clickable")
 							return;
 					}
-					this.__owner.fireItemEvent(e, e.getType(), e.getData());
-					break;
-
-				case "gridCellMouseUp":
-
-					// right click (or middle)?
-					if (e.getButton() === "left")
-						return;
-
-					this.__owner.fireItemEvent(e, "gridCellRightClick", e.getData());
+					this.listView.fireItemEvent(e, e.getType(), e.getData());
 					break;
 
 				case "selectionChanged":
-					this.__owner.fireDataEvent("selectionChanged", this.getSelectionRanges());
+					this.listView.fireDataEvent("selectionChanged", this.getSelectionRanges());
 					break;
 
 				case "dataUpdated":
-					if (this.__owner.isWired("dataUpdated")) {
+					if (this.listView.isWired("dataUpdated")) {
 						var data = e.getData();
-						this.__owner.fireDataEvent("dataUpdated", { firstIndex: data.firstRow, lastIndex: data.lastRow });
+						this.listView.fireDataEvent("dataUpdated", { firstIndex: data.firstRow, lastIndex: data.lastRow });
 					}
 					break;
 
 				default:
-					this.__owner.fireDataEvent(e.getType(), e.getData());
+					this.listView.fireDataEvent(e.getType(), e.getData());
 					break;
 			}
 		},
@@ -257,7 +250,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 					case "Space":
 
 						this.getSelectionModel().iterateSelection(function (index) {
-							this.__owner.fireDataEvent("itemCheck", index);
+							this.listView.fireDataEvent("itemCheck", index);
 						}, this);
 
 						e.stop();
@@ -300,7 +293,7 @@ qx.Class.define("wisej.web.listview.GridView", {
 
 					this.getSelectionModel().setSelectionRange(-1, row);
 
-					this.__owner.fireItemEvent(e, "itemDrag", row);
+					this.listView.fireItemEvent(e, "itemDrag", row);
 					break;
 				}
 			}

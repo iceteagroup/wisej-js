@@ -166,12 +166,20 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 				for (var i = 0; i < value.length; i++) {
 
 					var id = value[i].id;
+					var comp = Wisej.Core.getComponent(id);
+					var currentOpener = this.getHelpTip().getOpener();
+
+					// update existing helptip.
+					if (comp == currentOpener) {
+						this.getHelpTip().setLabel(value[i].text);
+					}
 
 					// make sure the handlers are attached only once.
-					if (this.__helptipByComponentId[id])
+					if (this.__helptipByComponentId[id]) {
+						this.__helptipByComponentId[id] = value[i].text;
 						continue;
+					}
 
-					var comp = Wisej.Core.getComponent(id);
 					if (comp) {
 						this.__helptipByComponentId[id] = value[i].text;
 						comp.addListener("activate", this.__onComponentActivate, this);
@@ -300,8 +308,9 @@ qx.Class.define("wisej.web.extender.HelpTip", {
 
 			// update the helptip text and place next to the target widget.
 			helptip.setLabel(text);
+			helptip.setOpener(widget);
 			helptip.placeToWidget(widget, true);
-
+			
 			// stop the close timer.
 			if (this.__closeTimer > 0) {
 				clearTimeout(this.__closeTimer);
@@ -403,7 +412,9 @@ qx.Class.define("wisej.web.extender.helpTip.Popup", {
 
 	properties: {
 
-		appearance: { init: "helptip", refine: true }
+		appearance: { init: "helptip", refine: true },
+
+		opener: { check: "qx.ui.core.Widget", nullable: true }
 	}
 
 });

@@ -24,141 +24,198 @@
  */
 qx.Class.define("wisej.web.manager.Accelerators", {
 
-    type: "singleton",
-    extend: qx.core.Object,
+	type: "singleton",
+	extend: qx.core.Object,
 
-    construct: function () {
+	construct: function () {
 
-        qx.event.Registration.addListener(document.body, "keydown", this._onKeyDown, this, true);
+		qx.event.Registration.addListener(document.body, "keyup", this._onAcceleratorKey, this, true);
+		qx.event.Registration.addListener(document.body, "keydown", this._onAcceleratorKey, this, true);
+		qx.event.Registration.addListener(document.body, "keypress", this._onAcceleratorKey, this, true);
 
-    },
+	},
 
-    members: {
+	members: {
 
-        __listeners: [],
+		__listeners: [],
 
-        /**
-         * Registers the specified callback to the list of registered targets.
-         * 
-         * @param {String} accelerator Accelerator key or null to register all keys.
-         * @param {Function} callback Method to call when the user presses any key.
-         * @param {Object} target Target instance of the callback method.
-         */
-        register: function (accelerator, callback, target) {
+		/**
+		 * Registers the specified callback to the list of registered targets.
+		 * 
+		 * @param {String} accelerator Accelerator key or null to register all keys.
+		 * @param {Function} callback Method to call when the user presses any key.
+		 * @param {Object} target Target instance of the callback method.
+		 * @param {String?} type Key event to register: "keydown", "keyup", "keypress".
+		 */
+		register: function (accelerator, callback, target, type) {
 
-            // add the listener.
-            this.__listeners.push({
-                target: target,
-                key: accelerator,
-                callback: callback
-            });
-        },
+			type = type || "keydown";
 
-        /**
-         * Unregisters the specified callback from the list of registered targets.
-         * 
-         * @param {String} accelerator Accelerator key or null to register all keys.
-         * @param {Function} callback Method to call when the user presses the key.
-         * @param {Object} target Target instance of the callback method.
-         */
-        unregister: function (accelerator, callback, target) {
+			// add the listener.
+			this.__listeners.push({
+				type: type,
+				target: target,
+				key: accelerator,
+				callback: callback
+			});
+		},
 
-            // removes the last instance of the listener.
-            var index = -1;
-            var listener = null;
-            for (var i = this.__listeners.length - 1; i > -1; i--) {
+		/**
+		 * Unregisters the specified callback from the list of registered targets.
+		 * 
+		 * @param {String} accelerator Accelerator key or null to register all keys.
+		 * @param {Function} callback Method to call when the user presses the key.
+		 * @param {Object} target Target instance of the callback method.
+		 * @param {String?} type Key event to register: "keydown", "keyup", "keypress".
+		 */
+		unregister: function (accelerator, callback, target, type) {
 
-                listener = this.__listeners[i];
+			type = type || "keydown";
 
-                if (listener.key === accelerator &&
-                    listener.callback === callback &&
-                    listener.target === target) {
+			// removes the last instance of the listener.
+			var index = -1;
+			var listener = null;
+			for (var i = this.__listeners.length - 1; i > -1; i--) {
 
-                    index = i;
-                    break;
-                }
-            }
+				listener = this.__listeners[i];
 
-            if (index > -1)
-                this.__listeners.splice(index, 1);
-        },
+				if (listener.type === type &&
+					listener.key === accelerator &&
+					listener.callback === callback &&
+					listener.target === target) {
 
-        /**
-         * Handles the "keydown" event during the capture phase
-         * from the document body.
-         */
-        _onKeyDown: function (e) {
+					index = i;
+					break;
+				}
+			}
 
-            // normalize the key.
-            var key = this.__getKeyIdentifier(e);
+			if (index > -1)
+				this.__listeners.splice(index, 1);
+		},
 
-            var index = -1;
-            var component = wisej.utils.Widget.findWisejComponent(e.getTarget());
+		/**
+		 * Handles the event during the capture phase from the document body.
+		 */
+		_onAcceleratorKey: function (e) {
 
-            // start from the component that had the focus.
-            if (component) {
-                index = this.__listeners.findIndex(function (item) {
-                    return item.target == component;
-                });
-            }
+			var type = e.getType();
 
-            var listener = null;
+			// normalize the key.
+			var key = this.__getKeyIdentifier(e);
 
-            if (index > 0) {
-                index--;
-                for (var i = index; i > -1; i--) {
+			// create cloned event with correct target.
+			var target = wisej.utils.Widget.findWisejComponent(e.getTarget());
+			var widgetEvent = qx.event.Pool.getInstance().getObject(e.constructor);
+			try {
 
-                    listener = this.__listeners[i];
+				widgetEvent.init(
+					e.getNativeEvent(),
+					target,
+					e.getKeyIdentifier());
 
-                    if (listener.key == null || listener.key === key) {
+				widgetEvent.setType(e.getType());
 
-                        // stop dispatching when an handler returns true.
-                        if (listener.callback.call(listener.target, e) === true)
-                            return;
-                    }
-                }
-            }
+				// allow the target to pre-process the accelerator without having to register.
+				if (target && target.processAccelerator instanceof Function) {
+					if (target.processAccelerator(widgetEvent)) {
+						return;
+					}
+				}
 
-            for (var i = this.__listeners.length - 1; i > index; i--) {
+				// dispatch the accelerator to the target first.
+				if (target) {
 
-                listener = this.__listeners[i];
+					for (var i = this.__listeners.length - 1; i > -1; i--) {
 
-                if (listener.key === null || listener.key === key) {
+						var listener = this.__listeners[i];
+						if (listener.type === type
+							&& listener.target === target
+							&& (listener.key === null || listener.key === key)) {
 
-                    // stop dispatching when an handler returns true.
-                    if (listener.callback.call(listener.target, e) === true)
-                        return;
-                }
-            }
-           
-        },
+							// stop dispatching when an handler returns true.
+							if (listener.callback.call(listener.target, widgetEvent) === true) {
+								widgetEvent.stop();
+								return;
+							}
+						}
+					}
+				}
 
-        // returns a normalized string representing the accelerator key.
-        __getKeyIdentifier: function (e) {
+				// dispatch the accelerator to the listeners that registered with target null.
+				for (var i = this.__listeners.length - 1; i > -1; i--) {
 
-            var parts = [];
+					var listener = this.__listeners[i];
 
-            if (e.isCtrlPressed())
-                parts.push("Ctrl");
-            if (e.isAltPressed())
-                parts.push("Alt");
-            if (e.isShiftPressed())
-                parts.push("Shift");
-            if (e.isMetaPressed())
-                parts.push("Meta");
+					if (listener.type === type
+						&& listener.target === null
+						&& (listener.key === null || listener.key === key)) {
 
-            switch (e.getKeyCode()) {
-                case 16: // shift key
-                case 17: // control key
-                case 18: // alt key
-                    break;
+						// stop dispatching when an handler returns true.
+						if (listener.callback.call(listener.target, widgetEvent) === true) {
+							widgetEvent.stop();
+							return;
+						}
+					}
+				}
 
-                default:
-                    parts.push(e.getKeyIdentifier());
-            }
+				// dispatch the accelerator to the remaining listeners.
+				for (var i = this.__listeners.length - 1; i > -1; i--) {
 
-            return parts.join("+");
-        }
-    }
+					var listener = this.__listeners[i];
+
+					if (listener.type === type
+						&& (listener.key === null || listener.key === key)
+						&& (listener.target !== target && listener.target != null)) {
+
+						// stop dispatching when an handler returns true.
+						if (listener.callback.call(listener.target, widgetEvent) === true) {
+							widgetEvent.stop();
+							return;
+						}
+					}
+				}
+			}
+			finally {
+
+				// transfer the defaultPrevented flag.
+				if (widgetEvent.getDefaultPrevented())
+					e.preventDefault();
+				// transfer the defaultPrevented flag.
+				if (widgetEvent.getPropagationStopped())
+					e.stopPropagation();
+
+				// release the event instance to the event pool.
+				qx.event.Pool.getInstance().poolObject(widgetEvent);
+			}
+		},
+
+		// returns a normalized string representing the accelerator key.
+		__getKeyIdentifier: function (e) {
+
+			var parts = [];
+
+			if (e.isCtrlPressed())
+				parts.push("Ctrl");
+			if (e.isAltPressed())
+				parts.push("Alt");
+			if (e.isShiftPressed())
+				parts.push("Shift");
+			if (e.isMetaPressed())
+				parts.push("Meta");
+
+			switch (e.getKeyCode()) {
+				case 16: // shift key
+				case 17: // control key
+				case 18: // alt key
+					break;
+
+				default:
+					parts.push(e.getKeyIdentifier());
+					break;
+			}
+
+			return parts.join("+");
+		}
+	}
 
 });

@@ -53,6 +53,8 @@ qx.Class.define("wisej.web.datagrid.HeaderRenderer", {
 					cellWidget.addState("sortable");
 				else
 					cellWidget.removeState("sortable");
+
+				cellWidget.invalidateLayoutChildren();
 			}
 		}
 	},

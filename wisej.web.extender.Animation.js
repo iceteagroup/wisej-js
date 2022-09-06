@@ -65,8 +65,9 @@ qx.Class.define("wisej.web.extender.Animation", {
 		 * Performs the specified animation immediately.
 		 *
 		 * @param animation {Map} the animation definition map.
+		 * @param callback {Function?} optional callback invoked when the animation terminates.
 		 */
-		run: function (animation) {
+		run: function (animation, callback) {
 
 			var component = this.__getAnimationTarget(animation.id);
 			if (!component)
@@ -102,16 +103,8 @@ qx.Class.define("wisej.web.extender.Animation", {
 				// end callback
 				end: function () {
 
-					switch (animation.event)
-					{
-						case "close":
-							animation.destroyComponent.call(component);
-							break;
-
-						case "disappear":
-							animation.hideElement.call(component.getContentElement());
-							break;
-					}
+					if (callback)
+						callback(animation);
 
 					me.fireDataEvent("end", { name: animation.name, target: component });
 				}
@@ -187,6 +180,7 @@ qx.Class.define("wisej.web.extender.Animation", {
 			if (animation.event === "close")
 			{
 				this.__registerCloseAnimation(animation, component);
+				this.__registerDisappearAnimation(animation, component);
 				return;
 			}
 
@@ -213,7 +207,9 @@ qx.Class.define("wisej.web.extender.Animation", {
 				// override and restore the hide method as soon as it's called.
 				animation.destroyComponent = component.destroy;
 				component.destroy = function () {
-					me.run(animation, component);
+					me.run(animation, function () {
+						animation.destroyComponent.call(component);
+					});
 				};
 			}
 		},
@@ -230,7 +226,9 @@ qx.Class.define("wisej.web.extender.Animation", {
 				// override and restore the hide method as soon as it's called.
 				animation.hideElement = el.hide;
 				el.hide = function () {
-					me.run(animation, component);
+					me.run(animation, function () {
+						animation.hideElement.call(component.getContentElement());
+					});
 				};
 			}
 		},

@@ -202,7 +202,8 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		 */
 		sizeMode: {
 			init: "none",
-			check: ["none", "columnHeader", "allCellsExceptHeader", "allCells", "displayedCellsExceptHeader", "displayedCells", "fill", "doubleClick"],
+			check: ["none", "columnHeader", "allCellsExceptHeader", "allCells", "displayedCellsExceptHeader", "displayedCells", "fill", "doubleClick",
+					"autoSizeToAllHeaders", "autoSizeToDisplayedHeaders", "autoSizeToFirstHeader"],
 			apply: "_applyProperty"
 		},
 

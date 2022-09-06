@@ -86,11 +86,34 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 		// process menu items after they are removed from the menu bar.
 		_afterRemoveChild: function (child) {
 
+			child.removeListener("changeVisibility", this._onChildchangeVisibility, this);
+
 			// remove the overflow item along with the menu item.
 			if (child.__overflowItem) {
 				child.__overflowItem.destroy();
 				child.__overflowItem = null;
 			}
+		},
+
+		// process menu items after they are added to the menu bar.
+		_afterAddChild: function (child) {
+
+			child.addListener("changeVisibility", this._onChildchangeVisibility, this);
+		},
+
+		/**
+		 * This method is called during the flush of the
+		 * {@link qx.ui.core.queue.Widget widget queue}.
+		 *
+		 * @param jobs {Map} A map of jobs.
+		 */
+		syncWidget: function (jobs) {
+
+			if (!jobs)
+				return;
+
+			if (jobs["recalculateOverflow"])
+				this._recalculateOverflow();
 		},
 
 		// ensures that all the menu items have their overflow clone
@@ -232,6 +255,11 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 			}
 		},
 
+		_onChildchangeVisibility: function (e) {
+
+			qx.ui.core.queue.Widget.add(this, "recalculateOverflow");
+		},
+
 		// when the overflow becomes visible it is added to the menubar
 		// together with a spacer to ensure that it's aligned to the right.
 		_recalculateOverflow: function (width, requiredWidth) {
@@ -241,15 +269,30 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 			if (this.__inRecalculateOverflow)
 				return;
 
-			// this.invalidateLayoutCache();
-			// requiredWidth = this.getSizeHint().width;
-			this.base(arguments, width, requiredWidth);
-
 			// our menus are dynamic - items are added/removed live - therefore
 			// we need to add/remove the spacer together with the overflow indicator otherwise
 			// newly added items will dock to the right.
 			this.__inRecalculateOverflow = true;
 			try {
+
+				// update overflowed items cached list.
+				var menuItems = this.getChildren();
+				for (var i = 0; i < menuItems.length; i++) {
+					var menuItem = menuItems[i];
+					if (menuItem instanceof wisej.web.menu.MenuBarItem) {
+						if (menuItem.isHidden()) {
+							qx.lang.Array.remove(this.__removedItems, menuItem);
+						} else {
+							menuItem.syncAppearance();
+							menuItem.invalidateLayoutCache();
+						}
+					}
+				}
+
+				this.invalidateLayoutCache();
+				requiredWidth = requiredWidth ||this.getSizeHint().width;
+				this.base(arguments, width, requiredWidth);
+
 				var overflow = this.getOverflowIndicator();
 				if (overflow) {
 
@@ -268,7 +311,7 @@ qx.Class.define("wisej.web.menu.MenuBar", {
 
 			}
 
-		},
+		}
 	},
 
 	destruct: function () {
@@ -302,7 +345,7 @@ qx.Class.define("wisej.web.menu.MainMenu", {
 
 
 /**
- * wisej.web.menu.ontextMenu
+ * wisej.web.menu.ContextMenu
  * 
  *  Represents a context menu component.
  */
@@ -368,12 +411,6 @@ qx.Class.define("wisej.web.menu.ContextMenu", {
 
 				offset = offset || [0, 0, 0, 0];
 				opener = opener.getChildrenContainer ? opener.getChildrenContainer() : opener;
-
-				if (opener && opener.getBounds()) {
-
-					if (position === "rightTop")
-						offset[3] -= opener.getBounds().width;
-				}
 
 				this.setOffset(offset);
 
@@ -442,6 +479,12 @@ qx.Class.define("wisej.web.menu.MenuBarItem", {
 
 		appearance: { refine: true, init: "menubar/item" },
 
+		/**
+		 * SizeMode property.
+		 *
+		 * Determines how the menu item is resized.
+		 */
+		sizeMode: { init: "auto", check: ["auto", "fill"], apply: "_applySizeMode" }
 	},
 
 	construct: function (label, icon, menu) {
@@ -481,6 +524,14 @@ qx.Class.define("wisej.web.menu.MenuBarItem", {
 		},
 
 		/**
+		 * Applies the SizeMode property.
+		 */
+		_applySizeMode: function (value, old) {
+
+			this.setLayoutProperties({ flex: value == "fill" ? 1 : 0 });
+		},
+
+		/**
 		 * Process shortcuts.
 		 */
 		executeShortcut: function () {
@@ -516,7 +567,7 @@ qx.Class.define("wisej.web.menu.MenuBarItem", {
 			}
 
 			return true;
-		},
+		}
 	},
 
 	destruct: function () {
@@ -771,6 +822,39 @@ qx.Class.define("wisej.web.menu.MenuSeparator", {
 
 
 /**
+ * wisej.web.menu.MenuBarSeparator
+ * 
+ *  Represents a separator item in the menu bar.
+ */
+qx.Class.define("wisej.web.menu.MenuBarSeparator", {
+
+	extend: wisej.web.menu.MenuSeparator,
+
+	properties: {
+
+		appearance: { refine: true, init: "menubar/separator" },
+
+		/**
+		 * SizeMode property.
+		 *
+		 * Determines how the menu item is resized.
+		 */
+		sizeMode: { init: "auto", check: ["auto", "fill"], apply: "_applySizeMode" }
+	},
+	members: {
+
+		/**
+		 * Applies the SizeMode property.
+		 */
+		_applySizeMode: function (value, old) {
+
+			this.setLayoutProperties({ flex: value == "fill" ? 1 : 0 });
+		}
+	}
+});
+
+
+/**
  * wisej.web.menu.LinkMenuItem
  * 
  *  Represents a menu item that acts as a regular link.
@@ -812,7 +896,7 @@ qx.Class.define("wisej.web.menu.LinkMenuItem", {
 		// overridden
 		_onTap: function (e) {
 			setTimeout(function () {
-				qx.ui.menu.Manager.getInstance().hideAll()
+				qx.ui.menu.Manager.getInstance().hideAll();
 			}, 500);
 		},
 
@@ -840,7 +924,7 @@ qx.Class.define("wisej.web.menu.LinkMenuItem", {
 
 
 /**
- * wisej.web.menu.LinkMenuItem
+ * wisej.web.menu.LinkMenuBarItem
  * 
  *  Represents a menu item that acts as a regular link in a main menu or menu bar.
  */
@@ -899,5 +983,58 @@ qx.Class.define("wisej.web.menu.LinkMenuBarItem", {
 		}
 	}
 
+
+});
+
+
+/**
+ * wisej.web.menu.CheckedMenuItem
+ * 
+ *  Represents a checkbox menu item.
+ */
+qx.Class.define("wisej.web.menu.CheckedMenuItem", {
+
+	extend: wisej.web.menu.MenuItem,
+
+	construct: function (label, icon, command, menu) {
+
+		this.base(arguments, label, icon, command, menu);
+
+		this.addState("unchecked");
+	},
+
+	members: {
+
+		/**
+		 * Applies the checked property.
+		 */
+		_applyChecked: function (value, old) {
+
+			// reset the icon to the theme.
+			// the app may change the icon after setting the checked property
+			// to change the check mark icon.
+			this.resetIcon();
+
+			if (value) {
+				this.addState("checked");
+				this.removeState("unchecked");
+			}
+			else {
+				this.addState("unchecked");
+				this.removeState("checked");
+			}
+		}
+	}
+});
+
+
+/**
+ * wisej.web.menu.CheckedMenuBarItem
+ * 
+ * Doesn't do anything different. Could be implemented if needed.
+ */
+qx.Class.define("wisej.web.menu.CheckedMenuBarItem", {
+
+	extend: wisej.web.menu.MenuBarItem
 
 });

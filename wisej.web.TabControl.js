@@ -296,9 +296,15 @@ qx.Class.define("wisej.web.TabControl", {
 		 */
 		_applyIconSize: function (value, old) {
 
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
+
 			var pages = this.getChildren();
-			for (var i = 0; i < pages.length; i++)
+			for (var i = 0; i < pages.length; i++) {
 				pages[i]._updateIconSize(value);
+			}
 		},
 
 		/**
@@ -1105,20 +1111,21 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 		 */
 		_applyHidden: function (value, old) {
 
+			var tabControl = this.getTabControl();
+
 			if (value) {
 
-				// if this is the currently visible page, hide it.
-				if (this.isVisible())
-					this.hide();
-
+				this.hide();
 				this.getButton().exclude();
 			}
 			else {
 
+				if (tabControl && tabControl.getSelectedTab() == this)
+					this.show();
+
 				this.getButton().show();
 			}
 
-			var tabControl = this.getTabControl();
 			if (tabControl)
 				tabControl._updateMetrics();
 		},
@@ -1142,7 +1149,7 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 				? this.addState("disabled")
 				: this.removeState("disabled");
 
-			// add the disabled stat but let t he button be
+			// add the disabled stat but let the button be
 			// clickable to let the user select the disabled tab page.
 			var btn = this.getChildControl("button");
 			value === false
@@ -1174,6 +1181,11 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 
 			// update the layout of the tab-button.
 			qx.ui.core.queue.Widget.add(this, "layout");
+
+			// update the tab control's metrics.
+			var tabControl = this.getTabControl();
+			if (tabControl)
+				tabControl._updateMetrics();
 		},
 
 		// overridden to adjust the button
@@ -1188,10 +1200,11 @@ qx.Class.define("wisej.web.tabcontrol.TabPage", {
 				// for WebFonts, wait for the font to be loaded.
 				var font = qx.theme.manager.Font.getInstance().resolve(value);
 				if (font instanceof qx.bom.webfonts.WebFont) {
-					font.addListenerOnce("changeStatus", function () {
-						qx.ui.core.queue.Widget.add(this, "layout");
-					}, this);
-
+					if (!font.isValid()) {
+						font.addListenerOnce("changeStatus", function () {
+							qx.ui.core.queue.Widget.add(this, "layout");
+						}, this);
+					}
 					return;
 				}
 			}
@@ -1695,9 +1708,11 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 			// when "automation.mode" is enabled, change the id of the element on creation.
 			// TabButton needs to do this here because the widget TabPage is not created until
 			// the first time it's made visible.
-			if (qx.core.Environment.get("automation.mode") === true) {
+			if (wisej.utils.Widget.getAutomationMode()) {
 				this.addListenerOnce("appear", function (e) {
-					wisej.utils.Widget.setAutomationID(this.getUserData("page"));
+					qx.event.Timer.once(function () {
+						wisej.utils.Widget.setAutomationID(this.getUserData("page"));
+					}, 1, this);
 				});
 			}
 		}
@@ -1759,7 +1774,35 @@ qx.Class.define("wisej.web.tabcontrol.TabButton", {
 			} else {
 				this._excludeChildControl("close-button");
 			}
+		},
 
+		/**
+		 * Applies the showCloseButton property.
+		 */
+		_applyShowCloseButton: function (value, old) {
+
+			if (value && this.isShowClose()) {
+				this._showChildControl("close-button");
+			} else {
+				this._excludeChildControl("close-button");
+			}
+		},
+
+		/**
+		 * Applies the Enabled property. Overridden
+		 * to keep the "disabled" state in sync with the TabPage enabled property.
+		 */
+		_applyEnabled: function (value, old) {
+
+			this.base(arguments, value, old);
+
+			var page = this.getUserData("page");
+			if (page) {
+				value = value && page.isEnabled();
+				value === false
+					? this.addState("disabled")
+					: this.removeState("disabled");
+			}
 		},
 
 		/**

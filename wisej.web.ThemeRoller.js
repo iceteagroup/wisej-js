@@ -330,14 +330,14 @@ qx.Class.define("wisej.web.themeRoller.Manager", {
 				var values = [];
 				var settings = theme.settings;
 				for (var name in settings) {
-					keys.push("\"$" + name + "\"");
+					keys.push("\"\\$" + name + "\"");
 					values.push(settings[name]);
 				}
 				if (keys.length > 0) {
 					var json = JSON.stringify(theme);
 
 					for (var i = 0; i < keys.length; i++) {
-						json = json.replace(keys[i], values[i]);
+						json = json.replace(new RegExp(keys[i], "g"), values[i]);
 					}
 
 					theme = JSON.parse(json);

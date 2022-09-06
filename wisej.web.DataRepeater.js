@@ -294,6 +294,7 @@ qx.Class.define("wisej.web.DataRepeater", {
 				this.__selectionManager = new qx.ui.virtual.selection.Row(this.getPane(), this);
 
 			this.__selectionManager.attachPointerEvents();
+			this.__selectionManager._autoScrollIntoView = false;
 			this.__selectionManager.addListener("changeSelection", this._onChangeSelection, this);
 
 			this.update();
@@ -670,7 +671,12 @@ qx.Class.define("wisej.web.DataRepeater", {
 					break;
 
 				case "Delete":
-					this.fireDataEvent("deleteItem", target.getIndex());
+					var index =
+						target instanceof wisej.web.dataRepeater.ItemContent
+							? target.getIndex()
+							: this.getSelectedIndex();
+
+					this.fireDataEvent("deleteItem", index);
 					break;
 
 				case "Tab":
@@ -709,8 +715,7 @@ qx.Class.define("wisej.web.DataRepeater", {
 /**
  * wisej.web.dataRepeater.ItemCellProvider
  *
- * Creates, pools and reuses wisej.web.dataRepeater.ItemCellWidget instances 
- * in the wisej.web.DataRepeater widget.
+ * Creates wisej.web.dataRepeater.ItemCellWidget instances in the wisej.web.DataRepeater widget.
  */
 qx.Class.define("wisej.web.dataRepeater.ItemCellProvider", {
 
@@ -878,8 +883,8 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 
 		this.initOrientation();
 		this.initItemBorderStyle();
+		this.addListener("click", this._onItemClick, this);
 		this.addListener("keypress", this._onKeyPress, this);
-		this.addListener("pointerdown", this._onPointerDown, this);
 
 		// RightToLeft support.
 		this.addListener("changeRtl", this._onRtlChange, this);
@@ -1112,8 +1117,8 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 			}
 		},
 
-		// handles taps anywhere in the panel item to change the selected index.
-		_onPointerDown: function (e) {
+		// handles click anywhere in the panel item to change the selected index.
+		_onItemClick: function (e) {
 
 			var index = this.getIndex();
 			var repeater = this._getDataRepeater();
@@ -1122,12 +1127,12 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 		},
 
 		// handles clicks on the panel header button.
-		_onHeaderPointerDown: function (e) {
+		_onHeaderClick: function (e) {
 
 			var index = this.getIndex();
 			var repeater = this._getDataRepeater();
 			if (repeater && index > -1) {
-				repeater.focus();
+				this.focus();
 				repeater.setSelectedIndex(index);
 			}
 		},
@@ -1216,7 +1221,7 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 
 					control.addState("inner");
 					this._updateLayout(control);
-					control.addListener("pointerdown", this._onHeaderPointerDown, this);
+					control.addListener("click", this._onHeaderClick, this);
 					break;
 			}
 

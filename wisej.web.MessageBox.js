@@ -78,7 +78,6 @@ qx.Class.define("wisej.web.MessageBox", {
 
 		this._createChildControl("buttonsPane");
 
-		this.setModal(true);
 		this.setMinWidth(250);
 		this.setMinHeight(150);
 		this.setVisible(true);
@@ -173,8 +172,13 @@ qx.Class.define("wisej.web.MessageBox", {
 			if (!this.isActive() || wisej.web.DesignMode)
 				return;
 
-			if (this.__defaultBtn)
-				this.__defaultBtn.focus();
+			if (this.__defaultBtn) {
+				if (!qx.ui.core.FocusHandler.getInstance().isFocused(this.__defaultBtn))
+					this.__defaultBtn.focus();
+			}
+
+			if (!this.isModal())
+				qx.event.Idle.getInstance().removeListener("interval", this.__ensureActiveMessageBox, this);
 		},
 
 		/**
@@ -283,7 +287,8 @@ qx.Class.define("wisej.web.MessageBox", {
 			}
 			catch (ex) { }
 
-			this.destroy();
+			// must destroy async or on mobile the element below will get the focus.
+			qx.event.Timer.once(this.destroy, this, 1);
 		},
 
 		__setImage: function (value) {

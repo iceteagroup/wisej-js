@@ -22,6 +22,5 @@
  */
 qx.Class.define("wisej.web.datagrid.PaneModel", {
 
-	extend: qx.ui.table.pane.Model,
-
+	extend: qx.ui.table.pane.Model
 });

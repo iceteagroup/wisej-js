@@ -178,7 +178,7 @@ qx.Class.define("wisej.web.ScrollableHtmlPanel", {
 		_applyHtml: function (value, old) {
 
 			var html = this.getChildControl("html");
-			html.setHtml("<div style='overflow:hidden' class='"
+			html.setHtml("<div style='overflow:visible;padding-bottom:0.1px' class='"
 				+ this.__getClassName()
 				+ "'>" + (value || "")
 				+ "</div>");

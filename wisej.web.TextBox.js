@@ -112,6 +112,11 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * current text value of the field.
 		 */
 		"changeValue": "qx.event.type.Data",
+
+		/**
+		 * This event is fired once when the user edits the value.
+		 */
+		"changeModified": "qx.event.type.Data"
 	},
 
 	properties: {
@@ -201,7 +206,14 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		 * 
 		 * When set to true, the entire text is selected when the element gains the focus.
 		 */
-		selectOnEnter: {init: false, check:"Boolean", apply:"_applySelectOnEnter"}
+		selectOnEnter: { init: false, check: "Boolean", apply: "_applySelectOnEnter" },
+
+		/**
+		 * modified property.
+		 *
+		 * Gets or sets the index of the selected item.
+		 */
+		modified: { init: false, check: "Boolean", event: "changeModified" }
 	},
 
 	statics: {
@@ -293,7 +305,7 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 			var textField = this.getChildControl("textfield");
 			var elem = textField.getContentElement();
-			var listId = this.getId() + "_datalist";
+			var listId = this.$$hash + "-datalist";
 			elem.setAttribute("list", listId);
 
 			if (old != null && old.length > 0 && this.__datalist != null) {
@@ -340,7 +352,7 @@ qx.Class.define("wisej.web.TextBoxBase", {
 			if (value && !old) {
 				this.addListener("focusin", function (e) {
 					if (this.isSelectOnEnter()) {
-						qx.event.Timer.once(this.selectAllText, this, 1);
+						qx.event.Timer.once(this.selectAllText, this, 0);
 					}
 				}, this);
 			}
@@ -389,24 +401,6 @@ qx.Class.define("wisej.web.TextBoxBase", {
 					break;
 			}
 			el.setStyle("textTransform", transform);
-		},
-
-		/**
-		 * Applies the capitalization defined in the @characterCasing property.
-		 */
-		_applyTextTransform: function (text) {
-
-			if (text) {
-				switch (this.getCharacterCasing()) {
-
-					case "upper": return text.toUpperCase();
-					case "lower": return text.toLowerCase();
-					case "capitalize": return qx.lang.String.capitalize(text);
-					default: return text;
-				}
-			}
-
-			return text;
 		},
 
 		/** 
@@ -520,15 +514,13 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		__onTextFieldInput: function (e) {
 
 			this.setDirty(true);
+			this.setModified(true);
 			this.fireDataEvent("input", e.getData(), e.getOldData());
-
-			if (e.getData() != e.getOldData())
-				this.fireEvent("modified");
 		},
 
 		// checks whether the textbox has the focus.
 		_isFocused: function () {
-			return qx.ui.core.FocusHandler.getInstance().getFocusedWidget() === this;
+			return qx.ui.core.FocusHandler.getInstance().isFocused(this);
 		},
 
 		/**
@@ -581,8 +573,6 @@ qx.Class.define("wisej.web.TextBoxBase", {
 
 		setValue: function (value) {
 
-			value = this._applyTextTransform(value);
-
 			var textField = this.getChildControl("textfield");
 			if (textField.getValue() === value)
 				return;
@@ -606,7 +596,7 @@ qx.Class.define("wisej.web.TextBoxBase", {
 		},
 		getValue: function () {
 
-			return  this._applyTextTransform(this.getChildControl("textfield").getValue());
+			return  this.getChildControl("textfield").getValue();
 
 		},
 		resetValue: function () {
@@ -784,6 +774,8 @@ qx.Class.define("wisej.web.TextBox", {
 				el.setAttribute("min", value.min);
 				el.setAttribute("max", value.max);
 				el.setAttribute("step", value.step);
+				if (value.mode != "text")
+					el.setAttribute("inputmode", value.mode);
 				el.setAttribute("type", qx.lang.String.hyphenate(value.type));
 
 				this.addState(value.type);
@@ -933,6 +925,31 @@ qx.Class.define("wisej.web.TextArea", {
 			el.setStyle("overflowX", (value & wisej.web.ScrollableControl.HORIZONTAL_SCROLLBAR) ? "auto" : "hidden");
 		},
 
+		/** 
+		 * Applies the tools property.
+		 */
+		_applyTools: function (value, old) {
+
+			if (value == null)
+				return;
+
+			if (value.length == 0 && (old == null || old.length == 0))
+				return;
+
+			var toolsLeft = wisej.web.ToolContainer.install(this, this, value, "left", { index: 0 }, null, "editor");
+			var toolsRight = wisej.web.ToolContainer.install(this, this, value, "right", { index: -1 }, null, "editor");
+
+			// when in a textarea, align to top.
+			if (toolsLeft) {
+				toolsLeft.setAlignY("top");
+				toolsLeft.setAllowGrowY(false);
+			}
+			if (toolsRight) {
+				toolsRight.setAlignY("top");
+				toolsRight.setAllowGrowY(false);
+			}
+		},
+
 		__createInnerTextField: function () {
 
 			return new qx.ui.form.TextArea().set({
@@ -946,14 +963,11 @@ qx.Class.define("wisej.web.TextArea", {
 		_applyAcceptsReturn: function (value, old) {
 
 			if (old) {
-				qx.event.Registration.removeListener(document.body, "keydown", this.__onDocumentAcceptsReturn, this, true);
-				qx.event.Registration.removeListener(document.body, "keypress", this.__onDocumentAcceptsReturn, this, true);
+				wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onEnter, this, "keypress");
 			}
 
 			if (value) {
-				// register the document level handlers to override shortcuts.
-				qx.event.Registration.addListener(document.body, "keydown", this.__onDocumentAcceptsReturn, this, true);
-				qx.event.Registration.addListener(document.body, "keypress", this.__onDocumentAcceptsReturn, this, true);
+				wisej.web.manager.Accelerators.getInstance().register("Enter", this.__onEnter, this, "keypress");
 			}
 		},
 
@@ -963,14 +977,11 @@ qx.Class.define("wisej.web.TextArea", {
 		_applyAcceptsTab: function (value, old) {
 
 			if (old) {
-				qx.event.Registration.removeListener(document, "keydown", this.__onDocumentAcceptsTab, this, true);
-				qx.event.Registration.removeListener(document, "keypress", this.__onDocumentAcceptsTab, this, true);
+				wisej.web.manager.Accelerators.getInstance().unregister("Tab", this.__onTab, this, "keypress");
 			}
 
 			if (value) {
-				// register the document level handlers to override shortcuts.
-				qx.event.Registration.addListener(document, "keydown", this.__onDocumentAcceptsTab, this, true);
-				qx.event.Registration.addListener(document, "keypress", this.__onDocumentAcceptsTab, this, true);
+				wisej.web.manager.Accelerators.getInstance().register("Tab", this.__onTab, this, "keypress");
 			}
 		},
 
@@ -987,69 +998,31 @@ qx.Class.define("wisej.web.TextArea", {
 			}
 		},
 
-		/**
-		 * Event handler for the "keydown" and "keypress" event at the document level. 
-		 * Needed when the TextArea has the AcceptsReturn and AcceptsTab property set to true.
-		 * 
-		 * @param {qx.event.type.KeySequence} e The event data.
-		 */
-		__onDocumentAcceptsReturn: function (e) {
+		__onTab: function (e) {
 
-			// verify the event was meant for this instance.
-			if (e.getTarget() !== this.__getTextFieldElement().getDomElement())
-				return;
+			if (this.getAcceptsTab() && e.getTarget() === this) {
 
-			switch (e.getKeyIdentifier()) {
+				var modifiers = e.getModifiers();
+				if (modifiers === 0) {
+					this.__insert("\t");
+				}
+				else if (modifiers === qx.event.type.Dom.SHIFT_MASK) {
+					qx.ui.core.FocusHandler.getInstance().focusNext(this);
+				}
 
-				case "Enter":
-					if (this.getAcceptsReturn() && e.getModifiers() === 0) {
-
-						// insert a newline.
-						if (e.getType() === "keydown") {
-							this.__insert("\n");
-						}
-
-						e.stop();
-					}
-					break;
+				e.stop();
+				return true;
 			}
 		},
 
-		/**
-		 * Event handler for the "keydown" and "keypress" event at the document level. 
-		 * Needed when the TextArea has the AcceptsReturn and AcceptsTab property set to true.
-		 * 
-		 * @param {qx.event.type.KeySequence} e The event data.
-		 */
-		__onDocumentAcceptsTab: function (e) {
+		__onEnter: function (e) {
 
-			// verify the event was meant for this instance.
-			if (e.getTarget() !== this.__getTextFieldElement().getDomElement())
-				return;
+			if (this.getAcceptsReturn() && e.getModifiers() === 0 && e.getTarget() === this) {
 
-			switch (e.getKeyIdentifier()) {
+				this.__insert("\n");
 
-				case "Tab":
-					if (this.getAcceptsTab()) {
-						var modifiers = e.getModifiers();
-						if (modifiers === 0) {
-
-							// insert the \t character.
-							if (e.getType() === "keydown") {
-								this.__insert("\t");
-							}
-
-							e.stop();
-						}
-						else if (modifiers === qx.event.type.Dom.SHIFT_MASK) {
-
-							if (e.getType() === "keypress")
-								qx.ui.core.FocusHandler.getInstance().focusNext(this);
-
-							e.stop();
-						}
-					}
-					break;
+				e.stop();
+				return true;
 			}
 		},
 
@@ -1209,7 +1182,7 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 		 */
 		_applyMask: function (value, old) {
 
-			var text = this.getValue(true);
+			var text = this.getValue();
 			this.__maskProvider.setMask(value);
 			this.setValue(text);
 
@@ -1243,7 +1216,6 @@ qx.Class.define("wisej.web.MaskedTextBox", {
 			var text = this.getValue(true);
 			this.__maskProvider.setLocalization(value);
 			this.setValue(text);
-
 		},
 
 		/**

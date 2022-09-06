@@ -43,6 +43,8 @@ qx.Class.define("wisej.web.SplitButton", {
 		// listen to changes of the allowMove property to change the move handle target.
 		this.addListener("changeAllowMove", this.__onChangeAllowMove, this);
 
+		this.getChildControl("button").addListener("pointerup", this._onPointerUp, this);
+		this.getChildControl("button").addListener("pointerdown", this._onPointerDown, this);
 	},
 
 	properties: {
@@ -118,6 +120,36 @@ qx.Class.define("wisej.web.SplitButton", {
 		},
 
 		/**
+		 * Repeat property.
+		 *
+		 * Enables or disables the auto-repeat feature.
+		 */
+		repeat: { init: false, check: "Boolean", apply: "_applyRepeat" },
+
+		/**
+		 * Interval used after the first run of the timer. Usually a smaller value
+		 * than the "firstInterval" property value to get a faster reaction.
+		 */
+		interval: { check: "Integer", init: 300 },
+
+		/**
+		 * Interval used for the first run of the timer. Usually a greater value
+		 * than the "interval" property value to a little delayed reaction at the first
+		 * time.
+		 */
+		firstInterval: { check: "Integer", init: 500 },
+
+		/**
+		 * This configures the minimum value for the timer interval.
+		 */
+		minTimer: { check: "Integer", init: 100 },
+
+		/** 
+		 * Decrease of the timer on each interval (for the next interval) until minTimer reached.
+		 */
+		timerDecrease: { check: "Integer", init: 20 },
+
+		/**
 		 * The 'innerPadding' property redirects the
 		 * padding to the child widgets (button and arrow) that make
 		 * the SplitButton.
@@ -145,6 +177,9 @@ qx.Class.define("wisej.web.SplitButton", {
 	},
 
 	members: {
+
+		// The button repeat timer.
+		__timer: null,
 
 		/**
 		 * Process mnemonics.
@@ -250,6 +285,11 @@ qx.Class.define("wisej.web.SplitButton", {
 		 * Applies the IconSize property on the inner button.
 		 */
 		_applyIconSize: function (value, old) {
+
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
 
 			this.getChildControl("button").setIconSize(value);
 		},
@@ -361,6 +401,101 @@ qx.Class.define("wisej.web.SplitButton", {
 			}
 
 			return control || this.base(arguments, id);
+		},
+
+		/**
+		  * Callback method for the "pointerdown" method.
+		  *
+		  * @param e {qx.event.type.Pointer} pointerdown event
+		  */
+		_onPointerDown: function (e) {
+
+			if (e.isLeftPressed() && this.isRepeat())
+				this.__startInternalTimer();
+		},
+
+
+		/**
+		 * Callback method for the "pointerup" event.
+		 *
+		 * @param e {qx.event.type.Pointer} pointerup event
+		 */
+		_onPointerUp: function (e) {
+
+			this.__stopInternalTimer();
+		},
+
+		/*
+		---------------------------------------------------------------------------
+			AUTO-REPEAT IMPLEMENTATION
+		---------------------------------------------------------------------------
+		*/
+
+		/**
+		 * Applies the Repeat property.
+		 */
+		_applyRepeat: function (value, old) {
+
+			if (value) {
+
+				if (!this.__timer) {
+					// create the timer and add the listener
+					this.__timer = new qx.event.AcceleratingTimer();
+					this.__timer.addListener("interval", this._onInterval, this);
+				}
+			}
+			else {
+				if (this.__timer) {
+
+					this.__timer.dispose();
+					this.__timer = undefined;
+				}
+			}
+
+		},
+
+		/**
+		 * Callback for the interval event.
+		 *
+		 * Stops the timer and starts it with a new interval
+		 * (value of the "interval" property - value of the "timerDecrease" property).
+		 * Dispatches the "execute" event.
+		 *
+		 * @param e {qx.event.type.Event} interval event
+		 */
+		_onInterval: function (e) {
+
+			this.fireEvent("execute");
+		},
+
+		/**
+		 * Starts the internal timer which causes firing of execution
+		 * events in an interval.
+		 */
+		__startInternalTimer: function () {
+
+			if (this.__timer) {
+
+				this.fireEvent("press");
+
+				this.__timer.set({
+					interval: this.getInterval(),
+					firstInterval: this.getFirstInterval(),
+					minimum: this.getMinTimer(),
+					decrease: this.getTimerDecrease()
+				}).start();
+			}
+		},
+
+		/**
+		 * Stops the internal timer and releases the button.
+		 */
+		__stopInternalTimer: function () {
+
+			if (this.__timer) {
+				this.__timer.stop();
+				this.fireEvent("release");
+			}
 		},
 	},
 

@@ -119,6 +119,13 @@ qx.Class.define("wisej.web.Desktop", {
 		 */
 		taskbarPosition: { init: "bottom", check: ["left", "top", "right", "bottom"], apply: "_applyTaskbarPosition" },
 
+		/**
+		 * TaskbarAlignment property.
+		 *
+		 * Returns or sets the alignment of the content of the taskbar.
+		 */
+		taskbarAlignment: { init: "left", check: ["left", "center", "right"], apply: "_applyTaskbarAlignment" }
+
 	},
 
 	members: {
@@ -268,6 +275,15 @@ qx.Class.define("wisej.web.Desktop", {
 					items[i].addState(orientation);
 				}
 			}
+		},
+
+		/**
+		 * Applies the taskbarAlignment property.
+		 */
+		_applyTaskbarAlignment: function (value, old) {
+
+			// change the internal alignment of the task bar.
+			this.__taskbar.setAlignment(value);
 		},
 
 		// Returns the orientation according to the
@@ -548,12 +564,17 @@ qx.Class.define("wisej.web.DesktopTaskBarItem", {
 		 */
 		_applyIconSize: function (value, old) {
 
+			if (value == null) {
+				this.resetIconSize();
+				return;
+			}
+
 			var icon = this.getChildControl("icon");
 
 			if (value && value.width && value.height) {
 				icon.setWidth(value.width);
 				icon.setHeight(value.height);
-				icon.getContentElement().setStyle("background-size", value.width + "px " + value.height + "px");
+				icon.getContentElement().setStyle("backgroundSize", value.width + "px " + value.height + "px");
 			}
 			else {
 				icon.resetWidth();
@@ -574,9 +595,8 @@ qx.Class.define("wisej.web.DesktopTaskBarItem", {
 				else
 					el.removeAttribute("name", true);
 			}
-		},
+		}
 	}
-
 });
 
 
@@ -693,7 +713,7 @@ qx.Class.define("wisej.web.DesktopTaskBarItemControl", {
 		 *
 		 * Reference to the widget to place inside the taskbar item.
 		 */
-		control: { init: null, nullable: true, apply: "_applyControl", transform: "_transformComponent" },
+		control: { init: null, nullable: true, apply: "_applyControl", transform: "_transformComponent" }
 	},
 
 	members: {
@@ -704,8 +724,12 @@ qx.Class.define("wisej.web.DesktopTaskBarItemControl", {
 		_applyControl: function (value, old) {
 
 			if (old) {
-				this._remove(old);
-				this.resetPadding();
+
+				if (this._indexOf(old) > -1)
+					this._remove(old);
+
+				this.removeState("control");
+
 				old.removeListener("resize", this._onControlResize, this);
 			}
 
@@ -714,8 +738,7 @@ qx.Class.define("wisej.web.DesktopTaskBarItemControl", {
 				var widget = value;
 				widget.resetUserBounds();
 				this._add(widget);
-
-				this.setPadding(0);
+				this.addState("control");
 
 				widget.addListener("resize", this._onControlResize, this);
 			}
@@ -727,8 +750,7 @@ qx.Class.define("wisej.web.DesktopTaskBarItemControl", {
 		_onControlResize: function (e) {
 
 			this.fireDataEvent("controlResize", e.getData());
-		},
-
+		}
 	}
 
 })
@@ -768,9 +790,16 @@ qx.Class.define("wisej.web.desktop.TaskBar", {
 		autoHide: { init: false, check: "Boolean", apply: "_applyAutoHide", themeable: true },
 
 		/**
-		 * orientation property.
+		 * Orientation property.
 		 */
 		orientation: { init: "horizontal", check: ["horizontal", "vertical"], apply: "_applyOrientation", event: "changeOrientation" },
+
+		/**
+		 * Alignment property.
+		 *
+		 * Returns or sets the alignment of the content of the taskbar.
+		 */
+		alignment: { init: "left", check: ["left", "center", "right"], apply: "_applyAlignment" }
 	},
 
 	/**
@@ -779,9 +808,10 @@ qx.Class.define("wisej.web.desktop.TaskBar", {
 	construct: function (owner) {
 
 		this.owner = owner;
-		this.base(arguments, new qx.ui.layout.HBox);
 
-		this._createChildControl("items");
+		this.base(arguments);
+
+		qx.ui.core.queue.Widget.add(this, "updateLayout");
 
 		// listen to changes to notify the parent.
 		this.addListener("changeVisibility", this.__onChangeVisibility, this);
@@ -836,33 +866,15 @@ qx.Class.define("wisej.web.desktop.TaskBar", {
 		 */
 		_applyOrientation: function (value, old) {
 
-			var items = this.getChildControl("items");
-			var shortcuts = this.getChildControl("shortcuts");
-			var notifications = this.getChildControl("notifications");
+			qx.ui.core.queue.Widget.add(this, "updateLayout");
+		},
 
-			this.getLayout().dispose();
-			shortcuts.getLayout().dispose();
-			notifications.getLayout().dispose();
+		/**
+		 * Applies the alignment property.
+		 */
+		_applyAlignment: function (value, old) {
 
-			items.setOrientation(value);
-
-			if (value == "vertical") {
-				this.setLayout(new qx.ui.layout.VBox);
-				shortcuts.setLayout(new qx.ui.layout.VBox);
-				notifications.setLayout(new qx.ui.layout.VBox);
-			}
-			else {
-				this.setLayout(new qx.ui.layout.HBox);
-				shortcuts.setLayout(new qx.ui.layout.HBox);
-				notifications.setLayout(new qx.ui.layout.HBox);
-			}
-
-			this.addState(value);
-			this.removeState(old);
-			shortcuts.addState(value);
-			shortcuts.removeState(old);
-			notifications.addState(value);
-			notifications.removeState(old);
+			qx.ui.core.queue.Widget.add(this, "updateLayout");
 		},
 
 		// shows or hides the taskbar when there are no visible items.
@@ -899,12 +911,128 @@ qx.Class.define("wisej.web.desktop.TaskBar", {
 				this.exclude();
 		},
 
+		__updateLayout: function () {
+
+			// create a new clean layout.
+			var layout = this.getLayout();
+			if (layout) layout.dispose();
+			layout = new qx.ui.layout.Grid();
+			this.setLayout(layout);
+
+			var alignment = this.getAlignment();
+			var orientation = this.getOrientation();
+			var items = this.getChildControl("items");
+			var shortcuts = this.getChildControl("shortcuts");
+			var notifications = this.getChildControl("notifications");
+
+			// update the orientation.
+			items.setOrientation(orientation);
+			this.addState(orientation);
+			items.addState(orientation);
+			shortcuts.addState(orientation);
+			notifications.addState(orientation);
+			var old = orientation == "vertical" ? "horizontal" : "vertical";
+			this.removeState(old);
+			items.removeState(old);
+			shortcuts.removeState(old);
+			notifications.removeState(old);
+
+
+			if (orientation == "vertical") {
+
+				items.setAllowGrowX(true);
+				shortcuts.setAllowGrowX(true);
+				notifications.setAllowGrowX(true);
+				items.setAllowGrowY(true);
+				shortcuts.setAllowGrowY(false);
+				notifications.setAllowGrowY(false);
+
+				items.setLayoutProperties({ column: 0, row: 1 }); // middle
+				shortcuts.setLayoutProperties({ column: 0, row: 0 }); // top
+				notifications.setLayoutProperties({ column: 0, row: 2 }); // bottom
+
+				shortcuts.setLayout(new qx.ui.layout.VBox);
+				notifications.setLayout(new qx.ui.layout.VBox);
+			}
+			else {
+
+				items.setAllowGrowX(true);
+				shortcuts.setAllowGrowX(false);
+				notifications.setAllowGrowX(false);
+				items.setAllowGrowY(true);
+				shortcuts.setAllowGrowY(true);
+				notifications.setAllowGrowY(true);
+
+				items.setLayoutProperties({ column: 1, row: 0 }); // center
+				shortcuts.setLayoutProperties({ column: 0, row: 0 }); // left
+				notifications.setLayoutProperties({ column: 2, row: 0 }); // right
+
+				shortcuts.setLayout(new qx.ui.layout.HBox);
+				notifications.setLayout(new qx.ui.layout.HBox);
+			}
+
+			if (orientation == "vertical") {
+
+				switch (alignment) {
+					case "left":
+						layout.setRowFlex(0, 0);
+						layout.setRowFlex(1, 1);
+						layout.setRowFlex(2, 0);
+						layout.setRowAlign(0, undefined, "top");
+						break;
+
+					case "center":
+						layout.setRowFlex(0, 1);
+						layout.setRowFlex(1, 1);
+						layout.setRowFlex(2, 0);
+						layout.setRowAlign(0, undefined, "bottom");
+						break;
+
+					case "right":
+						layout.setRowFlex(0, 0);
+						layout.setRowFlex(1, 0);
+						layout.setRowFlex(2, 0);
+						layout.setRowAlign(0, undefined, "bottom");
+						break;
+
+				}
+			} else {
+				switch (alignment) {
+					case "left":
+						layout.setRowFlex(0, 1);
+						layout.setColumnFlex(0, 0);
+						layout.setColumnFlex(1, 1);
+						layout.setColumnAlign(0, "left", undefined);
+						break;
+
+					case "center":
+						layout.setRowFlex(0, 1);
+						layout.setColumnFlex(0, 1);
+						layout.setColumnFlex(1, 1);
+						layout.setColumnAlign(0, "right", undefined);
+						break;
+
+					case "right":
+						layout.setRowFlex(0, 1);
+						layout.setColumnFlex(0, 1);
+						layout.setColumnFlex(1, 0);
+						layout.setColumnAlign(0, "right", undefined);
+						break;
+				}
+			}
+
+		},
+
 		syncWidget: function (jobs) {
 
 			this.base(arguments, jobs);
 
 			if (!jobs)
 				return;
+
+			if (jobs["updateLayout"]) {
+				this.__updateLayout();
+			}
 
 			if (jobs["updateVisibility"]) {
 				this.__updateVisibility();
@@ -969,18 +1097,27 @@ qx.Class.define("wisej.web.desktop.TaskBar", {
 
 			switch (id) {
 				case "items":
-					control = new qx.ui.container.SlideBar();
-					this._addAt(control, 1, { flex: 1 });
+					control = new qx.ui.container.SlideBar().set({
+						allowGrowX: true,
+						allowGrowY: true
+					});
+					this._add(control, {column: 0, row: 0});
 					break;
 
 				case "shortcuts":
-					control = new qx.ui.container.Composite(new qx.ui.layout.HBox());
-					this._addAt(control, 0);
+					control = new qx.ui.container.Composite(new qx.ui.layout.HBox()).set({
+						allowGrowX: false,
+						allowGrowY: true
+					});
+					this._add(control, { column: 1, row: 0 });
 					break;
 
 				case "notifications":
-					control = new qx.ui.container.Composite(new qx.ui.layout.HBox());
-					this._addAt(control, 2);
+					control = new qx.ui.container.Composite(new qx.ui.layout.HBox()).set({
+						allowGrowX: false,
+						allowGrowY: true
+					});
+					this._add(control, { column: 2, row: 0 });
 					break;
 			}
 
@@ -1241,8 +1378,8 @@ qx.Class.define("wisej.web.desktop.TaskbarPreview", {
 		var root = qx.core.Init.getApplication().getRoot();
 		root.add(this);
 
-		// make it overlap the workspace.
-		this.setZIndex(11);
+		// make it overlap workspace and windows.
+		this.setZIndex(1e5 + 1);
 	},
 
 	properties: {
@@ -1440,7 +1577,7 @@ qx.Class.define("wisej.web.desktop.TaskbarPreview", {
 				if (!wisej.web.DesignMode) {
 					// ensure that the window to close is not under a modal window.
 					var activeWindow = Wisej.Platform.getActiveWindow();
-					if (activeWindow && activeWindow != this.__window && activeWindow.isModal())
+					if (activeWindow instanceof qx.ui.window.Window && activeWindow != this.__window && activeWindow.isModal())
 						return;
 				}
 
@@ -1476,6 +1613,8 @@ qx.Class.define("wisej.web.desktop.TaskbarPreview", {
 			var preview = this.getChildControl("preview");
 			var previewDom = wisej.utils.Widget.ensureDomElement(preview);
 			var previewSize = preview.getBounds();
+			if (!previewSize)
+				return;
 
 			// retrieve the dom for the source widget.
 			var sourceDom = $window.getContentElement().getDomElement();

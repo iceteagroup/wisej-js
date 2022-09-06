@@ -90,15 +90,25 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				this.__rowCacheClear();
 			}
 
-			if (scrollOffset && Math.abs(scrollOffset) <= Math.min(10, this.getVisibleRowCount()) && this.getTopScrollOffset() == 0) {
+			var topScrollOffset = this.getTopScrollOffset();
+			var frozenRows = this.getTable().getFrozenRows();
+
+			if (!frozenRows && !topScrollOffset && scrollOffset
+				&& Math.abs(scrollOffset) <= Math.min(10, this.getVisibleRowCount())) {
+
 				this._scrollContent(scrollOffset);
+				this.getTable().scheduleAutoResize();
+
 			} else if (onlySelectionOrFocusChanged && !this.getTable().getAlwaysUpdateCells()) {
+
 				this._updateRowStyles(onlyRow);
+
 			} else {
+
 				this._updateAllRows();
+				this.getTable().scheduleAutoResize();
 			}
 		},
-
 
 		/**
 		 * If only focus or selection changes it is sufficient to only update the
@@ -119,23 +129,47 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			var table = this.getTable();
 			var selectionModel = table.getSelectionModel();
 			var tableModel = table.getTableModel();
+			var scroller = this.getPaneScroller();
 			var rowRenderer = table.getDataRowRenderer();
 			var rowNodes = elem.firstChild.childNodes;
+			var frozenRows = table.getFrozenRows();
+			var frozenPane = scroller.isFrozenPane() && !scroller.isRowHeaderPane();
+
 			var cellInfo = { table: table };
 
-			// @ITG:Wisej: Added reference to the current scroller, column model and data model to simplify the life of cell renderers.
 			cellInfo.tableModel = tableModel;
+			cellInfo.scroller = scroller;
 			cellInfo.rightToLeft = table.getRtl();
-			cellInfo.scroller = this.getPaneScroller();
 			cellInfo.selectionModel = selectionModel
 			cellInfo.columnModel = table.getTableColumnModel();
+
+			// How many rows do we need to update?
+			var end = rowNodes.length;
+
+			// update the frozen rows first.
+			if (frozenRows > 0) {
+
+				if (onlyRow)
+					end = onlyRow + 1;
+
+				for (var row = onlyRow || 0; row < end && row < frozenRows; row++) {
+
+					cellInfo.row = row;
+					cellInfo.frozenCell = frozenPane;
+					cellInfo.frozenRow = row < frozenRows;
+					cellInfo.selected = selectionModel.isRowSelected(row);
+					cellInfo.focusedRow = (this.__focusedRow == row);
+					cellInfo.rowData = tableModel.getRowData(row);
+
+					rowRenderer.updateDataRowElement(cellInfo, rowNodes[row]);
+				}
+			}
 
 			// We don't want to execute the row loop below more than necessary. If
 			// onlyRow is not null, we want to do the loop only for that row.
 			// In that case, we start at (set the "row" variable to) that row, and
 			// stop at (set the "end" variable to the offset of) the next row.
-			var row = this.getFirstVisibleRow();
-			var y = 0;
+			var row = this.getFirstVisibleRow() + frozenRows;
 
 			// adjust for the top offset.
 			var spanOffset = this.getTopScrollOffset();
@@ -143,15 +177,14 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				spanOffset = row;
 			row -= spanOffset;
 
-			// How many rows do we need to update?
-			var end = rowNodes.length;
+			var y = frozenRows;
 
 			if (onlyRow != null) {
 				// How many rows are we skipping?
 				var offset = onlyRow - row;
 				if (offset >= 0 && offset < end) {
-					row = onlyRow;
-					y = offset;
+					row = onlyRow + frozenRows;
+					y = offset + frozenRows;
 					end = offset + 1;
 				} else {
 					return;
@@ -159,13 +192,16 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			}
 
 			for (; y < end; y++, row++) {
+
 				cellInfo.row = row;
+				cellInfo.frozenCell = frozenPane;
+				cellInfo.frozenRow = row < frozenRows;
 				cellInfo.selected = selectionModel.isRowSelected(row);
 				cellInfo.focusedRow = (this.__focusedRow == row);
 				cellInfo.rowData = tableModel.getRowData(row);
 
 				rowRenderer.updateDataRowElement(cellInfo, rowNodes[y]);
-			};
+			}
 		},
 
 
@@ -178,24 +214,42 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 		 */
 		_getRowsHtml: function (firstRow, rowCount) {
 
+			var rowsArr = [];
+			var frozenRows = this.getTable().getFrozenRows();
+			this._renderRows(rowsArr, 0, frozenRows, true);
+			this._renderRows(rowsArr, firstRow + frozenRows, rowCount - frozenRows, false);
+			return rowsArr.join("");
+		},
+
+		/**
+		 * Get the HTML table fragment for the given row range.
+		 *
+		 * @param rowsArr {Array} Array where to add the rendered rows.
+		 * @param firstRow {Integer} Index of the first row.
+		 * @param rowCount {Integer} Number of rows.
+		 * @param frozenRows {Boolean} Indicates that it should render the frozen rows.
+		 */
+		_renderRows: function (rowsArr, firstRow, rowCount, frozenRows) {
+
+			if (frozenRows && rowCount == 0)
+				return;
+
 			var table = this.getTable();
 			var selectionModel = table.getSelectionModel();
 			var tableModel = table.getTableModel();
 			var columnModel = table.getTableColumnModel();
-			var paneModel = this.getPaneScroller().getTablePaneModel();
+			var scroller = this.getPaneScroller();
+			var paneModel = scroller.getTablePaneModel();
 			var rowRenderer = table.getDataRowRenderer();
 
 			tableModel.prefetchRows(firstRow, firstRow + rowCount - 1);
 
+			var rtl = table.isRtl();
 			var rowHeight = table.getRowHeight();
 			var colCount = paneModel.getColumnCount();
 			var left = 0;
 			var cols = [];
 
-			// @ITG:Wisej: RightToLeft support.
-			var rtl = table.isRtl();
-
-			// @ITG:Wisej: RightToLeft support.
 			// precompute column properties
 			for (var x =
 				rtl ? (colCount - 1) : (0);
@@ -217,7 +271,6 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				left += cellWidth;
 			}
 
-			var rowsArr = [];
 			var paneReloadsData = false;
 
 			// adjust for the top offset.
@@ -238,37 +291,41 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				}
 			}
 
+
+			var cellRenderer, cellInfo, rowStyle;
+			var rowHtml, focusedRow, rowSelected, anyCellSelected, cachedRow;
+			var frozenPane = scroller.isFrozenPane() && !scroller.isRowHeaderPane();
+
 			for (var row = firstRow, maxRow = firstRow + rowCount; row < maxRow; row++) {
 
-				var focusedRow = (this.__focusedRow == row);
-				var rowSelected = selectionModel.isRowSelected(row);
-				var anyCellSelected = rowSelected || selectionModel.isAnyCellSelected(row);
+				focusedRow = (this.__focusedRow == row);
+				rowSelected = selectionModel.isRowSelected(row);
+				anyCellSelected = rowSelected || selectionModel.isAnyCellSelected(row);
 
 				// don't retrieve offset rows from the cache.
-				if (row >= topVisibleRow) {
-					var cachedRow = this.__rowCacheGet(row, anyCellSelected, focusedRow);
+				if (!frozenRows && row >= topVisibleRow) {
+					cachedRow = this.__rowCacheGet(row, anyCellSelected, focusedRow);
 					if (cachedRow) {
 						rowsArr.push(cachedRow);
 						continue;
 					}
 				}
 
-				var rowHtml = [];
+				rowHtml = [];
 
-				var cellInfo = { table: table };
+				cellInfo = { table: table };
+				cellInfo.rightToLeft = rtl;
+				cellInfo.scroller = scroller;
 				cellInfo.styleHeight = rowHeight;
-
-				// @ITG:Wisej: Added reference to the current scroller, column model and data model to simplify the life of cell renderers.
 				cellInfo.tableModel = tableModel;
 				cellInfo.columnModel = columnModel;
 				cellInfo.selectionModel = selectionModel;
-				cellInfo.scroller = this.getPaneScroller();
-				cellInfo.rightToLeft = rtl;
+				cellInfo.rowData = tableModel.getRowData(row);
 
 				cellInfo.row = row;
 				cellInfo.selected = rowSelected;
+				cellInfo.frozenRow = frozenRows;
 				cellInfo.focusedRow = focusedRow;
-				cellInfo.rowData = tableModel.getRowData(row);
 
 				if (!cellInfo.rowData) {
 					paneReloadsData = true;
@@ -286,7 +343,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 					rowHtml.push('class="', rowClass, '" ');
 				}
 
-				var rowStyle = rowRenderer.createRowStyle(cellInfo) || "";
+				rowStyle = rowRenderer.createRowStyle(cellInfo) || "";
 
 				// if this is the first row of the offset rows, set the negative margin.
 				if (spanOffset > 0 && row == firstRow) {
@@ -296,57 +353,49 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 					rowStyle += "margin-top:-" + marginTop + "px";
 				}
 
-				// @ITG:Wisej: Removed this line and moved it to the row renderer.
-				// rowStyle += ";position:relative;" + rowRenderer.getRowHeightStyle(rowHeight) + "width:100%;";
 				if (rowStyle) {
 					rowHtml.push('style="', rowStyle, '" ');
 				}
 				rowHtml.push('>');
 
-				var stopLoop = false;
+				var stopLoop = false, col, col_def;
 				for (x = 0; x < colCount && !stopLoop; x++) {
-					var col_def = cols[x];
+					col_def = cols[x];
 					for (var attr in col_def) {
 						cellInfo[attr] = col_def[attr];
 					}
-					var col = cellInfo.col;
+					col = cellInfo.col;
 
-					// Use the "getValue" method of the tableModel to get the cell's
-					// value working directly on the "rowData" object
-					// (-> cellInfo.rowData[col];) is not a solution because you can't
-					// work with the columnIndex -> you have to use the columnId of the
-					// columnIndex This is exactly what the method "getValue" does
+					cellInfo.frozenCell = frozenPane;
+					cellInfo.columnId = tableModel.getColumnId(col);
 					cellInfo.value = tableModel.getValue(col, row);
-					var cellRenderer = columnModel.getDataCellRenderer(col);
+
+					cellRenderer = columnModel.getDataCellRenderer(col);
 
 					// Retrieve the current default cell style for this column.
 					cellInfo.style = cellRenderer.getDefaultCellStyle();
-
-					// @ITG:Wisej: Added column id to the cellInfo map.
-					cellInfo.columnId = tableModel.getColumnId(col);
 
 					// Allow a cell renderer to tell us not to draw any further cells in
 					// the row. Older, or traditional cell renderers don't return a
 					// value, however, from createDataCellHtml, so assume those are
 					// returning false.
-					//
-					// Tested with http://tinyurl.com/333hyhv
-					stopLoop =
-						cellRenderer.createDataCellHtml(cellInfo, rowHtml) || false;
+					stopLoop = cellRenderer.createDataCellHtml(cellInfo, rowHtml) || false;
 				}
 				rowHtml.push('</div>');
 
 				var rowString = rowHtml.join("");
 
 				// don't cache offset rows.
-				if (row >= topVisibleRow) {
+				if (!frozenRows && row >= topVisibleRow) {
 					this.__rowCacheSet(row, rowString, anyCellSelected, focusedRow);
 				}
 
 				rowsArr.push(rowString);
 			}
-			this.fireDataEvent("paneReloadsData", paneReloadsData);
-			return rowsArr.join("");
+
+			if (!frozenRows)
+				this.fireDataEvent("paneReloadsData", paneReloadsData);
+
 		},
 
 		/* =======================================================================
@@ -630,6 +679,49 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				}
 			}
 		},
+
+        /**
+         * This method is called during the flush of the
+         * {@link qx.ui.core.queue.Widget widget queue}.
+         *
+         * @param jobs {Map} A map of jobs.
+         */
+        syncWidget: function (jobs) {
+
+			if (jobs && jobs["updateContent"]) {
+
+				if (this.getPaneScroller() &&
+					this.getPaneScroller().getLayoutParent()) {
+
+					this.updateContent(true);
+				}
+			}
+		},
+
+		/**
+		 * Sets the column width.
+		 *
+		 * @param col {Integer} the column to change the width for.
+		 * @param width {Integer} the new width.
+		 */
+		setColumnWidth: function (col, width) {
+			qx.ui.core.queue.Widget.add(this, "updateContent");
+		},
+
+		/**
+		 * Event handler. Called the column order has changed.
+		 *
+		 */
+		onColOrderChanged: function () {
+			qx.ui.core.queue.Widget.add(this, "updateContent");
+		},
+
+		/**
+		 * Event handler. Called when the pane model has changed.
+		 */
+		onPaneModelChanged: function () {
+			qx.ui.core.queue.Widget.add(this, "updateContent");
+		}
 	},
 
 	destruct: function () {

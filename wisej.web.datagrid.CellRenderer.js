@@ -383,8 +383,14 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 				state.odd = true;
 
 			// right to left?
-			if (cellInfo.rightToLeft)
+			if (cellInfo.rightToLeft) {
 				state.rightToLeft = true;
+			}
+
+			// frozen?
+			if (cellInfo.frozenCell || cellInfo.frozenRow) {
+				state.frozen = true;
+			}
 
 			// cell border.
 			state[cellInfo.table._cellBorderStyle] = true;
@@ -647,7 +653,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 		 */
 		_getCellAutomationAttributes: function (cellInfo) {
 
-			if (qx.core.Environment.get("automation.mode") === true) {
+			if (wisej.utils.Widget.getAutomationMode()) {
 
 				var table = cellInfo.table;
 				if (table) {
@@ -655,7 +661,7 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 					var propName = wisej.utils.Widget.getAutomationPropertyName();
 					var ownerId = table.getContentElement().getAttribute(propName);
 
-					return propName + "'=" + ownerId + "_" + colName + "_" + cellInfo.row + "' " +
+					return propName + "='" + ownerId + "_" + colName + "_" + cellInfo.row + "' " +
 						"name='" + colName + "_" + cellInfo.row + "' ";
 				}
 			}
@@ -811,10 +817,14 @@ qx.Class.define("wisej.web.datagrid.cellRenderer.Cell", {
 			var height = cellInfo.styleHeight;
 			if (height == null) {
 				var rowRenderer = cellInfo.table.getDataRowRenderer();
-				var insets = rowRenderer.getInsets(cellInfo);
+				var cellInsets = this.getInsets(cellInfo);
+				var rowInsets = rowRenderer.getInsets(cellInfo);
 				var dataModel = cellInfo.table.getTableModel();
 
-				height = dataModel.getRowHeight(cellInfo.row) - insets.top - insets.bottom;
+				height = dataModel.getRowHeight(cellInfo.row);
+				width = width - cellInsets.left - cellInsets.right;
+				height = height - rowInsets.top - rowInsets.bottom;
+				height = height - cellInsets.top - cellInsets.bottom;
 			}
 
 			cellStyle.backgroundImage =

@@ -245,6 +245,9 @@ qx.Class.define("wisej.web.Label", {
 
 			if (name === "iconAlign")
 				this.scheduleLayoutUpdate();
+
+			if (value == null && name === "iconSize")
+				this.resetIconSize();
 		},
 
 		// returns the list of background images overriding the
@@ -350,6 +353,14 @@ qx.Class.define("wisej.web.Label", {
 		},
 
 		// overridden
+		invalidateLayoutCache: function () {
+
+			this.base(arguments);
+
+			this.__invalidContentSize = true;
+		},
+
+		// overridden
 		_getContentHint: function (width) {
 
 			if (this.__invalidContentSize) {
@@ -361,7 +372,7 @@ qx.Class.define("wisej.web.Label", {
 					this.__contentSize = this.__computeContentSize();
 				}
 
-				delete this.__invalidContentSize;
+				this.__invalidContentSize = false;
 			}
 
 			return {
@@ -389,12 +400,12 @@ qx.Class.define("wisej.web.Label", {
 
 			// center vertically.
 			if (qx.lang.String.startsWith(textAlign, "middle")) {
-				paddingTop = Math.round((height - textSize.height - paddingBottom + paddingTop) / 2);
+				paddingTop = Math.max(0, Math.round((height - textSize.height - paddingBottom + paddingTop) / 2));
 			}
 
 			// dock to bottom.
 			if (qx.lang.String.startsWith(textAlign, "bottom")) {
-				paddingTop = height - textSize.height - paddingBottom;
+				paddingTop = Math.max(0, height - textSize.height - paddingBottom);
 			}
 
 			// text and image overlap?

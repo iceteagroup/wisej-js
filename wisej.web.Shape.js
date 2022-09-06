@@ -157,6 +157,14 @@ qx.Class.define("wisej.web.Shape", {
 			}
 
 			return control || this.base(arguments, id);
+		},
+
+		// overridden.
+		_createContentElement: function () {
+			return new qx.html.Element("div", {
+				overflowX: "visible",
+				overflowY: "visible"
+			});
 		}
 
 	}

@@ -140,7 +140,10 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 
 				case 0:
 				case qx.event.type.Dom.CTRL_MASK:
-					changed = selectionModel.setSelectionRange(col, row);
+					if (this.table.isEditing())
+						changed = selectionModel.addSelectionRange(col, row);
+					else
+						changed = selectionModel.setSelectionRange(col, row);
 					break;
 
 				case qx.event.type.Dom.SHIFT_MASK:
@@ -148,7 +151,7 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 
 					var anchor = selectionModel.getAnchor();
 
-					if (anchor == null) {
+					if (anchor == null || !this.getMultiSelect()) {
 						changed = selectionModel.setSelectionRange(col, row);
 					} else {
 						changed = selectionModel.setSelectionRange(anchor.col, anchor.row, col, row);
@@ -160,9 +163,30 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 			return changed;
 		},
 
+		/**
+		 * Selects the specified cell according to the selection mode of the grid.
+		 * 
+		 * @param col {Integer} the index of the columns to select.
+		 * @param row {Integer} the index of the row to select.
+		 * @returns {Boolean} True if the selection has changed.
+		 */
+		select: function (col, row) {
+
+			var changed = false;
+			var selectionModel = this.getSelectionModel();
+
+			col = this.__adjustColIndex(col);
+			row = this.__adjustRowIndex(row);
+			if (col == null || row == null)
+				return false;
+
+			changed = selectionModel.setSelectionRange(col, row);
+			return changed;
+		},
+
 		// *****************************************************************************
 		// Internal implementation.
-	    // *****************************************************************************
+		// *****************************************************************************
 
 		/**
 		 * Handles a select event.
@@ -177,6 +201,9 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 			var changed = false;
 			var selectionModel = this.getSelectionModel();
 
+			var onColHeader = row == -1;
+			var onRowHeader = col == this.table.getRowHeaderIndex();
+
 			col = this.__adjustColIndex(col);
 			row = this.__adjustRowIndex(row);
 			if (col == null || row == null)
@@ -185,6 +212,7 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 			var multi = this.isMultiSelect();
 			var lead = selectionModel.getLead();
 			var anchor = selectionModel.getAnchor();
+			var mobile = qx.core.Environment.get("device.type") !== "desktop";
 
 			if (multi && e.isShiftPressed()) {
 
@@ -213,6 +241,31 @@ qx.Class.define("wisej.web.datagrid.SelectionManager", {
 					changed = selectionModel.removeSelectionRange(col, row);
 				} else {
 					changed = selectionModel.addSelectionRange(col, row);
+				}
+			}
+			else if (multi && mobile) {
+
+				// on mobile we can't press ctrl or shift for multiselection.
+				// so a tap acts as if the ctrl is pressed in these cases:
+				//
+				// - row selection: tap on row hader, if row header is not visible tap on row
+				// - column selection: tap on column header, if column header is not visible tap on cell
+				// - call selection: tap on cell
+
+				var ctrlPressed =
+					(col == -1 && (onRowHeader || !this.table.getRowHeadersVisible())) ||
+					(row == -1 && (onColHeader || !this.table.getHeaderCellsVisible())) ||
+					(row > -1 && col > -1);
+
+				if (ctrlPressed) {
+					if (selectionModel.isCellSelected(col, row)) {
+						changed = selectionModel.removeSelectionRange(col, row);
+					} else {
+						changed = selectionModel.addSelectionRange(col, row);
+					}
+				}
+				else {
+					changed = selectionModel.setSelectionRange(col, row);
 				}
 			}
 			else {

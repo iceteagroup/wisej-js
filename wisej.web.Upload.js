@@ -67,6 +67,13 @@ qx.Class.define("wisej.web.Upload", {
 		multiple: { init: false, check: "Boolean", apply: "_applyMultiple" },
 
 		/**
+		 * Folders property.
+		 *
+		 * Allows directories to be selected for uploading.
+		 */
+		folders: { init: false, check: "Boolean", apply: "_applyFolders" },
+
+		/**
 		 * AllowedFileTypes property.
 		 *
 		 * specifies the types of files that the server accepts (that can be submitted through a file upload).
@@ -202,8 +209,10 @@ qx.Class.define("wisej.web.Upload", {
 					continue;
 				}
 
-				fileList.push(file.name);
-				formData.append('file', file, file.name);
+				if (file.size > 0) {
+					fileList.push(file.name);
+					formData.append(file.name, file, file.fullPath);
+				}
 			}
 
 			// don't post if there are no files to post.
@@ -212,8 +221,9 @@ qx.Class.define("wisej.web.Upload", {
 				// send the data to our handler.
 				var xhr = new XMLHttpRequest();
 				xhr.open("POST", submitUrl, true);
-				xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+				xhr.setRequestHeader("X-Referrer", location.href);
 				xhr.setRequestHeader("X-Wisej-RequestType", "Postback");
+				xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
 
 				// uploading...
 				if (callbacks.uploading)
@@ -243,7 +253,7 @@ qx.Class.define("wisej.web.Upload", {
 
 							// completed with error...
 							if (callbacks.completed)
-								callbacks.completed({ error: "upload", message: xhr.statusText });
+								callbacks.completed({ error: "upload", message: xhr.statusText || "Upload error." });
 
 						}
 					}
@@ -314,6 +324,15 @@ qx.Class.define("wisej.web.Upload", {
 
 			if (this.__upload)
 				this.__upload.multiple = (value === true);
+		},
+
+		/**
+		 * Applies the folders property.
+		 */
+		_applyFolders: function (value, old) {
+
+			if (this.__upload)
+				this.__upload.webkitdirectory = (value === true);
 		},
 
 		/**
@@ -639,7 +658,7 @@ qx.Class.define("wisej.web.Upload", {
 				this.getAllowedFileTypes(),
 				this.getMaxFileSize(),
 				{
-					uploading: function (list, xhr) {
+					uploading: function (fileList, xhr) {
 
 						me.__currentXhr = xhr;
 

@@ -173,7 +173,9 @@ qx.Class.define("wisej.web.StatusBar", {
 
 		_onPanelClick: function (e) {
 
-			this.fireDataEvent("panelClick", e.getTarget());
+			var target = e.getTarget();
+			if (target instanceof wisej.web.statusbar.Panel)
+				this.fireDataEvent("panelClick", target);
 		},
 
 		// overridden
@@ -201,9 +203,8 @@ qx.Class.define("wisej.web.StatusBar", {
 			}
 
 			return control || this.base(arguments, id);
-		},
-
-	},
+		}
+	}
 });
 
 
@@ -271,7 +272,6 @@ qx.Class.define("wisej.web.statusbar.Panel", {
 			var label = this.getChildControl("label");
 
 			label.setWrap(false);
-			label.setAllowGrowX(true);
 			label.setTextAlign(value);
 		},
 
@@ -323,7 +323,61 @@ qx.Class.define("wisej.web.statusbar.Panel", {
 				icon.resetHeight();
 				icon.getContentElement().setStyle("backgroundSize", "contain");
 			}
+		}
+	}
+});
+
+
+/**
+ * wisej.web.statusbar.Control
+ */
+qx.Class.define("wisej.web.statusbar.Control", {
+
+	extend: wisej.web.statusbar.Panel,
+
+	properties: {
+
+		/**
+		 * Control property.
+		 *
+		 * Reference to the widget to place inside the statusbar panel.
+		 */
+		control: { init: null, nullable: true, apply: "_applyControl", transform: "_transformComponent" }
+	},
+
+	members: {
+
+		/**
+		 * Applies the control property.
+		 */
+		_applyControl: function (value, old) {
+
+			if (old) {
+				if (this._indexOf(old) > -1)
+					this._remove(old);
+
+				this.removeState("control");
+
+				old.removeListener("resize", this._onControlResize, this);
+			}
+
+			if (value) {
+				// the wrapped widget should always fill this item.
+				var widget = value;
+				widget.resetUserBounds();
+				this._add(widget, {flex: 1});
+				this.addState("control");
+
+				widget.addListener("resize", this._onControlResize, this);
+			}
 		},
 
-	},
+		// handles the "resize" even on the wrapped control
+		// to fire the event to the wrapper component on the server
+		// and update the wrapped control's size.
+		_onControlResize: function (e) {
+
+			this.fireDataEvent("controlResize", e.getData());
+		}
+	}
 });

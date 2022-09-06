@@ -32,6 +32,14 @@ qx.Class.define("wisej.web.LinkLabel", {
 		this.addListenerOnce("appear", function () {
 			this.__createInnerLinkElement(this.getValue());
 		});
+
+		this.addListener("keydown", this._onKeyDown);
+
+		this.addListener("click", this._onAnchorEvent);
+		this.addListener("mouseout", this._onAnchorEvent);
+		this.addListener("mousemove", this._onAnchorEvent);
+		this.addListener("mousedown", this._onAnchorEvent);
+		this.addListener("mouseup", this._onAnchorEvent);
 	},
 
 	properties: {
@@ -111,17 +119,12 @@ qx.Class.define("wisej.web.LinkLabel", {
 		/**
 		 * Creates the styles for the inner link elements.
 		 */
-		__applyStyles: function (mouseState) {
+		__applyStyles: function (el, mouseState) {
 
 			var dom = this.getContentElement().getDomElement();
 			if (dom) {
 
 				var colorMgr = qx.theme.manager.Color.getInstance();
-
-				var styles = {
-					textDecoration: "underline",
-					color: colorMgr.resolve(this.getLinkColor())
-				};
 
 				if (mouseState == null) {
 					mouseState = {
@@ -129,6 +132,11 @@ qx.Class.define("wisej.web.LinkLabel", {
 						down: false
 					};
 				}
+
+				var styles = {
+					textDecoration: "underline",
+					color: colorMgr.resolve(this.getLinkColor()),
+				};
 
 				// textDecoration
 				switch (this.getBehavior()) {
@@ -154,9 +162,22 @@ qx.Class.define("wisej.web.LinkLabel", {
 				else if (mouseState.down)
 					styles.color = colorMgr.resolve(this.getActiveColor());
 
-				var links = qx.bom.Selector.query("a", dom);
-				for (var i = 0; i < links.length; i++) {
-					qx.bom.element.Style.setStyles(links[i], styles);
+				if (el) {
+					qx.bom.element.Style.setStyles(el, styles);
+				}
+				else {
+					var links = qx.bom.Selector.query("a", dom);
+					for (var i = 0; i < links.length; i++) {
+						qx.bom.element.Style.setStyles(links[i], styles);
+					}
+				}
+
+				// cursor
+				if (!this.getCursor()) {
+					if (mouseState.over)
+						this.getContentElement().setStyle("cursor", "pointer");
+					else
+						this.getContentElement().removeStyle("cursor");
 				}
 			}
 		},
@@ -167,6 +188,23 @@ qx.Class.define("wisej.web.LinkLabel", {
 			this.base(arguments);
 
 			this.__applyStyles();
+		},
+
+		/**
+		 * Listener method for "keydown" event.
+		 * Fires "linkClicked" on pressing Enter.
+		 *
+		 * @param e {Event} Key event
+		 */
+		_onKeyDown: function (e) {
+			switch (e.getKeyIdentifier()) {
+				case "Enter":
+					var text = this.getValue();
+					var area = this.getLinkArea();
+					var textLink = text.substr(area.start, area.length == -1 ? text.length : area.length);
+					this.fireDataEvent("linkClick", textLink);
+					break;
+			}
 		},
 
 		/**
@@ -189,56 +227,80 @@ qx.Class.define("wisej.web.LinkLabel", {
 				dom.innerHTML = html;
 
 				this.__applyStyles();
-				this.__attachNativeClickHandlers();
 			}
 		},
 
-		/**
-		 * Hooks up the "click" handler on all innner link elements.
-		 */
-		__attachNativeClickHandlers: function () {
+		// last element under the pointer.
+		__lastEl: null,
+
+		_onAnchorEvent: function (e) {
+
+			var el = this.__findElement(e.getDocumentLeft(), e.getDocumentTop());
+
+			switch (e.getType()) {
+
+				case "click":
+					if (el) {
+						e.preventDefault();
+						e.stopPropagation();
+						if (this.isEnabled())
+							this.fireDataEvent("linkClick", el.innerText);
+					}
+					break;
+
+				case "mouseout":
+					{
+						// mouseout
+						if (this.__lastEl)
+							this.__applyStyles(this.__lastEl, { over: false, down: false });
+
+						this.__lastEl = null;
+					}
+					break;
+
+				case "mousemove":
+					{
+						// mouseout
+						if (this.__lastEl && this.__lastEl != el)
+							this.__applyStyles(this.__lastEl, { over: false, down: false });
+
+						// mouseover
+						if (el && this.__lastEl != el)
+							this.__applyStyles(el, { over: true, down: false });
+
+						this.__lastEl = el;
+					}
+					break;
+
+				case "mousedown":
+					if  (el)
+						this.__applyStyles(el, { over: true, down: true });
+					break;
+
+				case "mouseup":
+					if (el)
+						this.__applyStyles(el, { over: true, down: false });
+					break;
+			}
+		},
+
+		__findElement: function (x, y) {
 
 			var dom = this.getContentElement().getDomElement();
-			if (dom) {
-				var links = qx.bom.Selector.query("a", dom);
-				for (var i = 0; i < links.length; i++) {
-					qx.bom.Event.addNativeListener(links[i], "click", this.__onNativeClick.bind(this));
-					qx.bom.Event.addNativeListener(links[i], "mouseover", this.__onNativeMouseOver.bind(this));
-					qx.bom.Event.addNativeListener(links[i], "mouseout", this.__onNativeMouseOut.bind(this));
-					qx.bom.Event.addNativeListener(links[i], "mousedown", this.__onNativeMouseDown.bind(this));
-					qx.bom.Event.addNativeListener(links[i], "mouseup", this.__onNativeMouseUp.bind(this));
+
+			var nodes = dom.childNodes;
+			for (var i = 0; i < nodes.length; i++) {
+
+				if (nodes[i].tagName == "A") {
+
+					var rect = nodes[i].getBoundingClientRect();
+					if (rect.left <= x && rect.right >= x &&
+						rect.top <= y && rect.bottom >= y) {
+
+						return nodes[i];
+					}
 				}
 			}
-
-		},
-
-		__onNativeClick: function (e) {
-			e.preventDefault();
-			e.stopPropagation();
-
-			if (this.isEnabled())
-				this.fireDataEvent("linkClick", e.target.innerText);
-		},
-		__onNativeMouseOver: function (e) {
-
-			this.__applyStyles({ over: true, down: false });
-
-		},
-		__onNativeMouseOut: function (e) {
-
-			this.__applyStyles({ over: false, down: false });
-
-		},
-		__onNativeMouseDown: function (e) {
-
-			this.__applyStyles({ over: true, down: true });
-
-		},
-		__onNativeMouseUp: function (e) {
-
-			this.__applyStyles({ over: true, down: false });
-
-		},
-
-	},
+		}
+	}
 });

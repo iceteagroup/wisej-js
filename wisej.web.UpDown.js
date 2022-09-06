@@ -161,20 +161,26 @@ qx.Class.define("wisej.web.UpDownBase", {
 			else
 				this.removeState("readonly");
 
-			this.getChildControl("upbutton").setEnabled(!value);
-			this.getChildControl("downbutton").setEnabled(!value);
-			this.getChildControl("textfield").setReadOnly(value);
-			this.getChildControl("textfield").setFocusable(false);
+			if (value) {
+				this.getChildControl("upbutton").setEnabled(false);
+				this.getChildControl("downbutton").setEnabled(false);
+			}
+			else {
+				this.getChildControl("upbutton").setEnabled("inherit");
+				this.getChildControl("downbutton").setEnabled("inherit");
+			}
+
+			var readOnly = value || !this.isEditable();
+			this.getChildControl("textfield").setReadOnly(readOnly);
 		},
 
 		/**
 		 * Applies the editable property.
 		 */
 		_applyEditable: function (value, old) {
-			value = value && !this.isReadOnly();
-			var textField = this.getChildControl("textfield");
-			textField.setReadOnly(!value);
-			textField.setFocusable(false);
+
+			var readOnly = this.isReadOnly() || !value;
+			this.getChildControl("textfield").setReadOnly(readOnly);
 		},
 
 		/**
@@ -186,7 +192,7 @@ qx.Class.define("wisej.web.UpDownBase", {
 				this.addListener("focusin", function (e) {
 					if (this.isSelectOnEnter()) {
 						var textField = this.getChildControl("textfield");
-						qx.event.Timer.once(textField.selectAllText, textField, 1);
+						qx.event.Timer.once(textField.selectAllText, textField, 0);
 					}
 				}, this);
 			}
@@ -461,6 +467,13 @@ qx.Class.define("wisej.web.NumericUpDown", {
 
 	extend: wisej.web.UpDownBase,
 
+	construct: function () {
+
+		this.base(arguments);
+
+		qx.locale.Manager.getInstance().addListener("changeLocale", this._onChangeLocale, this);
+	},
+
 	properties: {
 
 		/**
@@ -514,6 +527,20 @@ qx.Class.define("wisej.web.NumericUpDown", {
 		},
 
 		/**
+		 * Updates the numeric formatter when the language changes.
+		 */
+		_onChangeLocale: function (e) {
+
+			var format = this.getNumberFormat();
+			if (format) {
+				format.dispose();
+				this.setNumberFormat(null);
+			}
+
+			this._applyFormat();
+		},
+
+		/**
 		 * Applies the hexadecimal property.
 		 */
 		_applyHexadecimal: function (value, old) {
@@ -537,16 +564,13 @@ qx.Class.define("wisej.web.NumericUpDown", {
 
 			if (this.isHexadecimal()) {
 
-				var textField = this.getChildControl("textfield");
-				var value = parseInt(textField.getValue(), 16);
+				var value = parseInt(this.getText(), 16);
 
 				if (!isNaN(value)) {
 
 					// fix range
-					if (value > this.getMaximum())
-						value = this.getMaximum();
-					else if (value < this.getMinimum())
-						value = this.getMinimum();
+					value = Math.min(value, this.getMaximum());
+					value = Math.max(value, this.getMinimum());
 
 					// set the value in the spinner
 					this.setValue(value);
@@ -606,18 +630,34 @@ qx.Class.define("wisej.web.NumericUpDown", {
 
 			var value = this.getValue();
 			if (value == null) {
-				var upButton = this.getChildControl("upbutton");
-				var downButton = this.getChildControl("downbutton");
-				upButton.setEnabled(true);
-				downButton.setEnabled(true);
+				this.getChildControl("upbutton").setEnabled(true);
+				this.getChildControl("downbutton").setEnabled(true);
 			}
 			else {
 				this.base(arguments);
 			}
+		},
+
+
+		/*---------------------------------------------------------------------------
+		  wisej.web.datagrid.EditorFactory -> get/setCellValue implementation.
+		---------------------------------------------------------------------------*/
+
+		getCellValue: function () {
+
+			this._onTextChange();
+			return this.getText();
+		},
+		setCellValue: function (value) {
+
+			this.setText(value);
 		}
 
-	}
+	},
 
+	destruct: function () {
+		qx.locale.Manager.getInstance().removeListener("changeLocale", this._onChangeLocale, this);
+	}
 });
 
 
@@ -633,11 +673,9 @@ qx.Class.define("wisej.web.DomainUpDown", {
 		this.base(arguments);
 
 		// add the "list" state to the components.
-		var upButton = this.getChildControl("upbutton");
-		var downButton = this.getChildControl("downbutton");
 		this.addState("list");
-		upButton.addState("list");
-		downButton.addState("list");
+		this.getChildControl("upbutton").addState("list");
+		this.getChildControl("downbutton").addState("list");
 
 		this.setText("");
 	},
@@ -649,7 +687,12 @@ qx.Class.define("wisej.web.DomainUpDown", {
 		 * 
 		 * List of items to iterate in the spinner.
 		 */
-		items: { init: null, nullable: true, check: "Array", apply: "_applyItems" }
+		items: { init: null, nullable: true, check: "Array", apply: "_applyItems" },
+
+		/** 
+		 *  The value of the spinner.
+		 */
+		value: { init: null, check: "String", apply: "_applyValue", event: "changeValue" },
 	},
 
 	members: {
@@ -669,15 +712,18 @@ qx.Class.define("wisej.web.DomainUpDown", {
 			this._updateButtons();
 		},
 
+		/**
+		 * Applies the value property.
+		 */
+		_applyValue: function (value, old) {
+
+			this._updateButtons();
+		},
+
 		// overridden
 		_onTextChange: function (e) {
 
-			// update the index of the selected item.
-			this._index = this.__findItem(e.getData());
-
-			this._updateButtons();
-
-			this.fireDataEvent("changeValue", e.getData(), e.getOldData());
+			this.setValue(this.getText());
 		},
 
 		// overridden
@@ -703,7 +749,7 @@ qx.Class.define("wisej.web.DomainUpDown", {
 			if (this._index < 0)
 				return;
 
-			this.getChildControl("textfield").setValue(items[this._index]);
+			this.setText(items[this._index]);
 		},
 
 		// overridden
@@ -726,7 +772,7 @@ qx.Class.define("wisej.web.DomainUpDown", {
 				this._index++;
 			}
 
-			this.getChildControl("textfield").setValue(items[this._index]);
+			this.setText(items[this._index]);
 		},
 
 		// overridden to eliminate the numeric filter.
@@ -956,7 +1002,7 @@ qx.Class.define("wisej.web.TimeUpDown", {
 		// overridden
 		_onTextChange: function (e) {
 
-			var text = e.getData();
+			var text = this.getText();
 
 			try {
 

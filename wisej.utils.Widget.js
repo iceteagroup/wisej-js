@@ -60,6 +60,13 @@ qx.Class.define("wisej.utils.Widget", {
 		__automationDrillDown: null,
 
 		/**
+		 * Returns whether automation mode is enabled.
+		 */
+		getAutomationMode: function () {
+			return !!qx.core.Environment.get("automation.mode");
+		},
+
+		/**
 		 * Creates a scaled clone of the dom for the specified widget.
 		 *
 		 * @param widget {qx.ui.core.Widget} The widget to clone and scale.
@@ -299,7 +306,7 @@ qx.Class.define("wisej.utils.Widget", {
 
 		/**
 		 * Returns true of the widget is in a popup.
-		 * @param widget {qx.ui.core.Widget} Widget to check/
+		 * @param widget {qx.ui.core.Widget} Widget to check.
 		 */
 		isInsidePopup: function (widget) {
 
@@ -382,7 +389,7 @@ qx.Class.define("wisej.utils.Widget", {
 				el = this.__measureElement = qx.dom.Element.create("div");
 				document.body.appendChild(el);
 
-				el.$$style = el.style = style;
+				el.$$style = el.style.cssText = style;
 
 				var elStyle = el.style;
 				elStyle.height = "auto";
@@ -398,7 +405,7 @@ qx.Class.define("wisej.utils.Widget", {
 			el.innerHTML = "";
 
 			if (el.$$style !== style) {
-				el.$$style = el.style = style;
+				el.$$style = el.style.cssText = style;
 
 				var elStyle = el.style;
 				elStyle.height = "auto";
@@ -442,7 +449,11 @@ qx.Class.define("wisej.utils.Widget", {
 			if (!el || !el.nodeType)
 				return null;
 
-			var containerEl = e.getTarget().getContentElement().getDomElement();
+			var target = e.getTarget();
+			if (!target)
+				return null;
+
+			var containerEl = target.getContentElement().getDomElement();
 			if (!containerEl || !containerEl.nodeType)
 				return null;
 
@@ -635,12 +646,12 @@ qx.Class.define("wisej.utils.Widget", {
 		/**
 		 * Generates a unique hierarchal ID to be used with automation tools.
 		 */
-		setAutomationID: function (target) {
+		setAutomationID: function (target, parent, force) {
 
 			if (!target)
 				return;
 
-			if (target.getUserData("automationId"))
+			if (force !== true && target.getUserData("automationId"))
 				return;
 
 			var names = [], name, className;
@@ -674,7 +685,8 @@ qx.Class.define("wisej.utils.Widget", {
 					names.push(target.$$subcontrol);
 				}
 
-				for (var widget = target.getLayoutParent(); widget != null; widget = widget.getLayoutParent()) {
+				parent = parent || target.getLayoutParent();
+				for (var widget = parent; widget != null; widget = widget.getLayoutParent()) {
 
 					if (widget.isWisejComponent) {
 						name = widget.getName();
@@ -773,6 +785,23 @@ qx.Class.define("wisej.utils.Widget", {
 			}
 		},
 
+		/**
+		 * Removes the automation ID.
+		 */
+		clearAutomationID: function (target) {
+
+			if (!target)
+				return;
+
+			target.setUserData("automationId", null);
+
+			var propertyName = this.getAutomationPropertyName();
+			var el = target.isWisejComponent ? target.getAutomationElement() : target.getContentElement();
+			if (el) {
+				el.removeAttribute(propertyName, true);
+			}
+		},
+		
 		/**
 		 * Parses the css string into a style map.
 		 * @param {any} css

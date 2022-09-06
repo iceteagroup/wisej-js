@@ -43,6 +43,20 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		this.addListener("focusout", this._onFocusOut);
 	},
 
+	statics: {
+
+		/** @type {Map} Supported event types */
+		SUPPORTED_TYPES:
+		{
+			move: 1,
+			resize: 1,
+			startmove: 1,
+			endmove: 1,
+			startresize: 1,
+			endresize: 1
+		},
+	},
+
 	properties: {
 
 		appearance: { init: "label-wrapper", refine: true },
@@ -147,7 +161,10 @@ qx.Class.define("wisej.web.LabelWrapper", {
 			right: true,
 			bottom: true,
 			inside: true,
-			multiline: true
+			multiline: true,
+			move: true,
+			resize: true,
+			drag: true
 		},
 
 		/**
@@ -271,7 +288,7 @@ qx.Class.define("wisej.web.LabelWrapper", {
 
 					// special case for multiline TextBox with label inside.
 					// add the label height to the inner padding.
-					if (editor instanceof wisej.web.TextArea) {
+					if (editor.hasState("multiline")) {
 						editor.setPaddingTop(label.getSizeHint().height);
 					}
 
@@ -290,7 +307,7 @@ qx.Class.define("wisej.web.LabelWrapper", {
 
 					// special case for multiline TextBox with label inside.
 					// add the label height to the inner padding.
-					if (editor instanceof wisej.web.TextArea) {
+					if (editor.hasState("multiline")) {
 						editor.resetPaddingTop();
 					}
 
@@ -412,6 +429,9 @@ qx.Class.define("wisej.web.LabelWrapper", {
 					// propagate up the multiline state when wrapping a textarea.
 					if (this._editor.hasState("multiline"))
 						this.addState("multiline");
+
+					// relay certain events.
+					this._registerEvents();
 				}
 				catch (error) {
 
@@ -455,11 +475,17 @@ qx.Class.define("wisej.web.LabelWrapper", {
 
 		// dispatches the events fired by the wrapped editor
 		// to the LabelWrapper since this is the widget wired on the server side.
-		_relayEvent: function (e) {
+		_registerEvents: function () {
 
+			for (var name in wisej.web.LabelWrapper.SUPPORTED_TYPES) {
+				this.addListener(name, this._onEvent);
+			}
+		},
+
+		_onEvent: function (e) {
 			var evt = e.clone();
 			evt.setBubbles(false);
-			this.dispatchEvent(evt);
+			this.getEditor().dispatchEvent(evt);
 		},
 
 		_onFocusIn: function (e) {
@@ -493,6 +519,13 @@ qx.Class.define("wisej.web.LabelWrapper", {
 			return position === "top" || position === "bottom";
 		},
 
+		/**
+		 * Returns the inner editor to wisej.web.DragDrop.
+		 */
+		getDragDropTarget: function () {
+			return this.getEditor();
+		},
+
 		/*---------------------------------------------------------------------------
 		  qx.ui.core.MContentPadding
 		---------------------------------------------------------------------------*/
@@ -500,6 +533,32 @@ qx.Class.define("wisej.web.LabelWrapper", {
 		_getContentPaddingTarget: function () {
 
 			return this.getLabel();
+		},
+
+		/*---------------------------------------------------------------------------
+		  scroll redirection overrides
+		---------------------------------------------------------------------------*/
+
+		/**
+		 * Scrolls the textfield to the given left position.
+		 *
+		 * @param value {Integer} Horizontal scroll position.
+		 */
+		scrollToX: function (value) {
+
+			if (this._editor)
+				this._editor.scrollToX(value);
+		},
+
+		/**
+		 * Scrolls the textfield to the given top position.
+		 *
+		 * @param value {Integer} Vertical scroll position.
+		 */
+		scrollToY: function (value) {
+
+			if (this._editor)
+				this._editor.scrollToY(value);
 		},
 
 		/*---------------------------------------------------------------------------
@@ -743,7 +802,36 @@ qx.Class.define("wisej.web.labelWrapper.Layout", {
 
 				return;
 			}
+		},
+
+		// overridden
+		_computeSizeHint: function () {
+
+			var sizeHint = this.base(arguments);
+
+			var labelWrapper = this._getWidget();
+			var label = labelWrapper.getLabel();
+			var editor = labelWrapper.getEditor();
+			var position = labelWrapper.getPosition();
+
+			var size = label.getSizeHint();
+
+			switch (position) {
+
+				case "top":
+				case "bottom":
+					sizeHint.height += size.height;
+					break;
+
+				case "bottom":
+					sizeHint.height += size.height;
+					sizeHint.height -= editor.getPaddingTop();
+					break;
+			}
+
+			return sizeHint;
 		}
 	}
 
 });
+
