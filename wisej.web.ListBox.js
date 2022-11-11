@@ -351,21 +351,29 @@ qx.Class.define("wisej.web.ListBox", {
 		 */
 		_applyHorizontal: function (value, old) {
 
-			var content = this.__content;
+			var content = this.getChildrenContainer();
+
+			if (content.getLayout())
+				content.getLayout().dispose();
 
 			if (value) {
-				content.getLayout().dispose();
-				content.setLayout(new qx.ui.layout.Flow());
 				content.setAllowGrowX(false);
 				content.setAllowGrowY(true);
+				content.setLayout(new qx.ui.layout.Flow());
 			}
 			else {
-				content.getLayout().dispose();
-				content.setLayout(new qx.ui.layout.VBox());
 				content.setAllowGrowX(true);
 				content.setAllowGrowY(false);
+				content.setLayout(new qx.ui.layout.VBox());
+
 				this._applySpacing(this.getSpacing());
 			}
+		},
+
+		// property apply
+		_applyOrientation: function (value, old) {
+
+			this.setHorizontal(value === "horizontal");
 		},
 
 		/**

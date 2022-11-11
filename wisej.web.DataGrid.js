@@ -120,7 +120,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		/**
 		 * @type {Integer} The time in milliseconds before a focused cell enters edit mode.
 		 */
-		STARTEDITING_DELAY: 250
+		STARTEDITING_DELAY: 25
 	},
 
 	events: {
@@ -723,6 +723,10 @@ qx.Class.define("wisej.web.DataGrid", {
 		 */
 		_updateTableData: function (firstRow, lastRow, firstColumn, lastColumn, removeStart, removeCount) {
 
+			// trigger autoresize.
+			this.scheduleAutoResize();
+
+			// update the panels.
 			this.base(arguments, firstRow, lastRow, firstColumn, lastColumn, removeStart, removeCount);
 
 			// notify the server that the grid rows have been updated.
@@ -1063,7 +1067,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				// initialize the column model with the new column count.
 				var columnModel = this.getTableColumnModel();
-					columnModel.init(columnIDs.length, this);
+				columnModel.init(columnIDs.length, this);
 
 				if (columnIDs.length > 0) {
 
@@ -1684,6 +1688,8 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (dataModel.resetStyles)
 				dataModel.resetStyles();
 
+			this.scheduleAutoResize();
+
 			qx.ui.core.queue.Widget.add(this, "updateContent");
 		},
 
@@ -1726,7 +1732,7 @@ qx.Class.define("wisej.web.DataGrid", {
 		/**
 		 * Schedules a full update of the columns position.
 		 */
-		_scheduleUpdateColumnsPosition: function () {
+		scheduleUpdateColumnsPosition: function () {
 
 			qx.ui.core.queue.Widget.add(this, "updateColumnsPosition");
 		},
@@ -1747,23 +1753,26 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (jobs["updateContent"])
 				this.updateContent();
 
-			if (jobs["autoSizeColumns"])
-				this.autoSizeColumns();
-
-			if (jobs["autoSizeRows"])
-				this.autoSizeRows();
-
-			if (jobs["autoResizeColumnHeaders"])
-				this.autoResizeColumnHeaders();
-
 			if (jobs["updateColumnsPosition"])
 				this.updateColumnsPosition();
+
+			if (jobs["updateColumnHeaders"])
+				this.scheduleAutoResize();
 
 			if (jobs["syncVerticalScrollBars"])
 				this.syncVerticalScrollBars();
 
 			if (jobs["metaDataChanged"])
 				this._onTableModelMetaDataChanged();
+		},
+
+		/**
+		* Returns the index of the last visible column.
+		 */
+		getLastVisibleColumn: function () {
+
+			var visible = this.getTableColumnModel().getVisibleColumns();
+			return visible[visible.length - 1];
 		},
 
 		/**
@@ -1930,10 +1939,16 @@ qx.Class.define("wisej.web.DataGrid", {
 			switch (identifier) {
 				case "C":
 				case "Insert":
-					if (!this.isEditing() && e.isCtrlPressed()) {
+					if (!this.isEditing() && e.getModifiers() == qx.event.type.Dom.CTRL_MASK) {
 						if (!this.isWired("keydown"))
 							this.fireEvent("copy");
 					}
+					break;
+
+				case "A": // select all
+					if (!this.isEditing() && e.getModifiers() == qx.event.type.Dom.CTRL_MASK)
+						if (!this.isWired("keydown"))
+							this.fireEvent("gridCellKeyPress");
 					break;
 			}
 		},
@@ -2090,10 +2105,10 @@ qx.Class.define("wisej.web.DataGrid", {
 					case "End":
 						if (e.isCtrlPressed())
 							// go to the very last cell.
-							this.setFocusedCell(this.getVisibleColumnCount() - 1, this.getRowCount() - 1, true, false);
+							this.setFocusedCell(this.getLastVisibleColumn(), this.getRowCount() - 1, true, false);
 						else
 							// go to the last cell in the current row.
-							this.setFocusedCell(this.getVisibleColumnCount() - 1, focusedRow, true, false);
+							this.setFocusedCell(this.getLastVisibleColumn(), focusedRow, true, false);
 
 						consumed = true;
 						break;
@@ -2165,14 +2180,12 @@ qx.Class.define("wisej.web.DataGrid", {
 				// to let special cells handle the space and enter and to allow the
 				// grid to expand collapse hierarchical rows.
 				switch (identifier) {
+
 					case "Space":
 					case "Enter":
 						if (!this.isWired("keypress"))
 							this.fireEvent("gridCellKeyPress");
-
-						break;
 				}
-
 			}
 
 			// update the selection/focused-cell depending on the keyboard key
@@ -2548,6 +2561,8 @@ qx.Class.define("wisej.web.DataGrid", {
 							isPointerAction: data.isPointerAction
 						});
 
+						this.scheduleAutoResize();
+
 						if (this.getHeaderSizeMode() == "autoSize")
 							this.scheduleAutoResizeColumnHeaders();
 					}
@@ -2616,6 +2631,8 @@ qx.Class.define("wisej.web.DataGrid", {
 
 			this.base(arguments, e);
 
+			this.scheduleAutoResize();
+
 			if (this.__canFireServerEvent()) {
 				this.fireDataEvent("columnVisibilityChanged", { col: data.col, visible: data.visible });
 			}
@@ -2656,39 +2673,68 @@ qx.Class.define("wisej.web.DataGrid", {
 		// the scrollbar visibility changes.
 		_updateScrollBarVisibility: function () {
 
-			this.base(arguments);
+			var changed = this.base(arguments);
 
-			if (this.getBounds() && !this.__internalChange) {
+			if (changed)
 				this.scheduleAutoResize();
-			}
+
+			return changed;
 		},
 
 		/* =======================================================================
 		 * AutoSize implementation
 		 * =======================================================================*/
 
+		// deferred autoResize methods.
+		__autoResizeCall: null,
+		__autoResizeColumnHeadersCall: null,
+
 		/**
 		 * Schedules the autoresize procedures for the columns and rows.
 		 */
 		scheduleAutoResize: function () {
-			qx.ui.core.queue.Widget.add(this, "autoSizeColumns");
-			qx.ui.core.queue.Widget.add(this, "autoSizeRows");
+
+			// console.trace("scheduleAutoResize");
+			// qx.ui.core.queue.Widget.add(this, "autoResize");
+
+			if (this.__autoResizeCall == null) {
+				this.__autoResizeCall = new qx.util.DeferredCall(function () {
+
+					this.autoSizeColumns();
+					this.autoSizeRows();
+
+				}, this);
+			}
+			this.__autoResizeCall.cancel();
+			this.__autoResizeCall.schedule();
 		},
 
 		/**
 		 * Scheduled the autoresize procedure to the column headers height.
 		 */
 		scheduleAutoResizeColumnHeaders: function () {
-			qx.ui.core.queue.Widget.add(this, "autoResizeColumnHeaders");
+
+			// console.trace("scheduleAutoResizeColumnHeaders");
+			// qx.ui.core.queue.Widget.add(this, "autoResizeColumnHeaders");
+
+			if (this.__autoResizeColumnHeadersCall == null) {
+				this.__autoResizeColumnHeadersCall = new qx.util.DeferredCall(function () {
+
+					this.autoResizeColumnHeaders();
+
+				}, this);
+			}
+			this.__autoResizeColumnHeadersCall.cancel();
+			this.__autoResizeColumnHeadersCall.schedule();
 		},
 
 		/**
 		 * Resize the columns width according to the specified parameters.
 		 *
 		 * @param columnIndex {Integer} Index of the column to resize. -1 for all columns.
-		 * @param autoSizeMode {String} Autosize mode: one of "columnHeader", "allCellsExceptHeader", "allCells", "displayedCellsExceptHeader", "displayedCells".
-		 * @param extraSpace {Integer} Extra space to add in pixels.
-		 * @param deferred {Boolean} Indicates that the call should be deferred until the next data update.
+		 * @param autoSizeMode {String?} Autosize mode: one of "columnHeader", "allCellsExceptHeader", "allCells", "displayedCellsExceptHeader", "displayedCells".
+		 * @param extraSpace {Integer?} Extra space to add in pixels.
+		 * @param deferred {Boolean?} Indicates that the call should be deferred until the next data update.
 		 */
 		autoResizeColumns: function (columnIndex, autoSizeMode, extraSpace, deferred) {
 
@@ -2709,10 +2755,11 @@ qx.Class.define("wisej.web.DataGrid", {
 
 
 				var column = columns[i];
-				var sizeMode = autoSizeMode;
+				var sizeMode = autoSizeMode || column.getSizeMode();
 
 				switch (sizeMode) {
 
+					case "fill":
 					case "allCells":
 					case "columnHeader":
 					case "displayedCells":
@@ -2728,9 +2775,6 @@ qx.Class.define("wisej.web.DataGrid", {
 						if (!column.isVisible())
 							continue;
 
-						if (!column.isFrozen() && column.getSizeMode() === "fill")
-							continue;
-
 						if (column.getMinWidth() === column.getMaxWidth())
 							continue;
 
@@ -2742,25 +2786,21 @@ qx.Class.define("wisej.web.DataGrid", {
 						});
 
 						break;
-
-					default:
-						return;
 				}
 			}
 
 			if (resizeData.length > 0) {
-				qx.event.Timer.once(function () {
+				//qx.event.Timer.once(function () {
 
 					this.__internalChange++;
 					try {
 						this.__autoSizeColumns(resizeData);
-						this.autoSizeFillColumns();
 
 					} finally {
 						this.__internalChange--;
 					}
 
-				}, this, 0);
+				//}, this, 0);
 			}
 		},
 
@@ -2824,9 +2864,9 @@ qx.Class.define("wisej.web.DataGrid", {
 			}
 
 			if (resizeData) {
-				qx.event.Timer.once(function () {
+				//qx.event.Timer.once(function () {
 					this.__autoSizeRows(resizeData);
-				}, this, 0);
+				//}, this, 0);
 			}
 		},
 
@@ -2902,7 +2942,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (!this.getHeaderCellsVisible())
 				return;
 
-			qx.event.Timer.once(function () {
+			//qx.event.Timer.once(function () {
 
 				this.syncAppearance();
 				var oldHeight = this.getHeaderCellHeight();
@@ -2922,7 +2962,7 @@ qx.Class.define("wisej.web.DataGrid", {
 					this.setHeaderCellHeight(newHeight);
 				}
 
-			}, this, 1);
+			//}, this, 1);
 		},
 
 		/**
@@ -2941,40 +2981,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			if (!columnModel)
 				return;
 
-			this.__internalChange++;
-			try {
-				var sizefillColumns = false;
-				for (var i = 0, length = columns.length; i < length; i++) {
-
-					var column = columns[i];
-
-					if (column.isVisible()) {
-
-						var sizeMode = column.getSizeMode();
-						switch (sizeMode) {
-							case "none":
-								break;
-
-							case "fill":
-								if (!column.isFrozen())
-									sizefillColumns = true;
-								break;
-
-							default:
-								resized = true;
-								this.autoResizeColumns(column.getIndex(), sizeMode);
-								break;
-						}
-					}
-				}
-
-				if (sizefillColumns)
-					this.autoSizeFillColumns();
-			}
-			finally {
-
-				this.__internalChange--;
-			}
+			this.autoResizeColumns(-1);
 		},
 
 		/**
@@ -3059,22 +3066,32 @@ qx.Class.define("wisej.web.DataGrid", {
 		// auto size columns with based on content.
 		__autoSizeColumns: function (resizeData) {
 
+			var columns = this.getColumns();
 			var dataModel = this.getTableModel();
 			var columnModel = this.getTableColumnModel();
 			var columnHeadersVisible = this.getHeaderCellsVisible();
+
+			// don't autoresize if there is a pending data request
+			// when the data comes in it will trigger another auto resize.
+			if (dataModel.isLoading())
+				return;
 
 			// resize the columns according to the size mode property.
 			for (var i = 0, length = resizeData.length; i < length; i++) {
 
 				var resizeItem = resizeData[i];
-
 				if (resizeItem.colIndex < 0)
 					continue;
 
+				var hasAutofillColumns = false;
 				var newWidth = 0, measuredWidth = 0, hintWidth = 0;
 				var oldWidth = columnModel.getColumnWidth(resizeItem.colIndex);
 
 				switch (resizeItem.sizeMode) {
+
+					case "fill":
+						hasAutofillColumns = true;
+						break;
 
 					case "columnHeader":
 						measuredWidth = hintWidth = columnHeadersVisible ? this.__getColumnHeaderSizeHint(resizeItem.column).width : 0;
@@ -3112,19 +3129,18 @@ qx.Class.define("wisej.web.DataGrid", {
 				}
 
 				newWidth = Math.max(measuredWidth, hintWidth);
-				if (newWidth) {
+				newWidth += (resizeItem.extraSpace | 0);
 
-					newWidth += (resizeItem.extraSpace | 0);
-
-					if (resizeItem.column.getMinWidth())
-						newWidth = Math.max(newWidth, resizeItem.column.getMinWidth());
-					if (resizeItem.column.getMaxWidth())
-						newWidth = Math.min(newWidth, resizeItem.column.getMaxWidth());
-				}
+				if (resizeItem.column.getMinWidth())
+					newWidth = Math.max(newWidth, resizeItem.column.getMinWidth());
+				if (resizeItem.column.getMaxWidth())
+					newWidth = Math.min(newWidth, resizeItem.column.getMaxWidth());
 
 				if (newWidth !== oldWidth && newWidth > 0) {
 
-					columnModel.setColumnWidth(resizeItem.colIndex, newWidth, false);
+					resizeItem.column.setWidth(newWidth);
+
+					// columnModel.setColumnWidth(resizeItem.colIndex, newWidth, false);
 
 					this.fireDataEvent("columnWidthChanged", {
 						col: resizeItem.colIndex,
@@ -3134,6 +3150,9 @@ qx.Class.define("wisej.web.DataGrid", {
 				}
 			}
 
+			// after resizing the non-fill columns, do the fill columns.
+			if (hasAutofillColumns)
+				this.autoSizeFillColumns();
 		},
 
 		// auto size rows height based on content.
@@ -3399,7 +3418,7 @@ qx.Class.define("wisej.web.DataGrid", {
 
 				if (newWidth !== oldWidth && newWidth > 0) {
 
-					columnModel.setColumnWidth(colIndex, newWidth, false);
+					column.setWidth(newWidth);
 
 					this.fireDataEvent("columnWidthChanged", {
 						col: colIndex,
@@ -3811,7 +3830,7 @@ qx.Class.define("wisej.web.DataGrid", {
 			for (var col = 0, l = tableModel.getColumnCount(); col < l; col++) {
 
 				// skip excluded columns.
-				if (columnHeaders[col].getShowInMenu() === false)
+				if (columnHeaders[col].getShowInMenu() === false || col == this._rowHeaderColIndex)
 					continue;
 
 				var menuButton =
@@ -4225,6 +4244,12 @@ qx.Class.define("wisej.web.DataGrid", {
 
 		clearTimeout(this.__selectionDelayTimer);
 		clearTimeout(this.__focusChangedDelayTimer);
+
+		// clear deferred calls.
+		if (this.__autoResizeCall)
+			this.__autoResizeCall.cancel();
+		if (this.__autoResizeColumnHeadersCall)
+			this.__autoResizeColumnHeadersCall.cancel();
 
 		// un-register the Enter or Esc accelerators.
 		wisej.web.manager.Accelerators.getInstance().unregister("Enter", this.__onEnterHandler, null, "keypress");

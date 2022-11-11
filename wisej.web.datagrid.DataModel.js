@@ -72,8 +72,8 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		// the data store used to retrieve data from the server component.
 		__dataStore: null,
 
-		// set to true if the current request is canceled.
-		__canceled: false,
+		// indicates whether there is a pending data request.
+		__pendingDataRequest: false,
 
 		/**
 		 * Initialize the table model <--> table interaction. The table model is
@@ -122,6 +122,15 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		},
 
 		/**
+		 * Returns whether there is a pending request for data.
+		 */
+		isLoading: function () {
+
+			return this._firstLoadingBlock != -1;
+
+		},
+
+		/**
 		 * Returns the requested cell value.
 		 *
 		 * @param columnIndex {Integer} the index of the column
@@ -131,10 +140,9 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 
 			var rowData = this.getRowData(rowIndex);
 			if (rowData == null || rowData.data == null)
-				return "";
+				return null;
 
-			var value = rowData.data[columnIndex];
-			return value == null ? "" : value;
+			return rowData.data[columnIndex];
 		},
 
 		/**
@@ -456,8 +464,7 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		 */
 		_cancelCurrentRequest: function () {
 
-			this.__canceled = true;
-			return true;
+			return !this.__pendingDataRequest;
 		},
 
 		/**
@@ -480,10 +487,7 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 		 */
 		_onRowDataLoaded: function (rowDataArr) {
 
-			if (this.__canceled) {
-				this.__canceled = false;
-				return;
-			}
+			this.__pendingDataRequest = false;
 
 			this.base(arguments, rowDataArr);
 		},
@@ -500,6 +504,8 @@ qx.Class.define("wisej.web.datagrid.DataModel", {
 					sortIndex: this.getSortColumnIndex(),
 					sortDirection: this.isSortAscending() ? "asc" : "desc"
 				};
+
+				this.__pendingDataRequest = true;
 
 				this._getDataStore().getDataRows(
 					args,

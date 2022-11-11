@@ -894,9 +894,12 @@ qx.Class.define("wisej.web.DateTimePicker", {
 			// opening of the popup. This is needed when the value has been
 			// modified and not saved yet (e.g. no blur).
 			if (opened) {
+				var value = this.getValue();
+
 				var chooser = this.getChildControl("list");
+				chooser.setValue(value);
+				chooser.showMonth(value.getMonth(), value.getFullYear());
 				this.__updateChooserStyle(chooser);
-				chooser.setValue(this.getValue());
 			}
 
 			this.fireEvent(popup.isVisible() ? "open" : "close");

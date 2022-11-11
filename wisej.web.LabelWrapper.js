@@ -650,6 +650,8 @@ qx.Class.define("wisej.web.labelWrapper.Layout", {
 			var minSize = labelWrapper.getMinSize();
 			var sizeType = labelWrapper.getSizeType();
 			var position = labelWrapper.getPosition();
+			var labelSizeHint = label.getSizeHint();
+			var editorSizeHint = editor.getSizeHint();
 
 			var top = padding.top;
 			var left = padding.left;
@@ -672,7 +674,7 @@ qx.Class.define("wisej.web.labelWrapper.Layout", {
 			}
 
 			// left, right.
-			var labelWidth, editorWidth;
+			var labelWidth = 0, editorWidth = 0;
 			if (position === "left" || position === "right") {
 
 				switch (sizeType) {
@@ -701,7 +703,7 @@ qx.Class.define("wisej.web.labelWrapper.Layout", {
 
 					default:
 					case "autoSize":
-						labelWidth = label.getSizeHint().width;
+						labelWidth = labelSizeHint.width;
 						if (minSize > 0)
 							labelWidth = Math.max(minSize, labelWidth);
 						if (maxSize > 0)
@@ -736,9 +738,8 @@ qx.Class.define("wisej.web.labelWrapper.Layout", {
 			}
 
 			// top, bottom, anything else.
-			var labelHeight, editorHeight;
+			var labelHeight = 0, editorHeight = 0;
 			{
-
 				switch (sizeType) {
 
 					case "absolute":
@@ -765,7 +766,7 @@ qx.Class.define("wisej.web.labelWrapper.Layout", {
 
 					default:
 					case "autoSize":
-						labelHeight = label.getSizeHint().height;
+						labelHeight = labelSizeHint.height;
 						if (editor) {
 
 							// if the editor is a multiline (i.e. listbox, or textarea) 
@@ -773,7 +774,7 @@ qx.Class.define("wisej.web.labelWrapper.Layout", {
 							if (editor.hasState("multiline"))
 								editorHeight = height - labelHeight;
 							else
-								editorHeight = editor.getSizeHint().height;
+								editorHeight = editorSizeHint.height;
 
 							labelHeight = height - editorHeight;
 						}

@@ -516,6 +516,8 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			this.base(arguments);
 
+			this.__table.scheduleAutoResize();
+
 			// if the table is in edit mode, make sure the editing cell is visible.
 			if (this.__table.isEditing())
 				this.scrollCellVisible(this.getFocusedColumn(), this.getFocusedRow());
@@ -555,14 +557,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			this._updateFocusIndicator();
 			this.__header.onTableModelMetaDataChanged();
 			this.__tablePane.onTableModelMetaDataChanged();
-		},
-
-		/**
-		 * Returns true for the pane that holds the row headers.
-		 */
-		isRowHeader: function () {
-
-			return this.__isRowHeader;
 		},
 
 		// determines whether this scroller is the row header and or a frozen pane.
@@ -676,28 +670,28 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			var pageX = e.getDocumentLeft();
 			var pageY = e.getDocumentTop();
 
-			// Workaround: In onpointerwheel the event has wrong coordinates for pageX
+			// workaround: In onpointerwheel the event has wrong coordinates for pageX
 			//       and pageY. So we remember the last move event.
 			this.__lastPointerPageX = pageX;
 			this.__lastPointerPageY = pageY;
 
 			if (this.__resizeRow != null && this.__resizeRow >= 0) {
 
-				// we are currently resizing -> update the position
+				// we are currently resizing -> update the position.
 				this.__handleResizeRow(pageY);
 				useResizeCursor = true;
 				e.stopPropagation();
 			}
 			else if (this.__resizeHeader) {
 
-				// we are currently resizing the column header height
+				// we are currently resizing the column header height.
 				this.__handleResizeColHeader(pageY);
 				useResizeCursor = true;
 				e.stopPropagation();
 			}
 			else if (this.__canResizeColHeader(pageY)) {
 
-				// the pointer is over a resize region -> show the right cursor
+				// the pointer is over a resize region -> show the right cursor.
 				useResizeCursor = true;
 
 				this.__header.setPointerOverColumn(null);
@@ -713,19 +707,13 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 						var resizeRow = this._getResizeRowForPageX(pageX, pageY, row);
 						if (resizeRow != null && resizeRow > -1) {
 
-							// check if the row is resizable.
-							var dataModel = table.getTableModel();
-							if (!dataModel.getResizable(row)) {
-								return;
-							}
-
-							// the pointer is over a resize region -> show the right cursor
+							// the pointer is over a resize region -> show the right cursor.
 							useResizeCursor = true;
 						}
 					}
 					else {
 
-						// the pointer is over the data -> update the focus
+						// the pointer is over the data -> update the focus.
 						if (this.getFocusCellOnPointerMove()) {
 							this._focusCellAtPagePos(pageX, pageY);
 						}
@@ -779,12 +767,6 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				if (col == 0) {
 					var resizeRow = this._getResizeRowForPageX(pageX, pageY, row);
 					if (resizeRow != null) {
-
-						// check if the row is resizable.
-						var dataModel = table.getTableModel();
-						if (!dataModel.getResizable(row)) {
-							return;
-						}
 
 						// the pointer is over a resize region -> start resizing the row.
 						this._startResizeRow(resizeRow, pageY);
@@ -994,11 +976,19 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 
 			if (row != null && row > -1) {
 
+				// check the row is resizable.
 				var table = this.getTable();
+				switch (table.getAutoSizeRowsMode()) {
+					case "none":
+					case "doubleClick":
+						var dataModel = table.getTableModel();
+						if (!dataModel.getResizable(row))
+							return null;
+						break;
 
-				var dataModel = table.getTableModel();
-				if (!dataModel.getResizable(row))
-					return null;
+					default:
+						return null;
+				}
 
 				var rowHeight = dataModel.getRowHeight(row);
 				var panePos = this.__tablePane.getContentLocation();
@@ -1007,8 +997,9 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 				var rowTop = this.getRowTop(row);
 				if (rowTop != null) {
 					var rowBottom = rowTop + rowHeight + panePos.top - qx.ui.table.pane.Scroller.RESIZE_REGION_RADIUS;
-					if (pageY >= rowBottom)
+					if (pageY >= rowBottom) {
 						return row;
+					}
 				}
 			}
 
@@ -1051,7 +1042,8 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 			if (colIndex > -1) {
 				// check if the column is resizable.
 				var colHeader = this.getTable().getColumns()[colIndex];
-				colIndex = colHeader.isResizable() ? colIndex : -1;
+				if (!colHeader.canResize())
+					colIndex = -1;
 			}
 
 			return colIndex;
@@ -1159,7 +1151,7 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		},
 
 		/* =======================================================================
-		 * Column moving implementation.
+		 * Column moving and resizing implementation.
 		 * =======================================================================*/
 
 		/**
@@ -1168,21 +1160,24 @@ qx.Class.define("wisej.web.datagrid.GridScroller", {
 		 * @param e {Map} the event.
 		 */
 		_onPointerdownHeader: function (e) {
-			if (!this.getTable().getEnabled()) {
+
+			var table = this.getTable();
+			if (!table.getEnabled()) {
 				return;
 			}
 
 			var pageX = e.getDocumentLeft();
 
-			// pointer is in header
+			// pointer is in header.
 			var resizeCol = this._getResizeColumnForPageX(pageX);
 			if (resizeCol != -1) {
-				// The pointer is over a resize region -> Start resizing
+
+				// the pointer is over a resize region -> Start resizing.
 				this._startResizeHeader(resizeCol, pageX);
 				e.stopPropagation();
 			}
 			else {
-				// The pointer is not in a resize region
+				// the pointer is not in a resize region.
 				var moveCol = this._getColumnForPageX(pageX);
 				if (moveCol != null) {
 					if (this._startMoveHeader(moveCol, pageX))

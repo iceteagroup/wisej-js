@@ -34,9 +34,15 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 	construct: function () {
 
 		if (wisej.web.DesignMode) {
-			this.core = {
-				processingActions: false
+
+			wisej.web.DesignCore = wisej.web.DesignCore || {
+				processingActions: false,
+				logInfo: function () { console.info.apply(console, arguments); },
+				logError: function () { console.error.apply(console, arguments); },
+				logWarning: function () { console.warn.apply(console, arguments); }
 			};
+
+			this.core = wisej.web.DesignCore;
 		}
 		else {
 
@@ -454,7 +460,6 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 			var newDescriptors = this.core.parseEventDescriptors(value);
 
 			// detach previously attached event handlers
-			var events = old;
 			if (oldDescriptors != null) {
 
 				for (var type in oldDescriptors) {
@@ -670,12 +675,18 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 						args[descriptor.argNames[0]] = value;
 					}
 
-					// add standard arguments
+					// add standard arguments.
 					if (e.getButton) {
 						var button = 0;
 						switch (e.getButton()) {
+							case "none": button = 0; break;
+							case "left": button = 1; break;
 							case "right": button = 2; break;
-							case "middle": button = 1; break;
+							case "middle": button = 4; break;
+							case "left,right": button = 3; break;
+							case "left,middle": button = 5; break;
+							case "right,middle": button = 6; break;
+							case "left,right,middle": button = 7; break;
 						}
 						args = args || {};
 						args.button = button;
@@ -684,9 +695,17 @@ qx.Mixin.define("wisej.mixin.MWisejComponent", {
 					}
 					else if (window.event) {
 						var event = window.event;
-						if (event.button !== undefined) {
-							args = args || {};
-							args.button = event.button | 0;
+						if (event.buttons !== undefined) {
+							args = args || { button: 0 };
+							args.button = event.buttons;
+						}
+						else if (event.button !== undefined) {
+							args = args || { button: 0 };
+							switch (event.button) {
+								case 0: args.button = 1; break; // left
+								case 1: args.button = 4; break; // middle
+								case 2: args.button = 2; break; // right
+							}
 						}
 					}
 

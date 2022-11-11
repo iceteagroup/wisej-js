@@ -212,8 +212,8 @@ qx.Class.define("wisej.web.Widget", {
 		/**
 		 * Registers the handler function to listen to the event name on the wrapped widget.
 		 * 
-		 * @param name { String } name of the event.
-		 * @param handler { Function } event handler.
+		 * @param name {String} name of the event.
+		 * @param handler {Function} event handler.
 		 */
 		_addListener: function (name, handler) {
 
@@ -224,8 +224,8 @@ qx.Class.define("wisej.web.Widget", {
 		/**
 		 * Unregisters the handler functions from the event name on the wrapped widget.
 		 * 
-		 * @param name { String } name of the event.
-		 * @param handler { Function } event handler.
+		 * @param name {String} name of the event.
+		 * @param handler {Function} event handler.
 		 */
 		_removeListener: function (name, handler) {
 

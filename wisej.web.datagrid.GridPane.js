@@ -90,6 +90,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				this.__rowCacheClear();
 			}
 
+			var scroller = this.getPaneScroller();
 			var topScrollOffset = this.getTopScrollOffset();
 			var frozenRows = this.getTable().getFrozenRows();
 
@@ -97,7 +98,6 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 				&& Math.abs(scrollOffset) <= Math.min(10, this.getVisibleRowCount())) {
 
 				this._scrollContent(scrollOffset);
-				this.getTable().scheduleAutoResize();
 
 			} else if (onlySelectionOrFocusChanged && !this.getTable().getAlwaysUpdateCells()) {
 
@@ -106,7 +106,6 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 			} else {
 
 				this._updateAllRows();
-				this.getTable().scheduleAutoResize();
 			}
 		},
 
@@ -705,7 +704,7 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 		 * @param width {Integer} the new width.
 		 */
 		setColumnWidth: function (col, width) {
-			qx.ui.core.queue.Widget.add(this, "updateContent");
+			this.scheduleUpdateContent();
 		},
 
 		/**
@@ -713,15 +712,23 @@ qx.Class.define("wisej.web.datagrid.GridPane", {
 		 *
 		 */
 		onColOrderChanged: function () {
-			qx.ui.core.queue.Widget.add(this, "updateContent");
+			this.scheduleUpdateContent();
 		},
 
 		/**
 		 * Event handler. Called when the pane model has changed.
 		 */
 		onPaneModelChanged: function () {
+			this.scheduleUpdateContent();
+		},
+
+		/**
+		 * Schedules a request to update the content pane.
+		 */
+		scheduleUpdateContent: function () {
 			qx.ui.core.queue.Widget.add(this, "updateContent");
 		}
+
 	},
 
 	destruct: function () {

@@ -325,14 +325,15 @@ qx.Class.define("wisej.web.Video", {
 
 		/**
 		 * Applies the playsinline property.
-		 * @param {any} value
-		 * @param {any} old
 		 */
 		_applyPlaysInline: function (value, old) {
 
 			var video = this._media.getMediaObject();
 			if (video) {
-				video.setAttribute("playsinline", "");
+				if (value)
+					video.setAttribute("playsinline", "");
+				else
+					video.removeAttribute("playsinline");
 			}
 		},
 

@@ -52,9 +52,6 @@ qx.Class.define("wisej.web.datagrid.ColumnMenuButton", {
 					component.setAppearance("menu/item");
 					component.setVisible(options.bVisible);
 
-					if (options.column == 0)
-						component.exclude();
-
 					this.getMenu().add(component);
 					break;
 			}

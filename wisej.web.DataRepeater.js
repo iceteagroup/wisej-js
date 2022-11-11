@@ -883,8 +883,8 @@ qx.Class.define("wisej.web.dataRepeater.ItemContent", {
 
 		this.initOrientation();
 		this.initItemBorderStyle();
-		this.addListener("click", this._onItemClick, this);
 		this.addListener("keypress", this._onKeyPress, this);
+		this.addListener("pointerdown", this._onItemClick, this);
 
 		// RightToLeft support.
 		this.addListener("changeRtl", this._onRtlChange, this);

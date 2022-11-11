@@ -284,8 +284,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 				// child widget.
 				headerWidget.setCellWidget(columnHeader.getWidget(), columnHeader.getWidgetDock());
 			}
-		},
-
+		}
 	},
 
 	members: {
@@ -297,7 +296,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 
 			var table = this.getTable();
 			if (table)
-				table._scheduleUpdateColumnsPosition();
+				table.scheduleUpdateColumnsPosition();
 		},
 
 		/**
@@ -391,6 +390,7 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 					var index = table.getColumns().indexOf(this);
 					table.getTableModel().setColumnName(index, value);
 					this._syncCellWidget(name);
+					qx.ui.core.queue.Widget.add(table, "updateColumnHeaders");
 					break;
 
 				case "editable":
@@ -431,9 +431,10 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 					table.getTableColumnModel().setColumnData(index, value);
 					break;
 
+				case "wrap":
 				case "sizeMode":
 				case "fillWeight":
-					qx.ui.core.queue.Widget.add(table, "autoSizeColumns");
+					qx.ui.core.queue.Widget.add(table, "updateColumnHeaders");
 					break;
 
 				case "widget":
@@ -459,7 +460,28 @@ qx.Class.define("wisej.web.datagrid.ColumnHeader", {
 		 */
 		getAccessibilityTarget: function () {
 			return this.getHeaderWidget();
-		}
+		},
+
+		/**
+		 * Returns true if the column can be resized by the user.
+		 */
+		canResize: function () {
+
+			if (this.isResizable()) {
+
+				switch (this.getSizeMode()) {
+					case "none":
+					case "fill":
+					case "doubleClick":
+						return true;
+				}
+
+				// don't resize autosize columns manually.
+			}
+
+			return false;
+ 		}
+
 
 	},
 
